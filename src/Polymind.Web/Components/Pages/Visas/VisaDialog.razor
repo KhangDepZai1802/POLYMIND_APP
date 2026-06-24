@@ -1,0 +1,198 @@
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudSelect T="Guid?" Value="_selectedCjoId" ValueChanged="OnCjoChanged" Label="Ứng viên – Đơn hàng *"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" Disabled="IsEdit">
+                    @foreach (var o in _options)
+                    {
+                        <MudSelectItem T="Guid?" Value="@o.CjoId">@o.Label</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_m.VisaType" Label="Loại visa" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="VisaStatus" @bind-Value="_m.Status" Label="Trạng thái" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var s in Enum.GetValues<VisaStatus>())
+                    {
+                        <MudSelectItem Value="@s">@Labels.Vi(s)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudDatePicker @bind-Date="_m.SubmittedDate" Label="Ngày nộp" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudDatePicker @bind-Date="_m.InterviewDate" Label="Ngày phỏng vấn" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudDatePicker @bind-Date="_m.ResultDate" Label="Ngày có kết quả" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+            </MudItem>
+            @if (_m.Status == VisaStatus.Rejected)
+            {
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_m.RejectionReason" Label="Lý do từ chối" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+                </MudItem>
+            }
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_m.Notes" Label="Ghi chú" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Hủy</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="_saving">Lưu</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Null = tạo mới; có giá trị = sửa hồ sơ visa hiện có.</summary>
+    [Parameter] public Guid? VisaId { get; set; }
+
+    private record CjoOption(Guid CjoId, Guid CandidateId, Guid JobOrderId, string Country, string Label);
+
+    private readonly FormModel _m = new();
+    private List<CjoOption> _options = new();
+    private Guid? _selectedCjoId;
+    private bool _saving;
+    private bool IsEdit => VisaId is not null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _options = await db.CandidateJobOrders
+            .OrderByDescending(c => c.CreatedAt)
+            .Select(c => new CjoOption(
+                c.Id, c.CandidateId, c.JobOrderId, c.JobOrder.Country,
+                c.Candidate.FullName + " — " + c.JobOrder.Code + " (" + c.JobOrder.Country + ")"))
+            .ToListAsync();
+
+        if (VisaId is not null)
+        {
+            var v = await db.Visas.FirstOrDefaultAsync(x => x.Id == VisaId);
+            if (v is not null)
+            {
+                _m.LoadFrom(v);
+                _selectedCjoId = _options.FirstOrDefault(o => o.CandidateId == v.CandidateId && o.JobOrderId == v.JobOrderId)?.CjoId;
+            }
+        }
+    }
+
+    private void OnCjoChanged(Guid? cjoId)
+    {
+        _selectedCjoId = cjoId;
+        var o = _options.FirstOrDefault(x => x.CjoId == cjoId);
+        if (o is not null)
+        {
+            _m.CandidateId = o.CandidateId;
+            _m.JobOrderId = o.JobOrderId;
+            _m.Country = o.Country;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        if (_m.CandidateId == Guid.Empty || _m.JobOrderId == Guid.Empty)
+        {
+            Snackbar.Add("Vui lòng chọn ứng viên – đơn hàng.", Severity.Warning);
+            return;
+        }
+
+        var permission = IsEdit ? "visas:update" : "visas:create";
+        if (!await HasPermission(permission))
+        {
+            Snackbar.Add("Bạn không có quyền thực hiện thao tác này.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (IsEdit)
+            {
+                var v = await db.Visas.FirstOrDefaultAsync(x => x.Id == VisaId);
+                if (v is null)
+                {
+                    Snackbar.Add("Không tìm thấy hồ sơ visa.", Severity.Error);
+                    return;
+                }
+                _m.ApplyTo(v);
+                v.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+            else
+            {
+                var v = new Visa { HandledBy = await db.Users.Select(u => u.Id).FirstOrDefaultAsync() };
+                _m.ApplyTo(v);
+                db.Visas.Add(v);
+            }
+            await db.SaveChangesAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private async Task<bool> HasPermission(string permission)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        return result.Succeeded;
+    }
+
+    private sealed class FormModel
+    {
+        public Guid CandidateId { get; set; }
+        public Guid JobOrderId { get; set; }
+        public string Country { get; set; } = "";
+        public string? VisaType { get; set; }
+        public VisaStatus Status { get; set; } = VisaStatus.NotSubmitted;
+        public DateTime? SubmittedDate { get; set; }
+        public DateTime? InterviewDate { get; set; }
+        public DateTime? ResultDate { get; set; }
+        public string? RejectionReason { get; set; }
+        public string? Notes { get; set; }
+
+        public void LoadFrom(Visa v)
+        {
+            CandidateId = v.CandidateId;
+            JobOrderId = v.JobOrderId;
+            Country = v.Country;
+            VisaType = v.VisaType;
+            Status = v.Status;
+            SubmittedDate = v.SubmittedDate?.ToDateTime(TimeOnly.MinValue);
+            InterviewDate = v.InterviewDate?.ToDateTime(TimeOnly.MinValue);
+            ResultDate = v.ResultDate?.ToDateTime(TimeOnly.MinValue);
+            RejectionReason = v.RejectionReason;
+            Notes = v.Notes;
+        }
+
+        public void ApplyTo(Visa v)
+        {
+            v.CandidateId = CandidateId;
+            v.JobOrderId = JobOrderId;
+            v.Country = Country;
+            v.VisaType = VisaType;
+            v.Status = Status;
+            v.SubmittedDate = SubmittedDate is null ? null : DateOnly.FromDateTime(SubmittedDate.Value);
+            v.InterviewDate = InterviewDate is null ? null : DateOnly.FromDateTime(InterviewDate.Value);
+            v.ResultDate = ResultDate is null ? null : DateOnly.FromDateTime(ResultDate.Value);
+            v.RejectionReason = Status == VisaStatus.Rejected ? RejectionReason : null;
+            v.Notes = Notes;
+        }
+    }
+}

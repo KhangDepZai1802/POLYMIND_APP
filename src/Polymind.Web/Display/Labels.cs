@@ -87,4 +87,126 @@ public static class Labels
         WorkflowStepStatus.Failed => "Thất bại",
         _ => s.ToString()
     };
+
+    public static string Vi(Gender g) => g switch
+    {
+        Gender.Male => "Nam",
+        Gender.Female => "Nữ",
+        Gender.Other => "Khác",
+        _ => g.ToString()
+    };
+
+    public static string Vi(MaritalStatus m) => m switch
+    {
+        MaritalStatus.Single => "Độc thân",
+        MaritalStatus.Married => "Đã kết hôn",
+        MaritalStatus.Divorced => "Ly hôn",
+        MaritalStatus.Widowed => "Góa",
+        _ => m.ToString()
+    };
+
+    public static string Vi(CandidateJobOrderStatus s) => s switch
+    {
+        CandidateJobOrderStatus.Active => "Đang xử lý",
+        CandidateJobOrderStatus.Dropped => "Đã dừng",
+        CandidateJobOrderStatus.Completed => "Hoàn tất",
+        _ => s.ToString()
+    };
+
+    public static string Vi(PaymentType t) => t switch
+    {
+        PaymentType.Deposit => "Đặt cọc",
+        PaymentType.DocumentFee => "Phí hồ sơ",
+        PaymentType.TrainingFee => "Phí đào tạo",
+        PaymentType.VisaFee => "Phí visa",
+        PaymentType.ServiceFee => "Phí dịch vụ",
+        PaymentType.OtherIncome => "Thu khác",
+        _ => t.ToString()
+    };
+
+    public static string Vi(PaymentStatus s) => s switch
+    {
+        PaymentStatus.Pending => "Chờ thu",
+        PaymentStatus.Partial => "Thu một phần",
+        PaymentStatus.Paid => "Đã thu",
+        PaymentStatus.Overdue => "Quá hạn",
+        PaymentStatus.Refunded => "Đã hoàn",
+        _ => s.ToString()
+    };
+
+    public static Color ColorOf(PaymentStatus s) => s switch
+    {
+        PaymentStatus.Paid => Color.Success,
+        PaymentStatus.Partial => Color.Info,
+        PaymentStatus.Pending => Color.Warning,
+        PaymentStatus.Overdue => Color.Error,
+        PaymentStatus.Refunded => Color.Default,
+        _ => Color.Default
+    };
+
+    public static string Vi(PaymentMethod m) => m switch
+    {
+        PaymentMethod.Cash => "Tiền mặt",
+        PaymentMethod.BankTransfer => "Chuyển khoản",
+        PaymentMethod.Other => "Khác",
+        _ => m.ToString()
+    };
+
+    public static string Vi(ExpenseCategory c) => c switch
+    {
+        ExpenseCategory.Marketing => "Marketing",
+        ExpenseCategory.Partner => "Đối tác",
+        ExpenseCategory.Document => "Hồ sơ",
+        ExpenseCategory.Visa => "Visa",
+        ExpenseCategory.Training => "Đào tạo",
+        ExpenseCategory.Refund => "Hoàn tiền",
+        ExpenseCategory.Other => "Khác",
+        _ => c.ToString()
+    };
+
+    public static string Vi(CommissionMilestone m) => m switch
+    {
+        CommissionMilestone.Deposit => "Đặt cọc",
+        CommissionMilestone.Selected => "Trúng tuyển",
+        CommissionMilestone.Departure => "Xuất cảnh",
+        _ => m.ToString()
+    };
+
+    public static string Vi(CommissionStatus s) => s switch
+    {
+        CommissionStatus.Pending => "Chờ duyệt",
+        CommissionStatus.Approved => "Đã duyệt",
+        CommissionStatus.Paid => "Đã chi",
+        CommissionStatus.Cancelled => "Đã hủy",
+        _ => s.ToString()
+    };
+
+    public static Color ColorOf(CommissionStatus s) => s switch
+    {
+        CommissionStatus.Paid => Color.Success,
+        CommissionStatus.Approved => Color.Info,
+        CommissionStatus.Pending => Color.Warning,
+        CommissionStatus.Cancelled => Color.Error,
+        _ => Color.Default
+    };
+
+    public static string Vi(VisaStatus s) => s switch
+    {
+        VisaStatus.NotSubmitted => "Chưa nộp",
+        VisaStatus.Preparing => "Đang chuẩn bị",
+        VisaStatus.Submitted => "Đã nộp",
+        VisaStatus.AdditionalRequired => "Bổ sung hồ sơ",
+        VisaStatus.Approved => "Đậu visa",
+        VisaStatus.Rejected => "Bị từ chối",
+        _ => s.ToString()
+    };
+
+    public static Color ColorOf(VisaStatus s) => s switch
+    {
+        VisaStatus.Approved => Color.Success,
+        VisaStatus.Submitted => Color.Info,
+        VisaStatus.Preparing or VisaStatus.AdditionalRequired => Color.Warning,
+        VisaStatus.Rejected => Color.Error,
+        _ => Color.Default
+    };
 }

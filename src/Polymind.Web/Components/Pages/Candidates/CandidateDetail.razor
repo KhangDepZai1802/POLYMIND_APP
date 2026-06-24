@@ -1,8 +1,8 @@
 @page "/candidates/{Id:guid}"
 @attribute [Authorize(Policy = "candidates:read")]
-@rendermode InteractiveServer
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject IAuthorizationService AuthorizationService
 @inject AuthenticationStateProvider AuthStateProvider
@@ -15,7 +15,13 @@
 }
 else
 {
-    <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/candidates"))" Class="mb-3">Quay lại</MudButton>
+    <div class="d-flex justify-space-between align-center mb-3">
+        <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/candidates"))">Quay lại</MudButton>
+        @if (_canUpdateCandidate)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenEdit">Sửa thông tin</MudButton>
+        }
+    </div>
 
     <MudGrid>
         <MudItem xs="12" md="5">
@@ -28,17 +34,57 @@ else
                     </div>
                 </div>
                 <MudDivider Class="mb-3" />
+
+                <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Thông tin cá nhân</b></MudText>
                 <MudGrid>
                     @Field("Số điện thoại", _candidate.Phone)
+                    @Field("Giới tính", _candidate.Gender is null ? null : Labels.Vi(_candidate.Gender.Value))
+                    @Field("Ngày sinh", _candidate.Dob?.ToString("dd/MM/yyyy"))
+                    @Field("Hôn nhân", _candidate.MaritalStatus is null ? null : Labels.Vi(_candidate.MaritalStatus.Value))
                     @Field("Tỉnh/Thành", _candidate.Province)
-                    @Field("CCCD", _candidate.CccdNumber)
                     @Field("Đơn hàng", _country)
                 </MudGrid>
+                @if (!string.IsNullOrWhiteSpace(_candidate.Address))
+                {
+                    <MudText Typo="Typo.body2" Class="mt-2"><b>Địa chỉ:</b> @_candidate.Address</MudText>
+                }
+
+                <MudDivider Class="my-3" />
+                <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Giấy tờ</b></MudText>
+                <MudGrid>
+                    @Field("Số CCCD", _candidate.CccdNumber)
+                    @Field("Ngày cấp", _candidate.CccdIssueDate?.ToString("dd/MM/yyyy"))
+                    @Field("Nơi cấp", _candidate.CccdIssuePlace)
+                    @Field("Số hộ chiếu", _candidate.PassportNumber)
+                    @Field("HC hết hạn", _candidate.PassportExpiry?.ToString("dd/MM/yyyy"))
+                </MudGrid>
+
+                @if (HasEmergencyInfo)
+                {
+                    <MudDivider Class="my-3" />
+                    <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Liên hệ khẩn cấp</b></MudText>
+                    <MudGrid>
+                        @Field("Người liên hệ", _candidate.EmergencyContactName)
+                        @Field("SĐT", _candidate.EmergencyContactPhone)
+                        @Field("Quan hệ", _candidate.EmergencyContactRelation)
+                    </MudGrid>
+                }
+
+                @if (HasBankInfo)
+                {
+                    <MudDivider Class="my-3" />
+                    <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Ngân hàng</b></MudText>
+                    <MudGrid>
+                        @Field("Số TK", _candidate.BankAccountNumber)
+                        @Field("Ngân hàng", _candidate.BankName)
+                        @Field("Chủ TK", _candidate.BankAccountName)
+                    </MudGrid>
+                }
             </MudPaper>
 
             @if (_cjo is not null && _cjo.CurrentStep < WorkflowStep.Completed && _canUpdateCandidate)
             {
-                <MudPaper Class="pa-4" Elevation="1">
+                <MudPaper Class="pa-4 mb-4" Elevation="1">
                     <MudText Typo="Typo.subtitle1" Class="mb-1"><b>Bước hiện tại</b></MudText>
                     <MudChip T="string" Color="Color.Primary" Class="mb-3">@Labels.Vi(_cjo.CurrentStep)</MudChip>
                     <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true"
@@ -49,29 +95,62 @@ else
             }
             else if (_cjo is not null)
             {
-                <MudAlert Severity="Severity.Success">Ứng viên đã hoàn tất toàn bộ quy trình 🎉</MudAlert>
+                <MudAlert Severity="Severity.Success" Class="mb-4">Ứng viên đã hoàn tất toàn bộ quy trình 🎉</MudAlert>
+            }
+
+            @if (_cjo is null && _canUpdateCandidate)
+            {
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.subtitle1" Class="mb-1"><b>Gắn vào đơn hàng</b></MudText>
+                    <MudText Typo="Typo.body2" Class="mb-3 mud-text-secondary">Chọn đơn hàng để bắt đầu quy trình 17 bước cho ứng viên.</MudText>
+                    @if (_jobOrders.Count == 0)
+                    {
+                        <MudAlert Severity="Severity.Info" Dense="true">Chưa có đơn hàng nào để gắn.</MudAlert>
+                    }
+                    else
+                    {
+                        <MudSelect T="Guid?" @bind-Value="_selectedJobOrderId" Label="Đơn hàng" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2">
+                            @foreach (var j in _jobOrders)
+                            {
+                                <MudSelectItem T="Guid?" Value="@j.Id">@j.Code — @j.Country (@j.CompanyName)</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudTextField @bind-Value="_assignNotes" Label="Ghi chú" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" Class="mb-2" />
+                        <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true"
+                                   StartIcon="@Icons.Material.Filled.Link" OnClick="AssignJobOrder" Disabled="_busy || _selectedJobOrderId is null">
+                            Gắn vào đơn hàng
+                        </MudButton>
+                    }
+                </MudPaper>
             }
         </MudItem>
 
         <MudItem xs="12" md="7">
             <MudPaper Class="pa-4" Elevation="1">
                 <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Quy trình 17 bước</b></MudText>
-                <MudTimeline TimelinePosition="TimelinePosition.Start" Class="workflow-timeline">
-                    @foreach (var step in Enum.GetValues<WorkflowStep>())
-                    {
-                        var state = StateOf(step);
-                        <MudTimelineItem Color="@state.Color" Size="Size.Small"
-                                         Icon="@(state.Done ? Icons.Material.Filled.Check : state.Current ? Icons.Material.Filled.RadioButtonChecked : Icons.Material.Filled.RadioButtonUnchecked)">
-                            <MudText Typo="Typo.body2" Style="@(state.Pending ? "color:#94a3b8" : "")">
-                                <b>@((int)step).</b> @Labels.Vi(step)
-                            </MudText>
-                            @if (state.Current)
-                            {
-                                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="mt-1">Đang xử lý</MudChip>
-                            }
-                        </MudTimelineItem>
-                    }
-                </MudTimeline>
+                @if (_cjo is null)
+                {
+                    <MudAlert Severity="Severity.Info">Ứng viên chưa được gắn vào đơn hàng nào.</MudAlert>
+                }
+                else
+                {
+                    <MudTimeline TimelinePosition="TimelinePosition.Start" Class="workflow-timeline">
+                        @foreach (var step in Enum.GetValues<WorkflowStep>())
+                        {
+                            var state = StateOf(step);
+                            <MudTimelineItem Color="@state.Color" Size="Size.Small"
+                                             Icon="@(state.Done ? Icons.Material.Filled.Check : state.Current ? Icons.Material.Filled.RadioButtonChecked : Icons.Material.Filled.RadioButtonUnchecked)">
+                                <MudText Typo="Typo.body2" Style="@(state.Pending ? "color:#94a3b8" : "")">
+                                    <b>@((int)step).</b> @Labels.Vi(step)
+                                </MudText>
+                                @if (state.Current)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="mt-1">Đang xử lý</MudChip>
+                                }
+                            </MudTimelineItem>
+                        }
+                    </MudTimeline>
+                }
             </MudPaper>
         </MudItem>
     </MudGrid>
@@ -85,6 +164,15 @@ else
     private string? _country;
     private bool _busy;
     private bool _canUpdateCandidate;
+
+    private List<JobOrder> _jobOrders = new();
+    private Guid? _selectedJobOrderId;
+    private string _assignNotes = "";
+
+    private bool HasEmergencyInfo => !string.IsNullOrWhiteSpace(_candidate?.EmergencyContactName)
+        || !string.IsNullOrWhiteSpace(_candidate?.EmergencyContactPhone);
+    private bool HasBankInfo => !string.IsNullOrWhiteSpace(_candidate?.BankAccountNumber)
+        || !string.IsNullOrWhiteSpace(_candidate?.BankName);
 
     protected override async Task OnInitializedAsync()
     {
@@ -100,7 +188,63 @@ else
         _cjo = await db.CandidateJobOrders.Where(j => j.CandidateId == Id)
             .OrderByDescending(j => j.CreatedAt).FirstOrDefaultAsync();
         if (_cjo is not null)
+        {
             _country = await db.JobOrders.Where(j => j.Id == _cjo.JobOrderId).Select(j => j.Country).FirstOrDefaultAsync();
+        }
+        else
+        {
+            _jobOrders = await db.JobOrders
+                .Where(j => j.Status != JobOrderStatus.Cancelled)
+                .OrderByDescending(j => j.CreatedAt).ToListAsync();
+        }
+    }
+
+    private async Task OpenEdit()
+    {
+        var parameters = new DialogParameters<CandidateDialog> { { x => x.CandidateId, Id } };
+        var dialog = await DialogService.ShowAsync<CandidateDialog>("Sửa thông tin ứng viên", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            Snackbar.Add("Đã cập nhật ứng viên", Severity.Success);
+            await Load();
+        }
+    }
+
+    private async Task AssignJobOrder()
+    {
+        if (_selectedJobOrderId is null) return;
+        if (!await HasPermission("candidates:update"))
+        {
+            Snackbar.Add("Bạn không có quyền gắn ứng viên vào đơn hàng.", Severity.Warning);
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var adminId = await db.Users.Select(u => u.Id).FirstOrDefaultAsync();
+            db.CandidateJobOrders.Add(new CandidateJobOrder
+            {
+                CandidateId = Id,
+                JobOrderId = _selectedJobOrderId.Value,
+                CurrentStep = WorkflowStep.Lead,
+                Status = CandidateJobOrderStatus.Active,
+                AssignedTo = adminId,
+                Notes = string.IsNullOrWhiteSpace(_assignNotes) ? null : _assignNotes,
+            });
+            await db.SaveChangesAsync();
+
+            Snackbar.Add("Đã gắn ứng viên vào đơn hàng", Severity.Success);
+            _selectedJobOrderId = null;
+            _assignNotes = "";
+            await Load();
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private (Color Color, bool Done, bool Current, bool Pending) StateOf(WorkflowStep step)

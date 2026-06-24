@@ -1,0 +1,167 @@
+@page "/agents/{Id:guid}"
+@attribute [Authorize(Policy = "agents:read")]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Chi tiết Đại lý — POLYMIND</PageTitle>
+
+@if (_agent is null)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <div class="d-flex justify-space-between align-center mb-3">
+        <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/agents"))">Quay lại</MudButton>
+        @if (_canUpdate)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenEdit">Sửa đại lý</MudButton>
+        }
+    </div>
+
+    <MudGrid>
+        <MudItem xs="12" md="5">
+            <MudPaper Class="pa-4 mb-4" Elevation="1">
+                <div class="d-flex justify-space-between align-center mb-3">
+                    <div>
+                        <MudText Typo="Typo.h6"><b>@_agent.Name</b></MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@_agent.Code</MudText>
+                    </div>
+                    <MudChip T="string" Color="@(_agent.IsActive ? Color.Success : Color.Default)">@(_agent.IsActive ? "Đang hợp tác" : "Ngừng")</MudChip>
+                </div>
+                <MudDivider Class="mb-3" />
+                <MudGrid>
+                    @Field("Người đại diện", _agent.RepresentativeName)
+                    @Field("Số điện thoại", _agent.Phone)
+                    @Field("Email", _agent.Email)
+                    @Field("Số TK", _agent.BankAccountNumber)
+                    @Field("Ngân hàng", _agent.BankName)
+                    @Field("Chủ TK", _agent.BankAccountName)
+                </MudGrid>
+                @if (!string.IsNullOrWhiteSpace(_agent.Address))
+                {
+                    <MudText Typo="Typo.body2" Class="mt-2"><b>Địa chỉ:</b> @_agent.Address</MudText>
+                }
+                <MudDivider Class="my-3" />
+                <div class="d-flex justify-space-between">
+                    <MudText Typo="Typo.body2">Ứng viên giới thiệu: <b>@_candidates.Count</b></MudText>
+                    <MudText Typo="Typo.body2">Tổng hoa hồng: <b>@($"{_totalCommission:N0} đ")</b></MudText>
+                </div>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="7">
+            <MudPaper Class="pa-4 mb-4" Elevation="1">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Ứng viên giới thiệu (@_candidates.Count)</b></MudText>
+                @if (_candidates.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info">Chưa có ứng viên nào do đại lý này giới thiệu.</MudAlert>
+                }
+                else
+                {
+                    <MudDataGrid T="CandidateRow" Items="_candidates" Hover="true" Dense="true" Striped="true"
+                                 RowClick="@(args => Nav.NavigateTo($"/candidates/{args.Item.Id}"))" Class="cursor-pointer">
+                        <Columns>
+                            <PropertyColumn Property="x => x.Code" Title="Mã" />
+                            <PropertyColumn Property="x => x.FullName" Title="Họ tên" />
+                            <PropertyColumn Property="x => x.Phone" Title="SĐT" />
+                        </Columns>
+                    </MudDataGrid>
+                }
+            </MudPaper>
+
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Hoa hồng (@_commissions.Count)</b></MudText>
+                @if (_commissions.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info">Chưa có hoa hồng phát sinh.</MudAlert>
+                }
+                else
+                {
+                    <MudDataGrid T="CommissionRow" Items="_commissions" Hover="true" Dense="true" Striped="true">
+                        <Columns>
+                            <PropertyColumn Property="x => x.CandidateName" Title="Ứng viên" />
+                            <TemplateColumn Title="Mốc">
+                                <CellTemplate>@Labels.Vi(context.Item.Milestone)</CellTemplate>
+                            </TemplateColumn>
+                            <TemplateColumn Title="Hoa hồng">
+                                <CellTemplate>@($"{context.Item.Amount:N0} đ")</CellTemplate>
+                            </TemplateColumn>
+                            <TemplateColumn Title="Trạng thái">
+                                <CellTemplate>
+                                    <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(context.Item.Status)">@Labels.Vi(context.Item.Status)</MudChip>
+                                </CellTemplate>
+                            </TemplateColumn>
+                        </Columns>
+                    </MudDataGrid>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private record CandidateRow(Guid Id, string Code, string FullName, string? Phone);
+    private record CommissionRow(string CandidateName, CommissionMilestone Milestone, decimal Amount, CommissionStatus Status);
+
+    private Agent? _agent;
+    private List<CandidateRow> _candidates = new();
+    private List<CommissionRow> _commissions = new();
+    private decimal _totalCommission;
+    private bool _canUpdate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canUpdate = await HasPermission("agents:update");
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _agent = await db.Agents.FirstOrDefaultAsync(a => a.Id == Id);
+        if (_agent is null) return;
+
+        _candidates = await db.Candidates.Where(c => c.AgentId == Id)
+            .OrderBy(c => c.FullName)
+            .Select(c => new CandidateRow(c.Id, c.Code, c.FullName, c.Phone))
+            .ToListAsync();
+
+        var names = await db.Candidates.ToDictionaryAsync(c => c.Id, c => c.FullName);
+        var commissions = await db.AgentCommissions.Where(c => c.AgentId == Id)
+            .OrderByDescending(c => c.CreatedAt).ToListAsync();
+        _commissions = commissions.Select(c => new CommissionRow(
+            names.GetValueOrDefault(c.CandidateId, "—"), c.Milestone, c.CommissionAmount, c.Status)).ToList();
+        _totalCommission = commissions.Sum(c => c.CommissionAmount);
+    }
+
+    private async Task OpenEdit()
+    {
+        var parameters = new DialogParameters<AgentDialog> { { x => x.AgentId, Id } };
+        var dialog = await DialogService.ShowAsync<AgentDialog>("Sửa đại lý", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            Snackbar.Add("Đã cập nhật đại lý", Severity.Success);
+            await Load();
+        }
+    }
+
+    private async Task<bool> HasPermission(string permission)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        return result.Succeeded;
+    }
+
+    private RenderFragment Field(string label, string? value) =>@<MudItem xs="6">
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">@label</MudText>
+        <MudText Typo="Typo.body2">@(string.IsNullOrWhiteSpace(value) ? "—" : value)</MudText>
+    </MudItem>;
+}

@@ -1,0 +1,90 @@
+@page "/agents"
+@attribute [Authorize(Policy = "agents:read")]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Đại lý — POLYMIND</PageTitle>
+
+<div class="d-flex justify-space-between align-center mb-4">
+    <div>
+        <MudText Typo="Typo.h5"><b>Đại lý & Cộng tác viên</b></MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">@_rows.Count đại lý</MudText>
+    </div>
+    <AuthorizeView Policy="agents:create">
+        <Authorized>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">
+                Thêm đại lý
+            </MudButton>
+        </Authorized>
+    </AuthorizeView>
+</div>
+
+<MudPaper Elevation="1" Class="pa-4">
+    <MudTextField @bind-Value="_search" Placeholder="Tìm tên, mã, SĐT..." Adornment="Adornment.Start"
+                  AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+
+    <MudDataGrid T="Agent" Items="Filtered" Hover="true" Dense="true" Striped="true"
+                 RowClick="@(args => Nav.NavigateTo($"/agents/{args.Item.Id}"))" Class="cursor-pointer">
+        <Columns>
+            <PropertyColumn Property="x => x.Code" Title="Mã" />
+            <PropertyColumn Property="x => x.Name" Title="Tên đại lý" />
+            <PropertyColumn Property="x => x.RepresentativeName" Title="Người đại diện" />
+            <PropertyColumn Property="x => x.Phone" Title="SĐT" />
+            <TemplateColumn Title="Trạng thái">
+                <CellTemplate>
+                    <MudChip T="string" Size="Size.Small" Color="@(context.Item.IsActive ? Color.Success : Color.Default)">
+                        @(context.Item.IsActive ? "Đang hợp tác" : "Ngừng")
+                    </MudChip>
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <PagerContent><MudDataGridPager T="Agent" /></PagerContent>
+    </MudDataGrid>
+</MudPaper>
+
+@code {
+    private List<Agent> _rows = new();
+    private string _search = "";
+
+    private IEnumerable<Agent> Filtered => _rows.Where(a =>
+        string.IsNullOrWhiteSpace(_search)
+        || a.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+        || a.Code.Contains(_search, StringComparison.OrdinalIgnoreCase)
+        || (a.Phone?.Contains(_search) ?? false));
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _rows = await db.Agents.OrderBy(a => a.Name).ToListAsync();
+    }
+
+    private async Task OpenCreate()
+    {
+        if (!await HasPermission("agents:create"))
+        {
+            Snackbar.Add("Bạn không có quyền tạo đại lý.", Severity.Warning);
+            return;
+        }
+
+        var dialog = await DialogService.ShowAsync<AgentDialog>("Thêm đại lý mới");
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            Snackbar.Add("Đã thêm đại lý mới", Severity.Success);
+            await Load();
+        }
+    }
+
+    private async Task<bool> HasPermission(string permission)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        return result.Succeeded;
+    }
+}

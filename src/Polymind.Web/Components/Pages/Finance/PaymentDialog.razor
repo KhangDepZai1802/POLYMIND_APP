@@ -1,0 +1,186 @@
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudSelect T="Guid?" @bind-Value="_m.CandidateId" Label="Ứng viên *" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true">
+                    @foreach (var c in _candidates)
+                    {
+                        <MudSelectItem T="Guid?" Value="@c.Id">@c.Code — @c.FullName</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="PaymentType" @bind-Value="_m.PaymentType" Label="Loại khoản thu" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var t in Enum.GetValues<PaymentType>())
+                    {
+                        <MudSelectItem Value="@t">@Labels.Vi(t)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudNumericField @bind-Value="_m.Amount" Label="Số tiền (VNĐ) *" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Format="N0" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="PaymentStatus" @bind-Value="_m.Status" Label="Trạng thái" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var s in Enum.GetValues<PaymentStatus>())
+                    {
+                        <MudSelectItem Value="@s">@Labels.Vi(s)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="PaymentMethod?" @bind-Value="_m.PaymentMethod" Label="Phương thức" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                    @foreach (var m in Enum.GetValues<PaymentMethod>())
+                    {
+                        <MudSelectItem T="PaymentMethod?" Value="@m">@Labels.Vi(m)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_m.DueDate" Label="Hạn thu" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_m.PaidDate" Label="Ngày đã thu" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_m.Notes" Label="Ghi chú" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Hủy</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="_saving">Lưu</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Null = tạo mới; có giá trị = sửa khoản thu hiện có.</summary>
+    [Parameter] public Guid? PaymentId { get; set; }
+
+    private record CandidateOption(Guid Id, string Code, string FullName);
+
+    private readonly FormModel _m = new();
+    private List<CandidateOption> _candidates = new();
+    private bool _saving;
+    private bool IsEdit => PaymentId is not null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _candidates = await db.Candidates.OrderBy(c => c.FullName)
+            .Select(c => new CandidateOption(c.Id, c.Code, c.FullName)).ToListAsync();
+
+        if (PaymentId is not null)
+        {
+            var p = await db.Payments.FirstOrDefaultAsync(x => x.Id == PaymentId);
+            if (p is not null) _m.LoadFrom(p);
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        if (_m.CandidateId is null)
+        {
+            Snackbar.Add("Vui lòng chọn ứng viên.", Severity.Warning);
+            return;
+        }
+        if (_m.Amount <= 0)
+        {
+            Snackbar.Add("Số tiền phải lớn hơn 0.", Severity.Warning);
+            return;
+        }
+
+        var permission = IsEdit ? "payments:update" : "payments:create";
+        if (!await HasPermission(permission))
+        {
+            Snackbar.Add("Bạn không có quyền thực hiện thao tác này.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (IsEdit)
+            {
+                var p = await db.Payments.FirstOrDefaultAsync(x => x.Id == PaymentId);
+                if (p is null)
+                {
+                    Snackbar.Add("Không tìm thấy khoản thu.", Severity.Error);
+                    return;
+                }
+                _m.ApplyTo(p);
+                p.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+            else
+            {
+                var p = new Payment
+                {
+                    Code = $"PT-{DateTime.Now:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}",
+                    CreatedBy = await db.Users.Select(u => u.Id).FirstOrDefaultAsync(),
+                };
+                _m.ApplyTo(p);
+                db.Payments.Add(p);
+            }
+            await db.SaveChangesAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private async Task<bool> HasPermission(string permission)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        return result.Succeeded;
+    }
+
+    private sealed class FormModel
+    {
+        public Guid? CandidateId { get; set; }
+        public PaymentType PaymentType { get; set; } = PaymentType.Deposit;
+        public decimal Amount { get; set; }
+        public PaymentStatus Status { get; set; } = PaymentStatus.Pending;
+        public PaymentMethod? PaymentMethod { get; set; }
+        public DateTime? DueDate { get; set; }
+        public DateTime? PaidDate { get; set; }
+        public string? Notes { get; set; }
+
+        public void LoadFrom(Payment p)
+        {
+            CandidateId = p.CandidateId;
+            PaymentType = p.PaymentType;
+            Amount = p.Amount;
+            Status = p.Status;
+            PaymentMethod = p.PaymentMethod;
+            DueDate = p.DueDate?.ToDateTime(TimeOnly.MinValue);
+            PaidDate = p.PaidDate?.ToDateTime(TimeOnly.MinValue);
+            Notes = p.Notes;
+        }
+
+        public void ApplyTo(Payment p)
+        {
+            p.CandidateId = CandidateId!.Value;
+            p.PaymentType = PaymentType;
+            p.Amount = Amount;
+            p.Status = Status;
+            p.PaymentMethod = PaymentMethod;
+            p.DueDate = DueDate is null ? null : DateOnly.FromDateTime(DueDate.Value);
+            p.PaidDate = PaidDate is null ? null : DateOnly.FromDateTime(PaidDate.Value);
+            p.Notes = Notes;
+        }
+    }
+}

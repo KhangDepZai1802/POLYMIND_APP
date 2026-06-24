@@ -1,0 +1,246 @@
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" Class="pt-2">
+            <MudTabPanel Text="Thông tin cá nhân">
+                <MudGrid>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_m.FullName" Label="Họ tên *" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_m.Phone" Label="Số điện thoại" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="Gender?" @bind-Value="_m.Gender" Label="Giới tính" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                            @foreach (var g in Enum.GetValues<Gender>())
+                            {
+                                <MudSelectItem T="Gender?" Value="@g">@Labels.Vi(g)</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudDatePicker @bind-Date="_m.Dob" Label="Ngày sinh" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                       DateFormat="dd/MM/yyyy" MaxDate="DateTime.Today" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="MaritalStatus?" @bind-Value="_m.MaritalStatus" Label="Tình trạng hôn nhân" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                            @foreach (var s in Enum.GetValues<MaritalStatus>())
+                            {
+                                <MudSelectItem T="MaritalStatus?" Value="@s">@Labels.Vi(s)</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_m.Province" Label="Tỉnh/Thành phố" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_m.Address" Label="Địa chỉ" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                </MudGrid>
+            </MudTabPanel>
+
+            <MudTabPanel Text="Giấy tờ">
+                <MudGrid>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_m.CccdNumber" Label="Số CCCD" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudDatePicker @bind-Date="_m.CccdIssueDate" Label="Ngày cấp CCCD" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                       DateFormat="dd/MM/yyyy" MaxDate="DateTime.Today" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_m.CccdIssuePlace" Label="Nơi cấp CCCD" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_m.PassportNumber" Label="Số hộ chiếu" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudDatePicker @bind-Date="_m.PassportExpiry" Label="Hộ chiếu hết hạn" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                       DateFormat="dd/MM/yyyy" />
+                    </MudItem>
+                </MudGrid>
+            </MudTabPanel>
+
+            <MudTabPanel Text="Liên hệ khẩn cấp">
+                <MudGrid>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_m.EmergencyContactName" Label="Người liên hệ" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_m.EmergencyContactPhone" Label="SĐT liên hệ" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_m.EmergencyContactRelation" Label="Quan hệ" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                </MudGrid>
+            </MudTabPanel>
+
+            <MudTabPanel Text="Ngân hàng">
+                <MudGrid>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_m.BankAccountNumber" Label="Số tài khoản" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_m.BankName" Label="Ngân hàng" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_m.BankAccountName" Label="Chủ tài khoản" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                </MudGrid>
+            </MudTabPanel>
+        </MudTabs>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Hủy</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="_saving">Lưu</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Null = tạo mới; có giá trị = sửa ứng viên hiện có.</summary>
+    [Parameter] public Guid? CandidateId { get; set; }
+
+    private readonly FormModel _m = new();
+    private bool _saving;
+    private bool IsEdit => CandidateId is not null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (CandidateId is null) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var c = await db.Candidates.FirstOrDefaultAsync(x => x.Id == CandidateId);
+        if (c is not null) _m.LoadFrom(c);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_m.FullName))
+        {
+            Snackbar.Add("Vui lòng nhập họ tên.", Severity.Warning);
+            return;
+        }
+
+        var permission = IsEdit ? "candidates:update" : "candidates:create";
+        if (!await HasPermission(permission))
+        {
+            Snackbar.Add("Bạn không có quyền thực hiện thao tác này.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (IsEdit)
+            {
+                var c = await db.Candidates.FirstOrDefaultAsync(x => x.Id == CandidateId);
+                if (c is null)
+                {
+                    Snackbar.Add("Không tìm thấy ứng viên.", Severity.Error);
+                    return;
+                }
+                _m.ApplyTo(c);
+                c.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+            else
+            {
+                var c = new Candidate
+                {
+                    Code = $"UV-{DateTime.Now:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}",
+                    CreatedBy = await db.Users.Select(u => u.Id).FirstOrDefaultAsync(),
+                };
+                _m.ApplyTo(c);
+                db.Candidates.Add(c);
+            }
+            await db.SaveChangesAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private async Task<bool> HasPermission(string permission)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        return result.Succeeded;
+    }
+
+    /// <summary>Model tách riêng để dùng DateTime? cho MudDatePicker rồi map sang DateOnly?.</summary>
+    private sealed class FormModel
+    {
+        public string FullName { get; set; } = "";
+        public string? Phone { get; set; }
+        public Gender? Gender { get; set; }
+        public DateTime? Dob { get; set; }
+        public string? Province { get; set; }
+        public string? Address { get; set; }
+        public MaritalStatus? MaritalStatus { get; set; }
+        public string? CccdNumber { get; set; }
+        public DateTime? CccdIssueDate { get; set; }
+        public string? CccdIssuePlace { get; set; }
+        public string? PassportNumber { get; set; }
+        public DateTime? PassportExpiry { get; set; }
+        public string? EmergencyContactName { get; set; }
+        public string? EmergencyContactPhone { get; set; }
+        public string? EmergencyContactRelation { get; set; }
+        public string? BankAccountNumber { get; set; }
+        public string? BankName { get; set; }
+        public string? BankAccountName { get; set; }
+
+        public void LoadFrom(Candidate c)
+        {
+            FullName = c.FullName;
+            Phone = c.Phone;
+            Gender = c.Gender;
+            Dob = c.Dob?.ToDateTime(TimeOnly.MinValue);
+            Province = c.Province;
+            Address = c.Address;
+            MaritalStatus = c.MaritalStatus;
+            CccdNumber = c.CccdNumber;
+            CccdIssueDate = c.CccdIssueDate?.ToDateTime(TimeOnly.MinValue);
+            CccdIssuePlace = c.CccdIssuePlace;
+            PassportNumber = c.PassportNumber;
+            PassportExpiry = c.PassportExpiry?.ToDateTime(TimeOnly.MinValue);
+            EmergencyContactName = c.EmergencyContactName;
+            EmergencyContactPhone = c.EmergencyContactPhone;
+            EmergencyContactRelation = c.EmergencyContactRelation;
+            BankAccountNumber = c.BankAccountNumber;
+            BankName = c.BankName;
+            BankAccountName = c.BankAccountName;
+        }
+
+        public void ApplyTo(Candidate c)
+        {
+            c.FullName = FullName.Trim();
+            c.Phone = Phone;
+            c.Gender = Gender;
+            c.Dob = Dob is null ? null : DateOnly.FromDateTime(Dob.Value);
+            c.Province = Province;
+            c.Address = Address;
+            c.MaritalStatus = MaritalStatus;
+            c.CccdNumber = CccdNumber;
+            c.CccdIssueDate = CccdIssueDate is null ? null : DateOnly.FromDateTime(CccdIssueDate.Value);
+            c.CccdIssuePlace = CccdIssuePlace;
+            c.PassportNumber = PassportNumber;
+            c.PassportExpiry = PassportExpiry is null ? null : DateOnly.FromDateTime(PassportExpiry.Value);
+            c.EmergencyContactName = EmergencyContactName;
+            c.EmergencyContactPhone = EmergencyContactPhone;
+            c.EmergencyContactRelation = EmergencyContactRelation;
+            c.BankAccountNumber = BankAccountNumber;
+            c.BankName = BankName;
+            c.BankAccountName = BankAccountName;
+        }
+    }
+}

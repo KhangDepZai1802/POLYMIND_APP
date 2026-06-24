@@ -1,6 +1,5 @@
 @page "/"
 @attribute [Authorize(Policy = "dashboard:read")]
-@rendermode InteractiveServer
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 
 <PageTitle>Tổng quan — POLYMIND</PageTitle>

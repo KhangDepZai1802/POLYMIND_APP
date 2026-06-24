@@ -1,6 +1,5 @@
 @page "/leads"
 @attribute [Authorize(Policy = "leads:read")]
-@rendermode InteractiveServer
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
 @inject IDialogService DialogService

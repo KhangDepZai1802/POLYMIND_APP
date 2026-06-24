@@ -1,0 +1,155 @@
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_m.Name" Label="Tên đại lý *" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_m.RepresentativeName" Label="Người đại diện" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_m.Phone" Label="Số điện thoại" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_m.Email" Label="Email" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_m.Address" Label="Địa chỉ" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_m.BankAccountNumber" Label="Số tài khoản" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_m.BankName" Label="Ngân hàng" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_m.BankAccountName" Label="Chủ tài khoản" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6" Class="d-flex align-center">
+                <MudSwitch @bind-Value="_m.IsActive" Label="Đang hợp tác" Color="Color.Success" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Hủy</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="_saving">Lưu</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Null = tạo mới; có giá trị = sửa đại lý hiện có.</summary>
+    [Parameter] public Guid? AgentId { get; set; }
+
+    private readonly FormModel _m = new();
+    private bool _saving;
+    private bool IsEdit => AgentId is not null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AgentId is null) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var a = await db.Agents.FirstOrDefaultAsync(x => x.Id == AgentId);
+        if (a is not null) _m.LoadFrom(a);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_m.Name))
+        {
+            Snackbar.Add("Vui lòng nhập tên đại lý.", Severity.Warning);
+            return;
+        }
+
+        var permission = IsEdit ? "agents:update" : "agents:create";
+        if (!await HasPermission(permission))
+        {
+            Snackbar.Add("Bạn không có quyền thực hiện thao tác này.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (IsEdit)
+            {
+                var a = await db.Agents.FirstOrDefaultAsync(x => x.Id == AgentId);
+                if (a is null)
+                {
+                    Snackbar.Add("Không tìm thấy đại lý.", Severity.Error);
+                    return;
+                }
+                _m.ApplyTo(a);
+                a.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+            else
+            {
+                var a = new Agent { Code = $"AG-{Random.Shared.Next(100000, 999999)}" };
+                _m.ApplyTo(a);
+                db.Agents.Add(a);
+            }
+            await db.SaveChangesAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private async Task<bool> HasPermission(string permission)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        return result.Succeeded;
+    }
+
+    private sealed class FormModel
+    {
+        public string Name { get; set; } = "";
+        public string? RepresentativeName { get; set; }
+        public string? Phone { get; set; }
+        public string? Email { get; set; }
+        public string? Address { get; set; }
+        public string? BankAccountNumber { get; set; }
+        public string? BankName { get; set; }
+        public string? BankAccountName { get; set; }
+        public bool IsActive { get; set; } = true;
+
+        public void LoadFrom(Agent a)
+        {
+            Name = a.Name;
+            RepresentativeName = a.RepresentativeName;
+            Phone = a.Phone;
+            Email = a.Email;
+            Address = a.Address;
+            BankAccountNumber = a.BankAccountNumber;
+            BankName = a.BankName;
+            BankAccountName = a.BankAccountName;
+            IsActive = a.IsActive;
+        }
+
+        public void ApplyTo(Agent a)
+        {
+            a.Name = Name.Trim();
+            a.RepresentativeName = RepresentativeName;
+            a.Phone = Phone;
+            a.Email = Email;
+            a.Address = Address;
+            a.BankAccountNumber = BankAccountNumber;
+            a.BankName = BankName;
+            a.BankAccountName = BankAccountName;
+            a.IsActive = IsActive;
+        }
+    }
+}

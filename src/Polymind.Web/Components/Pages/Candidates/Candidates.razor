@@ -1,14 +1,26 @@
 @page "/candidates"
 @attribute [Authorize(Policy = "candidates:read")]
-@rendermode InteractiveServer
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>Ứng viên — POLYMIND</PageTitle>
 
-<div class="mb-4">
-    <MudText Typo="Typo.h5"><b>Quản lý Ứng viên</b></MudText>
-    <MudText Typo="Typo.body2" Class="mud-text-secondary">@_rows.Count ứng viên trong quy trình</MudText>
+<div class="d-flex justify-space-between align-center mb-4">
+    <div>
+        <MudText Typo="Typo.h5"><b>Quản lý Ứng viên</b></MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">@_rows.Count ứng viên trong quy trình</MudText>
+    </div>
+    <AuthorizeView Policy="candidates:create">
+        <Authorized>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="OpenCreate">
+                Thêm ứng viên
+            </MudButton>
+        </Authorized>
+    </AuthorizeView>
 </div>
 
 <MudPaper Elevation="1" Class="pa-4">
@@ -52,7 +64,33 @@
         || r.Code.Contains(_search, StringComparison.OrdinalIgnoreCase)
         || (r.Phone?.Contains(_search) ?? false));
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task OpenCreate()
+    {
+        if (!await HasPermission("candidates:create"))
+        {
+            Snackbar.Add("Bạn không có quyền tạo ứng viên.", Severity.Warning);
+            return;
+        }
+
+        var dialog = await DialogService.ShowAsync<CandidateDialog>("Thêm ứng viên mới");
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            Snackbar.Add("Đã thêm ứng viên mới", Severity.Success);
+            await Load();
+        }
+    }
+
+    private async Task<bool> HasPermission(string permission)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        return result.Succeeded;
+    }
+
+    private async Task Load()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         var data = await db.Candidates

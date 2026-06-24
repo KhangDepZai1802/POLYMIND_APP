@@ -1,6 +1,5 @@
 @page "/leads/{Id:guid}"
 @attribute [Authorize(Policy = "leads:read")]
-@rendermode InteractiveServer
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar

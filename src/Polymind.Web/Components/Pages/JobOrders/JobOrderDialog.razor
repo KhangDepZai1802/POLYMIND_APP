@@ -1,0 +1,177 @@
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_m.Country" Label="Quốc gia *" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="JobOrderStatus" @bind-Value="_m.Status" Label="Trạng thái" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var s in Enum.GetValues<JobOrderStatus>())
+                    {
+                        <MudSelectItem Value="@s">@Labels.Vi(s)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_m.CompanyName" Label="Công ty tiếp nhận" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_m.UnionName" Label="Nghiệp đoàn" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_m.Field" Label="Ngành nghề" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudNumericField @bind-Value="_m.Quantity" Label="Số lượng" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_m.SalaryDescription" Label="Mức lương" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudNumericField @bind-Value="_m.CostAmount" Label="Chi phí (VNĐ)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Format="N0" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_m.RecruitmentStartDate" Label="Ngày bắt đầu tuyển" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_m.ExpectedDepartureDate" Label="Dự kiến xuất cảnh" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_m.Requirements" Label="Yêu cầu tuyển dụng" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="3" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Hủy</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="_saving">Lưu</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Null = tạo mới; có giá trị = sửa đơn hàng hiện có.</summary>
+    [Parameter] public Guid? JobOrderId { get; set; }
+
+    private readonly FormModel _m = new();
+    private bool _saving;
+    private bool IsEdit => JobOrderId is not null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (JobOrderId is null) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var j = await db.JobOrders.FirstOrDefaultAsync(x => x.Id == JobOrderId);
+        if (j is not null) _m.LoadFrom(j);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_m.Country))
+        {
+            Snackbar.Add("Vui lòng nhập quốc gia.", Severity.Warning);
+            return;
+        }
+
+        var permission = IsEdit ? "job_orders:update" : "job_orders:create";
+        if (!await HasPermission(permission))
+        {
+            Snackbar.Add("Bạn không có quyền thực hiện thao tác này.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (IsEdit)
+            {
+                var j = await db.JobOrders.FirstOrDefaultAsync(x => x.Id == JobOrderId);
+                if (j is null)
+                {
+                    Snackbar.Add("Không tìm thấy đơn hàng.", Severity.Error);
+                    return;
+                }
+                _m.ApplyTo(j);
+                j.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+            else
+            {
+                var j = new JobOrder
+                {
+                    Code = $"JO-{DateTime.Now:yyyyMM}-{Random.Shared.Next(100, 999)}",
+                    CreatedBy = await db.Users.Select(u => u.Id).FirstOrDefaultAsync(),
+                };
+                _m.ApplyTo(j);
+                db.JobOrders.Add(j);
+            }
+            await db.SaveChangesAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private async Task<bool> HasPermission(string permission)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        return result.Succeeded;
+    }
+
+    /// <summary>Model tách riêng để dùng DateTime? cho MudDatePicker rồi map sang DateOnly?.</summary>
+    private sealed class FormModel
+    {
+        public string Country { get; set; } = "";
+        public string? CompanyName { get; set; }
+        public string? UnionName { get; set; }
+        public string? Field { get; set; }
+        public int Quantity { get; set; }
+        public string? SalaryDescription { get; set; }
+        public decimal? CostAmount { get; set; }
+        public string? Requirements { get; set; }
+        public DateTime? RecruitmentStartDate { get; set; }
+        public DateTime? ExpectedDepartureDate { get; set; }
+        public JobOrderStatus Status { get; set; } = JobOrderStatus.Recruiting;
+
+        public void LoadFrom(JobOrder j)
+        {
+            Country = j.Country;
+            CompanyName = j.CompanyName;
+            UnionName = j.UnionName;
+            Field = j.Field;
+            Quantity = j.Quantity;
+            SalaryDescription = j.SalaryDescription;
+            CostAmount = j.CostAmount;
+            Requirements = j.Requirements;
+            RecruitmentStartDate = j.RecruitmentStartDate?.ToDateTime(TimeOnly.MinValue);
+            ExpectedDepartureDate = j.ExpectedDepartureDate?.ToDateTime(TimeOnly.MinValue);
+            Status = j.Status;
+        }
+
+        public void ApplyTo(JobOrder j)
+        {
+            j.Country = Country.Trim();
+            j.CompanyName = CompanyName;
+            j.UnionName = UnionName;
+            j.Field = Field;
+            j.Quantity = Quantity;
+            j.SalaryDescription = SalaryDescription;
+            j.CostAmount = CostAmount;
+            j.Requirements = Requirements;
+            j.RecruitmentStartDate = RecruitmentStartDate is null ? null : DateOnly.FromDateTime(RecruitmentStartDate.Value);
+            j.ExpectedDepartureDate = ExpectedDepartureDate is null ? null : DateOnly.FromDateTime(ExpectedDepartureDate.Value);
+            j.Status = Status;
+        }
+    }
+}

@@ -1,0 +1,143 @@
+@page "/job-orders/{Id:guid}"
+@attribute [Authorize(Policy = "job_orders:read")]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Chi tiết Đơn hàng — POLYMIND</PageTitle>
+
+@if (_job is null)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <div class="d-flex justify-space-between align-center mb-3">
+        <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/job-orders"))">Quay lại</MudButton>
+        @if (_canUpdate)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenEdit">Sửa đơn hàng</MudButton>
+        }
+    </div>
+
+    <MudGrid>
+        <MudItem xs="12" md="5">
+            <MudPaper Class="pa-4" Elevation="1">
+                <div class="d-flex justify-space-between align-center mb-3">
+                    <div>
+                        <MudText Typo="Typo.h6"><b>@(string.IsNullOrWhiteSpace(_job.CompanyName) ? _job.Country : _job.CompanyName)</b></MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@_job.Code</MudText>
+                    </div>
+                    <MudChip T="string" Color="Color.Primary">@Labels.Vi(_job.Status)</MudChip>
+                </div>
+                <MudDivider Class="mb-3" />
+                <MudGrid>
+                    @Field("Quốc gia", _job.Country)
+                    @Field("Ngành nghề", _job.Field)
+                    @Field("Nghiệp đoàn", _job.UnionName)
+                    @Field("Số lượng", _job.Quantity.ToString())
+                    @Field("Mức lương", _job.SalaryDescription)
+                    @Field("Chi phí", _job.CostAmount is null ? null : $"{_job.CostAmount:N0} đ")
+                    @Field("Bắt đầu tuyển", _job.RecruitmentStartDate?.ToString("dd/MM/yyyy"))
+                    @Field("Dự kiến xuất cảnh", _job.ExpectedDepartureDate?.ToString("dd/MM/yyyy"))
+                </MudGrid>
+                @if (!string.IsNullOrWhiteSpace(_job.Requirements))
+                {
+                    <MudDivider Class="my-3" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Yêu cầu tuyển dụng</MudText>
+                    <MudText Typo="Typo.body2">@_job.Requirements</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="7">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Ứng viên trong đơn hàng (@_candidates.Count)</b></MudText>
+                @if (_candidates.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info">Chưa có ứng viên nào được gắn vào đơn hàng này.</MudAlert>
+                }
+                else
+                {
+                    <MudDataGrid T="CandidateRow" Items="_candidates" Hover="true" Dense="true" Striped="true"
+                                 RowClick="@(args => Nav.NavigateTo($"/candidates/{args.Item.CandidateId}"))" Class="cursor-pointer">
+                        <Columns>
+                            <PropertyColumn Property="x => x.Code" Title="Mã" />
+                            <PropertyColumn Property="x => x.FullName" Title="Họ tên" />
+                            <TemplateColumn Title="Bước hiện tại">
+                                <CellTemplate>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">@Labels.Vi(context.Item.Step)</MudChip>
+                                </CellTemplate>
+                            </TemplateColumn>
+                            <TemplateColumn Title="Trạng thái">
+                                <CellTemplate>
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@Labels.Vi(context.Item.Status)</MudChip>
+                                </CellTemplate>
+                            </TemplateColumn>
+                        </Columns>
+                    </MudDataGrid>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private record CandidateRow(Guid CandidateId, string Code, string FullName, WorkflowStep Step, CandidateJobOrderStatus Status);
+
+    private JobOrder? _job;
+    private List<CandidateRow> _candidates = new();
+    private bool _canUpdate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canUpdate = await HasPermission("job_orders:update");
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _job = await db.JobOrders.FirstOrDefaultAsync(j => j.Id == Id);
+        if (_job is null) return;
+        _candidates = await db.CandidateJobOrders
+            .Where(cjo => cjo.JobOrderId == Id)
+            .OrderByDescending(cjo => cjo.CreatedAt)
+            .Select(cjo => new CandidateRow(
+                cjo.CandidateId,
+                cjo.Candidate.Code,
+                cjo.Candidate.FullName,
+                cjo.CurrentStep,
+                cjo.Status))
+            .ToListAsync();
+    }
+
+    private async Task OpenEdit()
+    {
+        var parameters = new DialogParameters<JobOrderDialog> { { x => x.JobOrderId, Id } };
+        var dialog = await DialogService.ShowAsync<JobOrderDialog>("Sửa đơn hàng", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            Snackbar.Add("Đã cập nhật đơn hàng", Severity.Success);
+            await Load();
+        }
+    }
+
+    private async Task<bool> HasPermission(string permission)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        return result.Succeeded;
+    }
+
+    private RenderFragment Field(string label, string? value) =>@<MudItem xs="6">
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">@label</MudText>
+        <MudText Typo="Typo.body2">@(string.IsNullOrWhiteSpace(value) ? "—" : value)</MudText>
+    </MudItem>;
+}

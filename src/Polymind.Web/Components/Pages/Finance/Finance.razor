@@ -1,0 +1,192 @@
+@page "/finance"
+@attribute [Authorize(Policy = "payments:read")]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Tài chính — POLYMIND</PageTitle>
+
+<div class="mb-4">
+    <MudText Typo="Typo.h5"><b>Tài chính & Công nợ</b></MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">Quản lý khoản thu từ ứng viên và khoản chi vận hành</MudText>
+</div>
+
+<MudGrid Class="mb-2">
+    <MudItem xs="12" sm="4">
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Tổng đã thu</MudText>
+            <MudText Typo="Typo.h6" Color="Color.Success"><b>@($"{_totalPaid:N0} đ")</b></MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Còn phải thu</MudText>
+            <MudText Typo="Typo.h6" Color="Color.Warning"><b>@($"{_totalPending:N0} đ")</b></MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Tổng đã chi</MudText>
+            <MudText Typo="Typo.h6" Color="Color.Error"><b>@($"{_totalExpense:N0} đ")</b></MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudPaper Elevation="1" Class="pa-2">
+    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" Class="pa-2">
+        <MudTabPanel Text="@($"Khoản thu ({_payments.Count})")">
+            <div class="d-flex justify-end mb-3">
+                <AuthorizeView Policy="payments:create">
+                    <Authorized>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreatePayment">
+                            Thêm khoản thu
+                        </MudButton>
+                    </Authorized>
+                </AuthorizeView>
+            </div>
+            <MudDataGrid T="PaymentRow" Items="_payments" Hover="true" Dense="true" Striped="true">
+                <Columns>
+                    <PropertyColumn Property="x => x.Code" Title="Mã" />
+                    <PropertyColumn Property="x => x.CandidateName" Title="Ứng viên" />
+                    <TemplateColumn Title="Loại">
+                        <CellTemplate>@Labels.Vi(context.Item.Type)</CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Số tiền">
+                        <CellTemplate>@($"{context.Item.Amount:N0} đ")</CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Trạng thái">
+                        <CellTemplate>
+                            <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(context.Item.Status)">@Labels.Vi(context.Item.Status)</MudChip>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Hạn thu">
+                        <CellTemplate>@(context.Item.DueDate?.ToString("dd/MM/yyyy") ?? "—")</CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="" Sortable="false">
+                        <CellTemplate>
+                            @if (_canUpdatePayment)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditPayment(context.Item.Id))" />
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+                <PagerContent><MudDataGridPager T="PaymentRow" /></PagerContent>
+            </MudDataGrid>
+        </MudTabPanel>
+
+        <MudTabPanel Text="@($"Khoản chi ({_expenses.Count})")">
+            <div class="d-flex justify-end mb-3">
+                <AuthorizeView Policy="expenses:create">
+                    <Authorized>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateExpense">
+                            Thêm khoản chi
+                        </MudButton>
+                    </Authorized>
+                </AuthorizeView>
+            </div>
+            <MudDataGrid T="Expense" Items="_expenses" Hover="true" Dense="true" Striped="true">
+                <Columns>
+                    <PropertyColumn Property="x => x.Code" Title="Mã" />
+                    <TemplateColumn Title="Loại">
+                        <CellTemplate>@Labels.Vi(context.Item.Category)</CellTemplate>
+                    </TemplateColumn>
+                    <PropertyColumn Property="x => x.Description" Title="Mô tả" />
+                    <TemplateColumn Title="Số tiền">
+                        <CellTemplate>@($"{context.Item.Amount:N0} đ")</CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Ngày chi">
+                        <CellTemplate>@context.Item.ExpenseDate.ToString("dd/MM/yyyy")</CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="" Sortable="false">
+                        <CellTemplate>
+                            @if (_canUpdateExpense)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditExpense(context.Item.Id))" />
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+                <PagerContent><MudDataGridPager T="Expense" /></PagerContent>
+            </MudDataGrid>
+        </MudTabPanel>
+    </MudTabs>
+</MudPaper>
+
+@code {
+    private record PaymentRow(Guid Id, string Code, string CandidateName, PaymentType Type, decimal Amount, PaymentStatus Status, DateOnly? DueDate);
+
+    private List<PaymentRow> _payments = new();
+    private List<Expense> _expenses = new();
+    private decimal _totalPaid, _totalPending, _totalExpense;
+    private bool _canUpdatePayment, _canUpdateExpense;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canUpdatePayment = await HasPermission("payments:update");
+        _canUpdateExpense = await HasPermission("expenses:update");
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var names = await db.Candidates.ToDictionaryAsync(c => c.Id, c => c.FullName);
+        var payments = await db.Payments.OrderByDescending(p => p.CreatedAt).ToListAsync();
+        _payments = payments.Select(p => new PaymentRow(
+            p.Id, p.Code, names.GetValueOrDefault(p.CandidateId, "—"),
+            p.PaymentType, p.Amount, p.Status, p.DueDate)).ToList();
+        _expenses = await db.Expenses.OrderByDescending(e => e.ExpenseDate).ToListAsync();
+
+        _totalPaid = payments.Where(p => p.Status == PaymentStatus.Paid).Sum(p => p.Amount);
+        _totalPending = payments.Where(p => p.Status is PaymentStatus.Pending or PaymentStatus.Partial or PaymentStatus.Overdue).Sum(p => p.Amount);
+        _totalExpense = _expenses.Sum(e => e.Amount);
+    }
+
+    private async Task OpenCreatePayment()
+    {
+        if (!await HasPermission("payments:create")) { Snackbar.Add("Bạn không có quyền tạo khoản thu.", Severity.Warning); return; }
+        var dialog = await DialogService.ShowAsync<PaymentDialog>("Thêm khoản thu");
+        await HandleResult(dialog, "Đã thêm khoản thu");
+    }
+
+    private async Task OpenEditPayment(Guid id)
+    {
+        var parameters = new DialogParameters<PaymentDialog> { { x => x.PaymentId, id } };
+        var dialog = await DialogService.ShowAsync<PaymentDialog>("Sửa khoản thu", parameters);
+        await HandleResult(dialog, "Đã cập nhật khoản thu");
+    }
+
+    private async Task OpenCreateExpense()
+    {
+        if (!await HasPermission("expenses:create")) { Snackbar.Add("Bạn không có quyền tạo khoản chi.", Severity.Warning); return; }
+        var dialog = await DialogService.ShowAsync<ExpenseDialog>("Thêm khoản chi");
+        await HandleResult(dialog, "Đã thêm khoản chi");
+    }
+
+    private async Task OpenEditExpense(Guid id)
+    {
+        var parameters = new DialogParameters<ExpenseDialog> { { x => x.ExpenseId, id } };
+        var dialog = await DialogService.ShowAsync<ExpenseDialog>("Sửa khoản chi", parameters);
+        await HandleResult(dialog, "Đã cập nhật khoản chi");
+    }
+
+    private async Task HandleResult(IDialogReference dialog, string successMessage)
+    {
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            Snackbar.Add(successMessage, Severity.Success);
+            await Load();
+        }
+    }
+
+    private async Task<bool> HasPermission(string permission)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        return result.Succeeded;
+    }
+}

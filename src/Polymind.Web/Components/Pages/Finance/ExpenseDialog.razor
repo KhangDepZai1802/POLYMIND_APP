@@ -1,0 +1,139 @@
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="ExpenseCategory" @bind-Value="_m.Category" Label="Loại khoản chi" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var c in Enum.GetValues<ExpenseCategory>())
+                    {
+                        <MudSelectItem Value="@c">@Labels.Vi(c)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudNumericField @bind-Value="_m.Amount" Label="Số tiền (VNĐ) *" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Format="N0" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_m.ExpenseDate" Label="Ngày chi *" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_m.Description" Label="Mô tả" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Hủy</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="_saving">Lưu</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Null = tạo mới; có giá trị = sửa khoản chi hiện có.</summary>
+    [Parameter] public Guid? ExpenseId { get; set; }
+
+    private readonly FormModel _m = new();
+    private bool _saving;
+    private bool IsEdit => ExpenseId is not null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (ExpenseId is null) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var e = await db.Expenses.FirstOrDefaultAsync(x => x.Id == ExpenseId);
+        if (e is not null) _m.LoadFrom(e);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        if (_m.Amount <= 0)
+        {
+            Snackbar.Add("Số tiền phải lớn hơn 0.", Severity.Warning);
+            return;
+        }
+        if (_m.ExpenseDate is null)
+        {
+            Snackbar.Add("Vui lòng chọn ngày chi.", Severity.Warning);
+            return;
+        }
+
+        var permission = IsEdit ? "expenses:update" : "expenses:create";
+        if (!await HasPermission(permission))
+        {
+            Snackbar.Add("Bạn không có quyền thực hiện thao tác này.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (IsEdit)
+            {
+                var e = await db.Expenses.FirstOrDefaultAsync(x => x.Id == ExpenseId);
+                if (e is null)
+                {
+                    Snackbar.Add("Không tìm thấy khoản chi.", Severity.Error);
+                    return;
+                }
+                _m.ApplyTo(e);
+                e.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+            else
+            {
+                var e = new Expense
+                {
+                    Code = $"EX-{DateTime.Now:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}",
+                    CreatedBy = await db.Users.Select(u => u.Id).FirstOrDefaultAsync(),
+                };
+                _m.ApplyTo(e);
+                db.Expenses.Add(e);
+            }
+            await db.SaveChangesAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private async Task<bool> HasPermission(string permission)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        return result.Succeeded;
+    }
+
+    private sealed class FormModel
+    {
+        public ExpenseCategory Category { get; set; } = ExpenseCategory.Other;
+        public decimal Amount { get; set; }
+        public string? Description { get; set; }
+        public DateTime? ExpenseDate { get; set; } = DateTime.Today;
+
+        public void LoadFrom(Expense e)
+        {
+            Category = e.Category;
+            Amount = e.Amount;
+            Description = e.Description;
+            ExpenseDate = e.ExpenseDate.ToDateTime(TimeOnly.MinValue);
+        }
+
+        public void ApplyTo(Expense e)
+        {
+            e.Category = Category;
+            e.Amount = Amount;
+            e.Description = Description;
+            e.ExpenseDate = DateOnly.FromDateTime(ExpenseDate!.Value);
+        }
+    }
+}
