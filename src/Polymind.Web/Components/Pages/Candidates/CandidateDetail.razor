@@ -291,14 +291,50 @@ else
                                     <td>v@document.VersionNumber</td>
                                     <td>@FormatFileSize(document.FileSize)</td>
                                     <td>@document.UploadedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
-                                    <td style="text-align:right">
+                                    <td style="text-align:right; white-space:nowrap">
                                         <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
                                                    StartIcon="@Icons.Material.Filled.Download"
                                                    OnClick="@(() => DownloadDocument(document.VersionId))">
                                             Tải
                                         </MudButton>
+                                        @if (_versionsByDoc.TryGetValue(document.DocumentId, out var vers) && vers.Count > 1)
+                                        {
+                                            <MudButton Size="Size.Small" Variant="Variant.Text"
+                                                       StartIcon="@Icons.Material.Filled.History"
+                                                       OnClick="@(() => ToggleHistory(document.DocumentId))">
+                                                Lịch sử (@vers.Count)
+                                            </MudButton>
+                                        }
                                     </td>
                                 </tr>
+                                @if (_expandedDocId == document.DocumentId && _versionsByDoc.TryGetValue(document.DocumentId, out var history))
+                                {
+                                    <tr>
+                                        <td colspan="6" style="background-color: var(--mud-palette-background-grey)">
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary mb-1"><b>Các phiên bản</b></MudText>
+                                            @foreach (var v in history)
+                                            {
+                                                <div class="d-flex align-center py-1" style="gap:8px">
+                                                    <MudChip T="string" Size="Size.Small" Color="@(v.IsCurrent ? Color.Success : Color.Default)">v@v.VersionNumber</MudChip>
+                                                    <span class="flex-grow-1">@v.FileName <span class="mud-text-secondary">(@FormatFileSize(v.FileSize) — @v.UploadedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm"))</span></span>
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Download" Size="Size.Small" OnClick="@(() => DownloadDocument(v.VersionId))" />
+                                                    @if (_canUpdateCandidate && !v.IsCurrent)
+                                                    {
+                                                        <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                                                                   StartIcon="@Icons.Material.Filled.RestartAlt"
+                                                                   OnClick="@(() => RestoreVersion(document.DocumentId, v.VersionId))">
+                                                            Đặt hiện hành
+                                                        </MudButton>
+                                                    }
+                                                    else if (v.IsCurrent)
+                                                    {
+                                                        <MudText Typo="Typo.caption" Color="Color.Success">Hiện hành</MudText>
+                                                    }
+                                                </div>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
                             }
                         </tbody>
                     </MudSimpleTable>
@@ -344,6 +380,10 @@ else
         int VersionNumber,
         DateTimeOffset UploadedAt,
         string? Notes);
+    private record DocumentVersionRow(Guid VersionId, int VersionNumber, string FileName, long FileSize, DateTimeOffset UploadedAt, bool IsCurrent);
+
+    private Dictionary<Guid, List<DocumentVersionRow>> _versionsByDoc = new();
+    private Guid? _expandedDocId;
 
     private bool HasEmergencyInfo => !string.IsNullOrWhiteSpace(_candidate?.EmergencyContactName)
         || !string.IsNullOrWhiteSpace(_candidate?.EmergencyContactPhone);
@@ -451,6 +491,14 @@ else
             .Where(row => row is not null)
             .Cast<CandidateDocumentRow>()
             .ToList();
+
+        _versionsByDoc = documents.ToDictionary(
+            d => d.Id,
+            d => versions.Where(v => v.DocumentId == d.Id)
+                .OrderByDescending(v => v.VersionNumber)
+                .Select(v => new DocumentVersionRow(v.Id, v.VersionNumber, v.FileName, v.FileSize, v.CreatedAt,
+                    d.CurrentVersionId == v.Id))
+                .ToList());
     }
 
     private async Task OpenEdit()
@@ -685,6 +733,32 @@ else
         {
             Snackbar.Add($"Không tạo được link tải hồ sơ: {ex.Message}", Severity.Error);
         }
+    }
+
+    private void ToggleHistory(Guid documentId)
+        => _expandedDocId = _expandedDocId == documentId ? null : documentId;
+
+    private async Task RestoreVersion(Guid documentId, Guid versionId)
+    {
+        if (!await HasPermission("candidates:update"))
+        {
+            Snackbar.Add("Bạn không có quyền khôi phục hồ sơ.", Severity.Warning);
+            return;
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var document = await db.CandidateDocuments.FirstOrDefaultAsync(d => d.Id == documentId && d.CandidateId == Id);
+        if (document is null) return;
+        if (document.CurrentVersionId == versionId) return;
+
+        var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+        var oldVersionId = document.CurrentVersionId;
+        document.CurrentVersionId = versionId;
+        document.UpdatedAt = DateTimeOffset.UtcNow;
+        db.AddAudit(actorId, "restore_version", "candidate_documents", document.Id,
+            new { CurrentVersionId = oldVersionId }, new { document.CurrentVersionId });
+        await db.SaveChangesAsync();
+        Snackbar.Add("Đã đặt phiên bản này làm hiện hành.", Severity.Success);
+        await Load();
     }
 
     // Mốc hoa hồng ↔ bước workflow tương ứng (mục 8.3).

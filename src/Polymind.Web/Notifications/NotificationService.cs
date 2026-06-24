@@ -94,6 +94,20 @@ public class NotificationService(IDbContextFactory<ApplicationDbContext> dbFacto
                 $"{f.Airline} → {f.DestinationCountry} — bay {f.DepartureDate:dd/MM/yyyy}.");
         }
 
+        // --- Lịch hẹn tư vấn Lead sắp tới ---
+        var horizonStart = DateTimeOffset.UtcNow;
+        var horizonEnd = DateTimeOffset.UtcNow.AddDays(LookAheadDays);
+        var leadAppointments = await db.Leads
+            .Where(l => l.AppointmentAt != null && l.AppointmentAt >= horizonStart && l.AppointmentAt <= horizonEnd
+                        && l.Status != LeadStatus.Converted && l.Status != LeadStatus.Cancelled)
+            .Select(l => new { l.Id, l.FullName, l.AppointmentAt })
+            .ToListAsync();
+        foreach (var l in leadAppointments)
+        {
+            Add(NotificationType.ReminderInterview, l.Id, "lead", $"Lịch hẹn tư vấn: {l.FullName}",
+                $"Hẹn lúc {l.AppointmentAt!.Value.ToLocalTime():dd/MM/yyyy HH:mm}.");
+        }
+
         // --- Hồ sơ còn thiếu: ứng viên đã tới bước Hoàn thiện hồ sơ nhưng chưa có tài liệu nào ---
         var docCandidateIds = (await db.CandidateDocuments.Select(d => d.CandidateId).Distinct().ToListAsync())
             .ToHashSet();

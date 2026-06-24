@@ -226,6 +226,20 @@ public static class Labels
         _ => Color.Default
     };
 
+    public static string Vi(ReceiptType t) => t switch
+    {
+        ReceiptType.Income => "Phiếu thu",
+        ReceiptType.Expense => "Phiếu chi",
+        _ => t.ToString()
+    };
+
+    public static Color ColorOf(ReceiptType t) => t switch
+    {
+        ReceiptType.Income => Color.Success,
+        ReceiptType.Expense => Color.Error,
+        _ => Color.Default
+    };
+
     public static string Vi(NotificationType t) => t switch
     {
         NotificationType.ReminderDocument => "Nhắc hồ sơ",

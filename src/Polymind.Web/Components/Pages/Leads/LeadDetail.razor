@@ -72,6 +72,31 @@ else
                 </MudPaper>
             }
 
+            @if (_canUpdateLead)
+            {
+                <MudPaper Class="pa-4 mb-4" Elevation="1">
+                    <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Phân công phụ trách</b></MudText>
+                    <MudSelect T="Guid?" @bind-Value="_assignTo" Label="Người phụ trách" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" Class="mb-2">
+                        @foreach (var u in _users)
+                        {
+                            <MudSelectItem T="Guid?" Value="@u.Id">@u.FullName</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true" OnClick="AssignLead" Disabled="_busy">Lưu phân công</MudButton>
+                </MudPaper>
+
+                <MudPaper Class="pa-4 mb-4" Elevation="1">
+                    <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Lịch hẹn tư vấn</b></MudText>
+                    <MudDatePicker @bind-Date="_appointmentDate" Label="Ngày hẹn" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" Class="mb-2" />
+                    <MudTimePicker @bind-Time="_appointmentTime" Label="Giờ hẹn" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" />
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true" OnClick="SaveAppointment" Disabled="_busy">Lưu lịch hẹn</MudButton>
+                    @if (_lead.AppointmentAt is not null)
+                    {
+                        <MudText Typo="Typo.caption" Class="mt-2 mud-text-secondary">Hẹn hiện tại: <b>@_lead.AppointmentAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</b></MudText>
+                    }
+                </MudPaper>
+            }
+
             @if (_lead.Status != LeadStatus.Converted)
             {
                 @if (_canUpdateLead && _canCreateCandidate)
@@ -103,6 +128,11 @@ else
     private bool _busy;
     private bool _canUpdateLead;
     private bool _canCreateCandidate;
+    private Guid? _assignTo;
+    private DateTime? _appointmentDate;
+    private TimeSpan? _appointmentTime;
+    private record UserOption(Guid Id, string FullName);
+    private List<UserOption> _users = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -117,8 +147,93 @@ else
         if (_lead is not null)
         {
             _newStatus = _lead.Status;
+            _assignTo = _lead.AssignedTo;
+            if (_lead.AppointmentAt is not null)
+            {
+                var local = _lead.AppointmentAt.Value.ToLocalTime();
+                _appointmentDate = local.Date;
+                _appointmentTime = local.TimeOfDay;
+            }
             _activities = await db.LeadActivities.Where(a => a.LeadId == Id)
                 .OrderByDescending(a => a.CreatedAt).ToListAsync();
+            _users = await db.Users.Where(u => u.IsActive)
+                .OrderBy(u => u.FullName)
+                .Select(u => new UserOption(u.Id, u.FullName)).ToListAsync();
+        }
+    }
+
+    private async Task AssignLead()
+    {
+        if (_lead is null) return;
+        if (!await HasPermission("leads:update"))
+        {
+            Snackbar.Add("Bạn không có quyền phân công lead.", Severity.Warning);
+            return;
+        }
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var lead = await db.Leads.FirstAsync(l => l.Id == Id);
+            var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+            var old = lead.AssignedTo;
+            lead.AssignedTo = _assignTo;
+            lead.UpdatedAt = DateTimeOffset.UtcNow;
+            var assigneeName = _assignTo is null ? "(bỏ phân công)" : _users.FirstOrDefault(u => u.Id == _assignTo)?.FullName ?? "?";
+            db.LeadActivities.Add(new LeadActivity
+            {
+                LeadId = Id,
+                ActivityType = LeadActivityType.Note,
+                Content = $"Phân công phụ trách: {assigneeName}",
+            });
+            db.AddAudit(actorId, "assign", "leads", Id, new { AssignedTo = old }, new { lead.AssignedTo });
+            await db.SaveChangesAsync();
+            Snackbar.Add("Đã lưu phân công", Severity.Success);
+            await Load();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SaveAppointment()
+    {
+        if (_lead is null) return;
+        if (!await HasPermission("leads:update"))
+        {
+            Snackbar.Add("Bạn không có quyền cập nhật lead.", Severity.Warning);
+            return;
+        }
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var lead = await db.Leads.FirstAsync(l => l.Id == Id);
+            var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+
+            DateTimeOffset? appt = null;
+            if (_appointmentDate is not null)
+            {
+                var local = _appointmentDate.Value.Date + (_appointmentTime ?? TimeSpan.Zero);
+                // Lưu UTC offset 0 theo quy ước Postgres của dự án.
+                appt = new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local)).ToUniversalTime();
+            }
+            lead.AppointmentAt = appt;
+            lead.UpdatedAt = DateTimeOffset.UtcNow;
+            db.LeadActivities.Add(new LeadActivity
+            {
+                LeadId = Id,
+                ActivityType = LeadActivityType.Appointment,
+                Content = appt is null ? "Xóa lịch hẹn tư vấn" : $"Đặt lịch hẹn tư vấn: {appt.Value.ToLocalTime():dd/MM/yyyy HH:mm}",
+            });
+            await db.SaveChangesAsync();
+            Snackbar.Add("Đã lưu lịch hẹn", Severity.Success);
+            await Load();
+        }
+        finally
+        {
+            _busy = false;
         }
     }
 

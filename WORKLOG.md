@@ -36,6 +36,7 @@
 - **ĐỢT 1 đã xong (Session 10):** UI cấu hình hoa hồng theo đại lý, tự sinh `AgentCommission` khi ứng viên đạt mốc Deposit/Selected/Departure, duyệt khoản thu và duyệt/đánh dấu đã chi hoa hồng. Build xanh, smoke-test `/finance`, `/agents/{id}`, `/candidates/{id}` HTTP 200.
 - **ĐỢT 2 đã xong (Session 11):** audit log thực thi cho các thao tác chính (ứng viên, payment/expense, chuyển bước, hoa hồng, cấu hình hoa hồng) và thêm section **Công nợ ứng viên** trong `CandidateDetail` gated bằng `payments:read`.
 - **ĐỢT 3 đã xong (Session 12):** wiring MinIO thật bằng package `Minio`, cấu hình bucket `polymind-documents`, service upload/download hồ sơ, UI **Hồ sơ ứng viên** trong `CandidateDetail` với upload version + link tải presigned URL.
+- **PHASE A đã xong (Session 15):** Hoàn thiện nghiệp vụ lõi còn hở theo plan production (`v-y-hi-n-gi-web-fizzy-parasol.md`). (A1) **Phiếu thu/chi**: thêm `Receipt.PaymentId/ExpenseId` + migration, nút "Phiếu thu"/"Phiếu chi" sinh phiếu idempotent từ khoản đã thu/khoản chi, tab "Phiếu thu/chi" trong `/finance` (PDF để Phase B). (A2) **Khôi phục phiên bản hồ sơ**: nút "Lịch sử" + "Đặt hiện hành" trong `CandidateDetail`, audit `restore_version`. (A3) **Field Lead §3.2**: `LeadDialog` bổ sung ngày sinh/giới tính/CCCD/địa chỉ/nghề nghiệp/học vấn/kinh nghiệm/ngoại ngữ/đơn hàng quan tâm/người phụ trách (entity đã đủ field từ trước). (A4) **Phân công Lead + KPI**: panel phân công trong `LeadDetail` + section "KPI nhân viên tuyển dụng" trong `/reports`. (A5) **Nhắc lịch hẹn tư vấn**: `Lead.AppointmentAt` + migration + panel đặt lịch + reminder `ReminderInterview`. Build xanh, smoke-test `/finance` `/candidates/{id}` `/leads/{id}` `/reports` = 200 không error-boundary, 2 migration applied. **(Nợ:** file đính kèm Lead hoãn — cần generic storage thay vì candidate-specific.)
 - **ĐỢT 5 đã xong (Session 14):** **Portal đại lý + RBAC data-scope.** Seed gắn tài khoản `agent@` vào đại lý AG-000001 (idempotent). `AgentScope` service phân giải `(IsAgentOnly, AgentId)`. Trang `/candidates` lọc theo `AgentId` cho đại lý; `/candidates/{id}` chặn xem ứng viên không thuộc đại lý mình. Trang mới `/my-commissions` (portal hoa hồng). `/` và `/reports` redirect đại lý về `/my-commissions` (chống lộ số liệu công ty). NavMenu ẩn Tổng quan/Báo cáo cho đại lý, hiện "Hoa hồng của tôi". Smoke-test: agent thấy 3/12 ứng viên, 5 hoa hồng; admin vẫn full. **Hoàn tất lộ trình 5 đợt nâng cấp.**
 - **ĐỢT 4 đã xong (Session 13):** (1) **Báo cáo mở rộng** — thêm 4 KPI (công nợ phải thu, khoản thu quá hạn, hồ sơ đã tải, sắp xuất cảnh 30 ngày) + 4 section mới (hồ sơ theo loại, khoản thu quá hạn, lịch visa & lịch xuất cảnh 30 ngày). (2) **Dashboard Home** thêm 3 KPI (công nợ/quá hạn/sắp xuất cảnh). (3) **Thông báo in-app (stub)** — `NotificationService` sinh reminder idempotent (khoản thu quá hạn/sắp tới, lịch visa, xuất cảnh, hồ sơ thiếu), bell badge ở topbar, trang `/notifications` (list + đánh dấu đã đọc + quét lại). (4) **Export CSV** — 3 endpoint `/export/*.csv` (thu/chi theo tháng, hoa hồng, khoản thu quá hạn) gated `reports:read`, BOM UTF-8 cho tiếng Việt, nút "Xuất CSV" trên trang Báo cáo. Build xanh, smoke-test `/`, `/reports`, `/notifications` = 200 không error-boundary, 3 CSV trả đúng `text/csv` + tiếng Việt đúng dấu, DB sinh 8 reminder thật.
 - **Kế hoạch nâng cấp:** xem `C:\Users\khang\.claude\plans\t-nh-ng-c-i-b-n-lexical-hejlsberg.md` (lộ trình 5 đợt; chốt giữ kiến trúc Blazor Server + Cookie, MinIO wiring thật, Email/SMS/Zalo stub).
@@ -44,11 +45,10 @@
 
 ## ⏭️ VIỆC TIẾP THEO (baton — làm cái này trước)
 
-**Đã xong cả 5 đợt nâng cấp (Đợt 1→5).** Không còn baton bắt buộc. Việc tiếp theo là **polish/tùy chọn** — chọn theo ưu tiên đối tác:
-1. **Thông báo nâng cao:** gửi Email/SMS/Zalo thật (hiện chỉ stub in-app); sinh reminder định kỳ bằng Hangfire thay vì sinh khi mở trang/topbar; thông báo nhắm đúng người phụ trách (hiện nhắm user đang đăng nhập).
-2. **Export nâng cao:** Excel thật (ClosedXML) / PDF (QuestPDF) thay CSV nếu đối tác cần định dạng đẹp.
-3. **Siết RBAC sâu hơn:** scope dữ liệu cho các role nội bộ khác (vd recruiter chỉ thấy lead/ứng viên mình phụ trách) nếu spec yêu cầu; hiện mới scope role `agent`.
-4. **Wiring còn nợ:** Redis cache, Hangfire job, QuestPDF/ClosedXML — gắn khi tới phần dùng.
+**Đang chạy theo plan production end-to-end** (`C:\Users\khang\.claude\plans\v-y-hi-n-gi-web-fizzy-parasol.md`, 8 phase A→H). **Đã xong Phase A.** Tiếp theo là **PHASE B — Xuất file thật PDF + Excel**:
+1. Thêm package **QuestPDF** (PDF) + **ClosedXML** (Excel) vào `Polymind.Web`.
+2. In **phiếu thu/chi PDF** (từ `Receipt`: mã, ứng viên, số tiền, ngày, chỗ ký) — nối tiếp A1; thêm nút "In PDF" ở tab Phiếu thu/chi.
+3. Export **Excel + PDF** cho báo cáo chính: mở rộng `Reporting/CsvExportEndpoints.cs` (thêm endpoint `.xlsx`/`.pdf`), thêm nút tải trong `/reports`. Stream trực tiếp, không ghi file repo; tiếng Việt đúng dấu/font (QuestPDF cần font hỗ trợ Unicode).
 
 **Lưu ý Đợt 5 cho người sau:**
 - `AgentScope` (scoped, `Identity/AgentScope.cs`) là nguồn sự thật cho data-scope đại lý: `GetAsync()` trả `(IsAgentOnly, AgentId)`, cache trong 1 request. "Agent-only" = có role `agent` và KHÔNG kèm role nội bộ nào. Dùng nó ở mọi trang dùng chung cần bó hẹp.
@@ -75,6 +75,18 @@
 ---
 
 ## 📜 NHẬT KÝ SESSION (mới nhất ở trên)
+
+### [2026-06-24] Session 15 — Claude
+- **Bối cảnh:** user duyệt plan production end-to-end 8 phase (`v-y-hi-n-gi-web-fizzy-parasol.md`) — đích cuối ra web dùng được thật. Bắt đầu **Phase A — hoàn thiện nghiệp vụ lõi còn hở**.
+- **Làm được:**
+  - **A1 Phiếu thu/chi (§7.4):** `Receipt.PaymentId`/`ExpenseId` (+ index) + migration `AddReceiptSourceLinks`. `Finance.razor`: nút "Phiếu thu" (khoản đã thu) / "Phiếu chi" (khoản chi) sinh `Receipt` mã `RC-...` idempotent (check PaymentId/ExpenseId), gán `Payment.ReceiptId`, audit `create receipts`; tab thứ 3 "Phiếu thu/chi" liệt kê (gate `receipts:read`/`create`). Labels `ReceiptType`. *(In PDF → Phase B.)*
+  - **A2 Khôi phục phiên bản (§4.3):** `CandidateDetail` nút "Lịch sử (n)" mở danh sách `DocumentVersion`, nút "Đặt hiện hành" cập nhật `CurrentVersionId` + audit `restore_version`.
+  - **A3 Field Lead (§3.2):** `LeadDialog` thêm ngày sinh/giới tính/CCCD/địa chỉ/nghề nghiệp/trình độ/kinh nghiệm/ngoại ngữ/đơn hàng quan tâm/người phụ trách (entity `Lead` vốn đã đủ field).
+  - **A4 Phân công + KPI (§2.3):** `LeadDetail` panel "Phân công phụ trách" (set `AssignedTo` + audit `assign`); `Reports.razor` section "KPI nhân viên tuyển dụng" (lead/đã chuyển/tỷ lệ theo người phụ trách).
+  - **A5 Nhắc lịch hẹn (§3.4/§13):** `Lead.AppointmentAt` + migration `AddLeadAppointment`; `LeadDetail` panel "Lịch hẹn tư vấn" (date+time, lưu UTC offset 0); `NotificationService` sinh `ReminderInterview` cho lead có hẹn ≤7 ngày.
+- **File chính:** `Domain/Entities/Receipt.cs`, `Lead.cs`; `Infrastructure/Persistence/ApplicationDbContext.cs` + 2 migration; `Web/Display/Labels.cs`; `Finance/Finance.razor`; `Candidates/CandidateDetail.razor`; `Leads/LeadDialog.razor` + `LeadDetail.razor`; `Reports/Reports.razor`; `Notifications/NotificationService.cs`.
+- **Đã test:** `dotnet build Polymind.slnx` = 0 error, 1 warning cũ `BL0008`. 2 migration apply lúc khởi động (DB có `receipts.payment_id/expense_id`, `leads.appointment_at`). Smoke-test HTTP admin: `/finance`, `/candidates/{id}`, `/leads/{id}`, `/reports` = 200, không `blazor-error-boundary`.
+- **Lưu ý/cảnh báo:** (1) Phiếu in PDF chưa làm — Phase B. (2) **File đính kèm Lead hoãn:** `IDocumentStorage.UploadAsync` hiện candidate-specific (key theo candidateId) — cần generic hóa trước khi gắn cho Lead. (3) KPI nhân viên + lịch hẹn hiển thị rỗng nếu demo cũ chưa set `AssignedTo`/`AppointmentAt` (empty-state đúng) — tạo lead mới hoặc phân công để thấy dữ liệu. (4) Web chạy `:5177` (log `C:\tmp\polymind-web-phaseA.*.log`).
 
 ### [2026-06-24] Session 14 — Claude
 - **Làm được:** Hoàn thành **ĐỢT 5 — Portal đại lý + RBAC data-scope** (đợt cuối lộ trình).

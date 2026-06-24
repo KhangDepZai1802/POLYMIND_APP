@@ -89,6 +89,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
         b.Entity<Receipt>(e =>
         {
             e.HasIndex(x => x.Code).IsUnique();
+            e.HasIndex(x => x.PaymentId);
+            e.HasIndex(x => x.ExpenseId);
             e.Property(x => x.Amount).HasPrecision(15, 2);
         });
 

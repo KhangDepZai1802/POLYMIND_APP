@@ -24,6 +24,7 @@ public class Lead : BaseEntity
     public LeadSource Source { get; set; }
     public Guid? AgentId { get; set; }
     public Guid? AssignedTo { get; set; }
+    public DateTimeOffset? AppointmentAt { get; set; } // lịch hẹn tư vấn sắp tới
     public LeadStatus Status { get; set; } = LeadStatus.New;
     public string? Notes { get; set; }
 

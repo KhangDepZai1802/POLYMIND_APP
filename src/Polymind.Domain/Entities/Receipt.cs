@@ -10,6 +10,8 @@ public class Receipt : BaseEntity
     public ReceiptType ReceiptType { get; set; }
     public Guid? CandidateId { get; set; }
     public Guid? AgentId { get; set; }
+    public Guid? PaymentId { get; set; } // nguồn: khoản thu (nếu phiếu thu)
+    public Guid? ExpenseId { get; set; } // nguồn: khoản chi (nếu phiếu chi)
     public decimal Amount { get; set; }
     public string? Description { get; set; }
     public DateOnly ReceiptDate { get; set; }
