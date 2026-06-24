@@ -9,10 +9,11 @@
 <div class="d-flex justify-space-between align-center mb-4">
     <div>
         <MudText Typo="Typo.h5"><b>Thông báo</b></MudText>
-        <MudText Typo="Typo.body2" Class="mud-text-secondary">Nhắc việc tự động: khoản thu, visa, xuất cảnh, hồ sơ</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Nhắc việc tự động: khoản thu, visa, xuất cảnh, hồ sơ và tùy chọn kênh nhận</MudText>
     </div>
     <div class="d-flex gap-2">
         <MudButton StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" OnClick="RefreshAsync">Quét nhắc việc</MudButton>
+        <MudButton StartIcon="@Icons.Material.Filled.Send" Variant="Variant.Outlined" OnClick="DispatchAsync">Gửi kênh chờ</MudButton>
         <MudButton StartIcon="@Icons.Material.Filled.DoneAll" Variant="Variant.Filled" Color="Color.Primary"
                    Disabled="@(_unread == 0)" OnClick="MarkAllAsync">Đánh dấu đã đọc</MudButton>
     </div>
@@ -22,47 +23,82 @@
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
 }
-else if (_items.Count == 0)
-{
-    <MudPaper Class="pa-8" Elevation="1">
-        <div class="d-flex flex-column align-center mud-text-secondary">
-            <MudIcon Icon="@Icons.Material.Filled.NotificationsNone" Size="Size.Large" />
-            <MudText Class="mt-2">Không có thông báo nào.</MudText>
-        </div>
-    </MudPaper>
-}
 else
 {
-    <MudPaper Elevation="1">
-        <MudList T="Notification" Dense="false">
-            @foreach (var n in _items)
+    <MudTabs Elevation="1" Rounded="true">
+        <MudTabPanel Text="Thông báo">
+            @if (_items.Count == 0)
             {
-                <MudListItem T="Notification" OnClick="@(() => MarkAsync(n))"
-                             Style="@(n.IsRead ? "" : "background-color: var(--mud-palette-action-default-hover)")">
-                    <div class="d-flex align-center" style="gap:12px">
-                        <MudIcon Icon="@Labels.IconOf(n.Type)" Color="@Labels.ColorOf(n.Type)" />
-                        <div class="flex-grow-1">
-                            <div class="d-flex align-center" style="gap:8px">
-                                <MudText Typo="Typo.body1"><b>@n.Title</b></MudText>
-                                @if (!n.IsRead)
-                                {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">Mới</MudChip>
-                                }
-                            </div>
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@n.Body</MudText>
-                        </div>
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@n.CreatedAt.LocalDateTime.ToString("dd/MM HH:mm")</MudText>
-                    </div>
-                </MudListItem>
-                <MudDivider />
+                <div class="d-flex flex-column align-center mud-text-secondary pa-8">
+                    <MudIcon Icon="@Icons.Material.Filled.NotificationsNone" Size="Size.Large" />
+                    <MudText Class="mt-2">Không có thông báo nào.</MudText>
+                </div>
             }
-        </MudList>
-    </MudPaper>
+            else
+            {
+                <MudList T="Notification" Dense="false">
+                    @foreach (var n in _items)
+                    {
+                        <MudListItem T="Notification" OnClick="@(() => MarkAsync(n))"
+                                     Style="@(n.IsRead ? "" : "background-color: var(--mud-palette-action-default-hover)")">
+                            <div class="d-flex align-center" style="gap:12px">
+                                <MudIcon Icon="@Labels.IconOf(n.Type)" Color="@Labels.ColorOf(n.Type)" />
+                                <div class="flex-grow-1">
+                                    <div class="d-flex align-center" style="gap:8px">
+                                        <MudText Typo="Typo.body1"><b>@n.Title</b></MudText>
+                                        @if (!n.IsRead)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">Mới</MudChip>
+                                        }
+                                    </div>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@n.Body</MudText>
+                                </div>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@n.CreatedAt.LocalDateTime.ToString("dd/MM HH:mm")</MudText>
+                            </div>
+                        </MudListItem>
+                        <MudDivider />
+                    }
+                </MudList>
+            }
+        </MudTabPanel>
+        <MudTabPanel Text="Kênh nhận">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                Mặc định hệ thống bật thông báo trong app. Email dùng SMTP khi đã cấu hình; SMS/Zalo hiện là adapter log/queue chờ provider thật.
+            </MudText>
+            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                <thead>
+                    <tr>
+                        <th>Loại</th>
+                        <th>In-app</th>
+                        <th>Email</th>
+                        <th>SMS</th>
+                        <th>Zalo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in _preferences)
+                    {
+                        <tr>
+                            <td>@Labels.Vi(p.Type)</td>
+                            <td><MudCheckBox T="bool" @bind-Value="p.InAppEnabled" Dense="true" /></td>
+                            <td><MudCheckBox T="bool" @bind-Value="p.EmailEnabled" Dense="true" /></td>
+                            <td><MudCheckBox T="bool" @bind-Value="p.SmsEnabled" Dense="true" /></td>
+                            <td><MudCheckBox T="bool" @bind-Value="p.ZaloEnabled" Dense="true" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+            <MudButton Class="mt-3" StartIcon="@Icons.Material.Filled.Save" Variant="Variant.Filled" Color="Color.Primary" OnClick="SavePreferencesAsync">
+                Lưu tùy chọn
+            </MudButton>
+        </MudTabPanel>
+    </MudTabs>
 }
 
 @code {
     private bool _loading = true;
     private List<Notification> _items = new();
+    private List<NotificationPreference> _preferences = new();
     private int _unread;
     private Guid? _userId;
 
@@ -78,6 +114,7 @@ else
     {
         if (_userId is null) { _loading = false; return; }
         _items = await NotificationSvc.GetForUserAsync(_userId.Value);
+        _preferences = await NotificationSvc.GetPreferencesAsync(_userId.Value);
         _unread = _items.Count(n => !n.IsRead);
         _loading = false;
     }
@@ -88,6 +125,13 @@ else
         var created = await NotificationSvc.GenerateRemindersAsync(_userId.Value);
         await LoadAsync();
         Snackbar.Add(created > 0 ? $"Đã tạo {created} nhắc việc mới." : "Không có nhắc việc mới.", Severity.Info);
+    }
+
+    private async Task DispatchAsync()
+    {
+        var sent = await NotificationSvc.SendPendingAsync();
+        await LoadAsync();
+        Snackbar.Add(sent > 0 ? $"Đã xử lý {sent} thông báo theo kênh." : "Không có thông báo đang chờ gửi.", Severity.Info);
     }
 
     private async Task MarkAsync(Notification n)
@@ -103,5 +147,12 @@ else
         await NotificationSvc.MarkAllReadAsync(_userId.Value);
         await LoadAsync();
         Snackbar.Add("Đã đánh dấu tất cả là đã đọc.", Severity.Success);
+    }
+
+    private async Task SavePreferencesAsync()
+    {
+        if (_userId is null) return;
+        await NotificationSvc.SavePreferencesAsync(_userId.Value, _preferences);
+        Snackbar.Add("Đã lưu tùy chọn nhận thông báo.", Severity.Success);
     }
 }

@@ -6,6 +6,7 @@
 @using Microsoft.AspNetCore.Identity
 @using Polymind.Infrastructure.Identity
 @inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
 @inject NavigationManager Nav
 
 <PageTitle>Đăng nhập — POLYMIND</PageTitle>
@@ -44,12 +45,24 @@
 </div>
 
 @code {
-    [SupplyParameterFromForm] private LoginInput Input { get; set; } = new();
+    [SupplyParameterFromForm] private LoginInput Input { get; set; } = default!;
     [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
     private string? _error;
 
+    protected override void OnInitialized()
+    {
+        Input ??= new LoginInput();
+    }
+
     private async Task LoginUser()
     {
+        var user = await UserManager.FindByEmailAsync(Input.Email);
+        if (user is not null && !user.IsActive)
+        {
+            _error = "Tài khoản đang bị khóa. Vui lòng liên hệ quản trị viên.";
+            return;
+        }
+
         var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, isPersistent: true, lockoutOnFailure: false);
         if (result.Succeeded)
             Nav.NavigateTo(ReturnUrl ?? "/", forceLoad: true);

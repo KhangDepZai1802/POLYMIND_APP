@@ -33,6 +33,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<Visa> Visas => Set<Visa>();
     public DbSet<Flight> Flights => Set<Flight>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     protected override void OnModelCreating(ModelBuilder b)
@@ -127,6 +128,17 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
         });
 
         b.Entity<WorkflowStepRecord>().HasIndex(x => x.CandidateJobOrderId);
+
+        b.Entity<Notification>(e =>
+        {
+            e.HasIndex(x => new { x.UserId, x.Type, x.ReferenceId, x.Channel }).IsUnique();
+            e.HasIndex(x => new { x.SentAt, x.Channel });
+        });
+
+        b.Entity<NotificationPreference>(e =>
+        {
+            e.HasIndex(x => new { x.UserId, x.Type }).IsUnique();
+        });
 
         // Lưu mọi enum dưới dạng chuỗi (dễ đọc, ổn định khi bổ sung giá trị mới).
         foreach (var entityType in b.Model.GetEntityTypes())

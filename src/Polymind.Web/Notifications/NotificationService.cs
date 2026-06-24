@@ -1,140 +1,140 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Polymind.Domain.Entities;
 using Polymind.Domain.Enums;
+using Polymind.Infrastructure.Identity;
 using Polymind.Infrastructure.Persistence;
+using Polymind.Infrastructure.Persistence.Constants;
 
 namespace Polymind.Web.Notifications;
 
 /// <summary>
-/// Nền thông báo (stub Module 8 / mục 13). Sinh reminder nội bộ (in-app) cho người dùng:
-/// khoản thu quá hạn/sắp tới, lịch visa, lịch xuất cảnh, hồ sơ còn thiếu.
-/// Chưa gửi Email/SMS/Zalo thật — chỉ tạo bản ghi <see cref="Notification"/> kênh InApp.
-/// Sinh idempotent: mỗi (UserId, Type, ReferenceId) chỉ tạo 1 lần.
+/// Sinh reminder theo người phụ trách, lưu theo kênh nhận, rồi dispatcher nền đánh dấu/gửi qua sender tương ứng.
 /// </summary>
-public class NotificationService(IDbContextFactory<ApplicationDbContext> dbFactory)
+public class NotificationService(
+    IDbContextFactory<ApplicationDbContext> dbFactory,
+    UserManager<ApplicationUser> userManager,
+    IEnumerable<INotificationSender> senders,
+    ILogger<NotificationService> logger)
 {
-    /// <summary>Ngưỡng nhắc trước (ngày) cho các mốc sắp tới.</summary>
     private const int LookAheadDays = 7;
 
-    /// <summary>Quét dữ liệu nghiệp vụ, tạo các reminder còn thiếu cho user. Trả về số bản ghi mới tạo.</summary>
     public async Task<int> GenerateRemindersAsync(Guid userId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
+        var user = await userManager.FindByIdAsync(userId.ToString());
+        var roles = user is null ? Array.Empty<string>() : await userManager.GetRolesAsync(user);
+        var canSeeAll = roles.Contains(RoleNames.SuperAdmin) || roles.Contains(RoleNames.Director);
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow.Date);
-        var horizon = today.AddDays(LookAheadDays);
+        var events = await BuildReminderEventsAsync(db);
+        if (canSeeAll)
+            return await PersistEventsAsync(db, events, currentUserOnly: null);
 
-        // Đã có reminder nào cho user (theo Type + ReferenceId) để tránh trùng.
-        var existing = await db.Notifications
-            .Where(n => n.UserId == userId && n.ReferenceId != null)
-            .Select(n => new { n.Type, n.ReferenceId })
-            .ToListAsync();
-        var seen = existing.Select(x => (x.Type, x.ReferenceId!.Value)).ToHashSet();
+        var scoped = events.Where(e => e.Recipients.Contains(userId)).ToList();
+        return await PersistEventsAsync(db, scoped, userId);
+    }
 
-        var candidateNames = await db.Candidates.ToDictionaryAsync(c => c.Id, c => c.FullName);
-        var toAdd = new List<Notification>();
+    public async Task<int> GenerateRemindersForAllUsersAsync()
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var events = await BuildReminderEventsAsync(db);
+        return await PersistEventsAsync(db, events, currentUserOnly: null);
+    }
 
-        void Add(NotificationType type, Guid refId, string refType, string title, string body)
+    public async Task<int> SendPendingAsync(int take = 200, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var pending = await db.Notifications
+            .Where(n => n.SentAt == null)
+            .OrderBy(n => n.CreatedAt)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+        if (pending.Count == 0) return 0;
+
+        var byChannel = senders.ToDictionary(s => s.Channel);
+        var sent = 0;
+        foreach (var notification in pending)
         {
-            if (!seen.Add((type, refId))) return;
-            toAdd.Add(new Notification
+            if (!byChannel.TryGetValue(notification.Channel, out var sender))
+            {
+                logger.LogWarning("Không có sender cho kênh {Channel}", notification.Channel);
+                continue;
+            }
+
+            try
+            {
+                var result = await sender.SendAsync(notification, cancellationToken);
+                if (!result.Success)
+                {
+                    logger.LogWarning("Gửi thông báo {NotificationId} thất bại: {Message}", notification.Id, result.Message);
+                    continue;
+                }
+
+                notification.SentAt = DateTimeOffset.UtcNow;
+                notification.UpdatedAt = DateTimeOffset.UtcNow;
+                sent++;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Gửi thông báo {NotificationId} lỗi", notification.Id);
+            }
+        }
+
+        if (sent > 0) await db.SaveChangesAsync(cancellationToken);
+        return sent;
+    }
+
+    public async Task<List<NotificationPreference>> GetPreferencesAsync(Guid userId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var existing = await db.NotificationPreferences.Where(p => p.UserId == userId).ToListAsync();
+        var byType = existing.ToDictionary(p => p.Type);
+        var result = new List<NotificationPreference>();
+        foreach (var type in Enum.GetValues<NotificationType>())
+        {
+            if (byType.TryGetValue(type, out var pref))
+            {
+                result.Add(pref);
+                continue;
+            }
+
+            result.Add(new NotificationPreference
             {
                 UserId = userId,
                 Type = type,
-                Channel = NotificationChannel.InApp,
-                Title = title,
-                Body = body,
-                ReferenceType = refType,
-                ReferenceId = refId,
-                IsRead = false,
-                SentAt = DateTimeOffset.UtcNow,
+                InAppEnabled = true,
             });
         }
+        return result.OrderBy(p => p.Type).ToList();
+    }
 
-        string Name(Guid candidateId) => candidateNames.GetValueOrDefault(candidateId, "Ứng viên");
-
-        // --- Khoản thu quá hạn / sắp đến hạn ---
-        var duePayments = await db.Payments
-            .Where(p => p.Status != PaymentStatus.Paid && p.Status != PaymentStatus.Refunded
-                        && p.DueDate != null && p.DueDate <= horizon)
-            .Select(p => new { p.Id, p.CandidateId, p.Amount, p.DueDate, p.Status })
-            .ToListAsync();
-        foreach (var p in duePayments)
+    public async Task SavePreferencesAsync(Guid userId, IReadOnlyCollection<NotificationPreference> preferences)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var existing = await db.NotificationPreferences.Where(p => p.UserId == userId).ToListAsync();
+        var byType = existing.ToDictionary(p => p.Type);
+        foreach (var incoming in preferences)
         {
-            var overdue = p.DueDate < today || p.Status == PaymentStatus.Overdue;
-            var label = overdue ? "Khoản thu quá hạn" : "Khoản thu sắp đến hạn";
-            Add(NotificationType.ReminderPayment, p.Id, "payment", $"{label}: {Name(p.CandidateId)}",
-                $"{p.Amount:N0} đ — hạn {p.DueDate:dd/MM/yyyy}.");
-        }
+            if (!byType.TryGetValue(incoming.Type, out var pref))
+            {
+                pref = new NotificationPreference { UserId = userId, Type = incoming.Type };
+                db.NotificationPreferences.Add(pref);
+            }
 
-        // --- Lịch visa sắp tới (phỏng vấn hoặc có kết quả) ---
-        var visas = await db.Visas
-            .Where(v => v.Status != VisaStatus.Approved && v.Status != VisaStatus.Rejected
-                        && ((v.InterviewDate != null && v.InterviewDate >= today && v.InterviewDate <= horizon)
-                            || (v.ResultDate != null && v.ResultDate >= today && v.ResultDate <= horizon)))
-            .Select(v => new { v.Id, v.CandidateId, v.InterviewDate, v.ResultDate, v.Country })
-            .ToListAsync();
-        foreach (var v in visas)
-        {
-            var date = v.InterviewDate ?? v.ResultDate;
-            var what = v.InterviewDate != null ? "Phỏng vấn visa" : "Có kết quả visa";
-            Add(NotificationType.ReminderVisa, v.Id, "visa", $"{what}: {Name(v.CandidateId)}",
-                $"{v.Country} — ngày {date:dd/MM/yyyy}.");
+            pref.InAppEnabled = incoming.InAppEnabled;
+            pref.EmailEnabled = incoming.EmailEnabled;
+            pref.SmsEnabled = incoming.SmsEnabled;
+            pref.ZaloEnabled = incoming.ZaloEnabled;
+            pref.UpdatedAt = DateTimeOffset.UtcNow;
         }
-
-        // --- Lịch xuất cảnh sắp tới ---
-        var flights = await db.Flights
-            .Where(f => f.ActualDepartureAt == null && f.DepartureDate != null
-                        && f.DepartureDate >= today && f.DepartureDate <= horizon)
-            .Select(f => new { f.Id, f.CandidateId, f.DepartureDate, f.Airline, f.DestinationCountry })
-            .ToListAsync();
-        foreach (var f in flights)
-        {
-            Add(NotificationType.ReminderDeparture, f.Id, "flight", $"Sắp xuất cảnh: {Name(f.CandidateId)}",
-                $"{f.Airline} → {f.DestinationCountry} — bay {f.DepartureDate:dd/MM/yyyy}.");
-        }
-
-        // --- Lịch hẹn tư vấn Lead sắp tới ---
-        var horizonStart = DateTimeOffset.UtcNow;
-        var horizonEnd = DateTimeOffset.UtcNow.AddDays(LookAheadDays);
-        var leadAppointments = await db.Leads
-            .Where(l => l.AppointmentAt != null && l.AppointmentAt >= horizonStart && l.AppointmentAt <= horizonEnd
-                        && l.Status != LeadStatus.Converted && l.Status != LeadStatus.Cancelled)
-            .Select(l => new { l.Id, l.FullName, l.AppointmentAt })
-            .ToListAsync();
-        foreach (var l in leadAppointments)
-        {
-            Add(NotificationType.ReminderInterview, l.Id, "lead", $"Lịch hẹn tư vấn: {l.FullName}",
-                $"Hẹn lúc {l.AppointmentAt!.Value.ToLocalTime():dd/MM/yyyy HH:mm}.");
-        }
-
-        // --- Hồ sơ còn thiếu: ứng viên đã tới bước Hoàn thiện hồ sơ nhưng chưa có tài liệu nào ---
-        var docCandidateIds = (await db.CandidateDocuments.Select(d => d.CandidateId).Distinct().ToListAsync())
-            .ToHashSet();
-        var needDocs = await db.CandidateJobOrders
-            .Where(cjo => cjo.Status == CandidateJobOrderStatus.Active && cjo.CurrentStep >= WorkflowStep.Document)
-            .Select(cjo => cjo.CandidateId)
-            .Distinct()
-            .ToListAsync();
-        foreach (var cid in needDocs.Where(cid => !docCandidateIds.Contains(cid)))
-        {
-            Add(NotificationType.ReminderDocument, cid, "candidate", $"Thiếu hồ sơ: {Name(cid)}",
-                "Ứng viên đã tới bước hoàn thiện hồ sơ nhưng chưa có tài liệu nào được tải lên.");
-        }
-
-        if (toAdd.Count > 0)
-        {
-            db.Notifications.AddRange(toAdd);
-            await db.SaveChangesAsync();
-        }
-        return toAdd.Count;
+        await db.SaveChangesAsync();
     }
 
     public async Task<List<Notification>> GetForUserAsync(Guid userId, int take = 100)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.Notifications
-            .Where(n => n.UserId == userId)
+            .Where(n => n.UserId == userId && n.Channel == NotificationChannel.InApp)
             .OrderByDescending(n => n.IsRead ? 0 : 1)
             .ThenByDescending(n => n.CreatedAt)
             .Take(take)
@@ -144,7 +144,8 @@ public class NotificationService(IDbContextFactory<ApplicationDbContext> dbFacto
     public async Task<int> GetUnreadCountAsync(Guid userId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        return await db.Notifications.CountAsync(n => n.UserId == userId && !n.IsRead);
+        return await db.Notifications.CountAsync(n =>
+            n.UserId == userId && n.Channel == NotificationChannel.InApp && !n.IsRead);
     }
 
     public async Task MarkReadAsync(Guid notificationId)
@@ -161,9 +162,214 @@ public class NotificationService(IDbContextFactory<ApplicationDbContext> dbFacto
     public async Task MarkAllReadAsync(Guid userId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var unread = await db.Notifications.Where(n => n.UserId == userId && !n.IsRead).ToListAsync();
+        var unread = await db.Notifications
+            .Where(n => n.UserId == userId && n.Channel == NotificationChannel.InApp && !n.IsRead)
+            .ToListAsync();
         var now = DateTimeOffset.UtcNow;
-        foreach (var n in unread) { n.IsRead = true; n.ReadAt = now; n.UpdatedAt = now; }
+        foreach (var n in unread)
+        {
+            n.IsRead = true;
+            n.ReadAt = now;
+            n.UpdatedAt = now;
+        }
         if (unread.Count > 0) await db.SaveChangesAsync();
     }
+
+    private async Task<List<ReminderEvent>> BuildReminderEventsAsync(ApplicationDbContext db)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+        var horizon = today.AddDays(LookAheadDays);
+        var events = new List<ReminderEvent>();
+
+        var candidateNames = await db.Candidates.ToDictionaryAsync(c => c.Id, c => c.FullName);
+        string Name(Guid candidateId) => candidateNames.GetValueOrDefault(candidateId, "Ứng viên");
+
+        var roleRecipients = await LoadRoleRecipientsAsync(db);
+        var cjoOwners = await db.CandidateJobOrders
+            .Where(c => c.AssignedTo != null)
+            .Select(c => new { c.CandidateId, c.AssignedTo })
+            .ToListAsync();
+        var ownerByCandidate = cjoOwners
+            .GroupBy(x => x.CandidateId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.AssignedTo!.Value).Distinct().ToList());
+
+        List<Guid> CandidateOwnersOr(Guid candidateId, params string[] fallbackRoles)
+            => ownerByCandidate.TryGetValue(candidateId, out var owners) && owners.Count > 0
+                ? owners
+                : RoleUsers(roleRecipients, fallbackRoles);
+
+        var duePayments = await db.Payments
+            .Where(p => p.Status != PaymentStatus.Paid && p.Status != PaymentStatus.Refunded
+                        && p.DueDate != null && p.DueDate <= horizon)
+            .Select(p => new { p.Id, p.CandidateId, p.Amount, p.DueDate, p.Status })
+            .ToListAsync();
+        foreach (var p in duePayments)
+        {
+            var overdue = p.DueDate < today || p.Status == PaymentStatus.Overdue;
+            var label = overdue ? "Khoản thu quá hạn" : "Khoản thu sắp đến hạn";
+            events.Add(new ReminderEvent(
+                NotificationType.ReminderPayment, p.Id, "payment",
+                $"{label}: {Name(p.CandidateId)}",
+                $"{p.Amount:N0} đ — hạn {p.DueDate:dd/MM/yyyy}.",
+                CandidateOwnersOr(p.CandidateId, RoleNames.Accountant, RoleNames.Director)));
+        }
+
+        var visas = await db.Visas
+            .Where(v => v.Status != VisaStatus.Approved && v.Status != VisaStatus.Rejected
+                        && ((v.InterviewDate != null && v.InterviewDate >= today && v.InterviewDate <= horizon)
+                            || (v.ResultDate != null && v.ResultDate >= today && v.ResultDate <= horizon)))
+            .Select(v => new { v.Id, v.CandidateId, v.InterviewDate, v.ResultDate, v.Country, v.HandledBy })
+            .ToListAsync();
+        foreach (var v in visas)
+        {
+            var date = v.InterviewDate ?? v.ResultDate;
+            var what = v.InterviewDate != null ? "Phỏng vấn visa" : "Có kết quả visa";
+            var recipients = v.HandledBy is not null
+                ? new List<Guid> { v.HandledBy.Value }
+                : CandidateOwnersOr(v.CandidateId, RoleNames.VisaStaff, RoleNames.Director);
+            events.Add(new ReminderEvent(
+                NotificationType.ReminderVisa, v.Id, "visa",
+                $"{what}: {Name(v.CandidateId)}",
+                $"{v.Country} — ngày {date:dd/MM/yyyy}.",
+                recipients));
+        }
+
+        var flights = await db.Flights
+            .Where(f => f.ActualDepartureAt == null && f.DepartureDate != null
+                        && f.DepartureDate >= today && f.DepartureDate <= horizon)
+            .Select(f => new { f.Id, f.CandidateId, f.DepartureDate, f.Airline, f.DestinationCountry })
+            .ToListAsync();
+        foreach (var f in flights)
+        {
+            events.Add(new ReminderEvent(
+                NotificationType.ReminderDeparture, f.Id, "flight",
+                $"Sắp xuất cảnh: {Name(f.CandidateId)}",
+                $"{f.Airline} → {f.DestinationCountry} — bay {f.DepartureDate:dd/MM/yyyy}.",
+                CandidateOwnersOr(f.CandidateId, RoleNames.VisaStaff, RoleNames.Director)));
+        }
+
+        var horizonStart = DateTimeOffset.UtcNow;
+        var horizonEnd = DateTimeOffset.UtcNow.AddDays(LookAheadDays);
+        var leadAppointments = await db.Leads
+            .Where(l => l.AppointmentAt != null && l.AppointmentAt >= horizonStart && l.AppointmentAt <= horizonEnd
+                        && l.Status != LeadStatus.Converted && l.Status != LeadStatus.Cancelled)
+            .Select(l => new { l.Id, l.FullName, l.AppointmentAt, l.AssignedTo })
+            .ToListAsync();
+        foreach (var l in leadAppointments)
+        {
+            var recipients = l.AssignedTo is not null
+                ? new List<Guid> { l.AssignedTo.Value }
+                : RoleUsers(roleRecipients, RoleNames.Recruiter, RoleNames.RecruitmentManager);
+            events.Add(new ReminderEvent(
+                NotificationType.ReminderInterview, l.Id, "lead",
+                $"Lịch hẹn tư vấn: {l.FullName}",
+                $"Hẹn lúc {l.AppointmentAt!.Value.ToLocalTime():dd/MM/yyyy HH:mm}.",
+                recipients));
+        }
+
+        var docCandidateIds = (await db.CandidateDocuments.Select(d => d.CandidateId).Distinct().ToListAsync()).ToHashSet();
+        var needDocs = await db.CandidateJobOrders
+            .Where(cjo => cjo.Status == CandidateJobOrderStatus.Active && cjo.CurrentStep >= WorkflowStep.Document)
+            .Select(cjo => new { cjo.CandidateId, cjo.AssignedTo })
+            .Distinct()
+            .ToListAsync();
+        foreach (var row in needDocs.Where(x => !docCandidateIds.Contains(x.CandidateId)))
+        {
+            var recipients = row.AssignedTo is not null
+                ? new List<Guid> { row.AssignedTo.Value }
+                : RoleUsers(roleRecipients, RoleNames.DocumentStaff, RoleNames.RecruitmentManager);
+            events.Add(new ReminderEvent(
+                NotificationType.ReminderDocument, row.CandidateId, "candidate",
+                $"Thiếu hồ sơ: {Name(row.CandidateId)}",
+                "Ứng viên đã tới bước hoàn thiện hồ sơ nhưng chưa có tài liệu nào được tải lên.",
+                recipients));
+        }
+
+        return events;
+    }
+
+    private async Task<int> PersistEventsAsync(ApplicationDbContext db, IEnumerable<ReminderEvent> events, Guid? currentUserOnly)
+    {
+        var eventList = events.ToList();
+        if (eventList.Count == 0) return 0;
+
+        var existing = await db.Notifications
+            .Where(n => n.ReferenceId != null)
+            .Select(n => new { n.UserId, n.Type, n.ReferenceId, n.Channel })
+            .ToListAsync();
+        var seen = existing.Select(x => (x.UserId, x.Type, x.ReferenceId!.Value, x.Channel)).ToHashSet();
+
+        var preferences = await db.NotificationPreferences.ToListAsync();
+        var prefByUserType = preferences.ToDictionary(p => (p.UserId, p.Type));
+        var toAdd = new List<Notification>();
+
+        foreach (var reminder in eventList)
+        {
+            var recipients = reminder.Recipients.Distinct().ToList();
+            if (currentUserOnly is not null)
+                recipients = recipients.Contains(currentUserOnly.Value) ? new List<Guid> { currentUserOnly.Value } : new List<Guid>();
+
+            foreach (var userId in recipients)
+            {
+                foreach (var channel in ChannelsFor(prefByUserType.GetValueOrDefault((userId, reminder.Type))))
+                {
+                    if (!seen.Add((userId, reminder.Type, reminder.ReferenceId, channel))) continue;
+                    toAdd.Add(new Notification
+                    {
+                        UserId = userId,
+                        Type = reminder.Type,
+                        Channel = channel,
+                        Title = reminder.Title,
+                        Body = reminder.Body,
+                        ReferenceType = reminder.ReferenceType,
+                        ReferenceId = reminder.ReferenceId,
+                        IsRead = false,
+                    });
+                }
+            }
+        }
+
+        if (toAdd.Count == 0) return 0;
+        db.Notifications.AddRange(toAdd);
+        await db.SaveChangesAsync();
+        return toAdd.Count;
+    }
+
+    private static IEnumerable<NotificationChannel> ChannelsFor(NotificationPreference? pref)
+    {
+        if (pref is null)
+        {
+            yield return NotificationChannel.InApp;
+            yield break;
+        }
+
+        if (pref.InAppEnabled) yield return NotificationChannel.InApp;
+        if (pref.EmailEnabled) yield return NotificationChannel.Email;
+        if (pref.SmsEnabled) yield return NotificationChannel.Sms;
+        if (pref.ZaloEnabled) yield return NotificationChannel.Zalo;
+    }
+
+    private static async Task<Dictionary<string, List<Guid>>> LoadRoleRecipientsAsync(ApplicationDbContext db)
+    {
+        var pairs = await db.UserRoles
+            .Join(db.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => new { r.Name, ur.UserId })
+            .Where(x => x.Name != null)
+            .ToListAsync();
+        return pairs
+            .GroupBy(x => x.Name!)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.UserId).Distinct().ToList());
+    }
+
+    private static List<Guid> RoleUsers(Dictionary<string, List<Guid>> roleRecipients, params string[] roles)
+        => roles.SelectMany(role => roleRecipients.GetValueOrDefault(role) ?? new List<Guid>())
+            .Distinct()
+            .ToList();
+
+    private sealed record ReminderEvent(
+        NotificationType Type,
+        Guid ReferenceId,
+        string ReferenceType,
+        string Title,
+        string Body,
+        List<Guid> Recipients);
 }

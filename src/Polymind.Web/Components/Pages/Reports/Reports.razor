@@ -16,16 +16,31 @@
             <MudMenuItem Href="/export/finance-monthly.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.CalendarMonth">Thu/chi theo tháng</MudMenuItem>
             <MudMenuItem Href="/export/commissions.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.Handshake">Hoa hồng theo đại lý</MudMenuItem>
             <MudMenuItem Href="/export/overdue-payments.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.MoneyOff">Khoản thu quá hạn</MudMenuItem>
+            <MudMenuItem Href="/export/revenue-by-country.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.Public">Doanh thu theo quốc gia</MudMenuItem>
+            <MudMenuItem Href="/export/revenue-by-job-order.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.Work">Doanh thu theo đơn hàng</MudMenuItem>
+            <MudMenuItem Href="/export/lead-by-province.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.Map">Lead theo tỉnh</MudMenuItem>
+            <MudMenuItem Href="/export/recruitment-funnel.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.FilterAlt">Phễu tuyển dụng</MudMenuItem>
+            <MudMenuItem Href="/export/top-agents.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.EmojiEvents">Top đại lý</MudMenuItem>
         </MudMenu>
         <MudMenu Label="PDF" StartIcon="@Icons.Material.Filled.PictureAsPdf" Variant="Variant.Outlined" Color="Color.Error">
             <MudMenuItem Href="/export/finance-monthly.pdf" ForceLoad="true" Icon="@Icons.Material.Filled.CalendarMonth">Thu/chi theo tháng</MudMenuItem>
             <MudMenuItem Href="/export/commissions.pdf" ForceLoad="true" Icon="@Icons.Material.Filled.Handshake">Hoa hồng theo đại lý</MudMenuItem>
             <MudMenuItem Href="/export/overdue-payments.pdf" ForceLoad="true" Icon="@Icons.Material.Filled.MoneyOff">Khoản thu quá hạn</MudMenuItem>
+            <MudMenuItem Href="/export/revenue-by-country.pdf" ForceLoad="true" Icon="@Icons.Material.Filled.Public">Doanh thu theo quốc gia</MudMenuItem>
+            <MudMenuItem Href="/export/revenue-by-job-order.pdf" ForceLoad="true" Icon="@Icons.Material.Filled.Work">Doanh thu theo đơn hàng</MudMenuItem>
+            <MudMenuItem Href="/export/lead-by-province.pdf" ForceLoad="true" Icon="@Icons.Material.Filled.Map">Lead theo tỉnh</MudMenuItem>
+            <MudMenuItem Href="/export/recruitment-funnel.pdf" ForceLoad="true" Icon="@Icons.Material.Filled.FilterAlt">Phễu tuyển dụng</MudMenuItem>
+            <MudMenuItem Href="/export/top-agents.pdf" ForceLoad="true" Icon="@Icons.Material.Filled.EmojiEvents">Top đại lý</MudMenuItem>
         </MudMenu>
         <MudMenu Label="CSV" StartIcon="@Icons.Material.Filled.Download" Variant="Variant.Outlined" Color="Color.Default">
             <MudMenuItem Href="/export/finance-monthly.csv" ForceLoad="true" Icon="@Icons.Material.Filled.CalendarMonth">Thu/chi theo tháng</MudMenuItem>
             <MudMenuItem Href="/export/commissions.csv" ForceLoad="true" Icon="@Icons.Material.Filled.Handshake">Hoa hồng theo đại lý</MudMenuItem>
             <MudMenuItem Href="/export/overdue-payments.csv" ForceLoad="true" Icon="@Icons.Material.Filled.MoneyOff">Khoản thu quá hạn</MudMenuItem>
+            <MudMenuItem Href="/export/revenue-by-country.csv" ForceLoad="true" Icon="@Icons.Material.Filled.Public">Doanh thu theo quốc gia</MudMenuItem>
+            <MudMenuItem Href="/export/revenue-by-job-order.csv" ForceLoad="true" Icon="@Icons.Material.Filled.Work">Doanh thu theo đơn hàng</MudMenuItem>
+            <MudMenuItem Href="/export/lead-by-province.csv" ForceLoad="true" Icon="@Icons.Material.Filled.Map">Lead theo tỉnh</MudMenuItem>
+            <MudMenuItem Href="/export/recruitment-funnel.csv" ForceLoad="true" Icon="@Icons.Material.Filled.FilterAlt">Phễu tuyển dụng</MudMenuItem>
+            <MudMenuItem Href="/export/top-agents.csv" ForceLoad="true" Icon="@Icons.Material.Filled.EmojiEvents">Top đại lý</MudMenuItem>
         </MudMenu>
     </div>
 </div>
@@ -47,6 +62,9 @@ else
         @Kpi("Khoản thu quá hạn", _overduePayments.Count.ToString("N0"), Icons.Material.Filled.RunningWithErrors, _overduePayments.Count > 0 ? Color.Error : Color.Success)
         @Kpi("Hồ sơ đã tải lên", _documentsUploaded.ToString("N0"), Icons.Material.Filled.FolderShared, Color.Info)
         @Kpi("Sắp xuất cảnh (30 ngày)", _upcomingFlights.Count.ToString("N0"), Icons.Material.Filled.FlightTakeoff, Color.Secondary)
+        @Kpi("Tỷ lệ trúng tuyển", $"{_selectedRate:0.#}%", Icons.Material.Filled.HowToReg, Color.Primary)
+        @Kpi("Tỷ lệ đậu visa", $"{_visaApprovedRate:0.#}%", Icons.Material.Filled.AssignmentTurnedIn, Color.Success)
+        @Kpi("Tỷ lệ xuất cảnh", $"{_departureRate:0.#}%", Icons.Material.Filled.FlightTakeoff, Color.Secondary)
     </MudGrid>
 
     <MudGrid Class="mt-2">
@@ -80,6 +98,53 @@ else
                 else
                 {
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">Chưa có dữ liệu lead.</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid Class="mt-2">
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Lead theo tỉnh/thành</b></MudText>
+                @if (_leadByProvince.Any())
+                {
+                    @foreach (var row in _leadByProvince)
+                    {
+                        <div class="mb-3">
+                            <div class="d-flex justify-space-between mb-1">
+                                <b>@row.Province</b>
+                                <span class="mud-text-secondary">@row.Total lead • @($"{row.ConversionRate:0.#}%") chuyển đổi</span>
+                            </div>
+                            <MudProgressLinear Color="Color.Info" Value="@(_totalLeads == 0 ? 0 : row.Total * 100.0 / _totalLeads)" Style="height:10px" Rounded="true" />
+                        </div>
+                    }
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Chưa có dữ liệu tỉnh/thành.</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Tỷ lệ trúng tuyển / visa / xuất cảnh</b></MudText>
+                @if (_recruitmentFunnel.Any())
+                {
+                    @foreach (var row in _recruitmentFunnel)
+                    {
+                        <div class="mb-3">
+                            <div class="d-flex justify-space-between mb-1">
+                                <b>@row.Stage</b>
+                                <span class="mud-text-secondary">@row.Count ứng viên • @($"{row.Rate:0.#}%")</span>
+                            </div>
+                            <MudProgressLinear Color="@row.Color" Value="@row.Rate" Style="height:10px" Rounded="true" />
+                        </div>
+                    }
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Chưa có ứng viên trong quy trình.</MudText>
                 }
             </MudPaper>
         </MudItem>
@@ -133,6 +198,65 @@ else
                 else
                 {
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">Chưa có ứng viên gắn đơn hàng.</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid Class="mt-2">
+        <MudItem xs="12" md="5">
+            <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Doanh thu theo quốc gia</b></MudText>
+                @if (_revenueByCountry.Any())
+                {
+                    @foreach (var row in _revenueByCountry)
+                    {
+                        <div class="mb-3">
+                            <div class="d-flex justify-space-between mb-1">
+                                <b>@row.Country</b>
+                                <span class="mud-text-secondary">@($"{row.Revenue:N0} đ")</span>
+                            </div>
+                            <MudProgressLinear Color="Color.Success" Value="@(_maxCountryRevenue == 0 ? 0 : (double)(row.Revenue * 100 / _maxCountryRevenue))" Style="height:10px" Rounded="true" />
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@row.OrderCount đơn hàng • @row.CandidateCount ứng viên đã thu</MudText>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Chưa có khoản thu gắn với đơn hàng.</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="7">
+            <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Doanh thu theo đơn hàng</b></MudText>
+                @if (_revenueByJobOrder.Any())
+                {
+                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                        <thead>
+                            <tr>
+                                <th>Đơn hàng</th>
+                                <th>Quốc gia</th>
+                                <th style="text-align:right">Ứng viên</th>
+                                <th style="text-align:right">Doanh thu</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in _revenueByJobOrder)
+                            {
+                                <tr>
+                                    <td>@row.OrderName</td>
+                                    <td>@row.Country</td>
+                                    <td style="text-align:right">@row.CandidateCount</td>
+                                    <td style="text-align:right"><b>@($"{row.Revenue:N0} đ")</b></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Chưa có doanh thu theo đơn hàng.</MudText>
                 }
             </MudPaper>
         </MudItem>
@@ -294,6 +418,46 @@ else
     <MudGrid Class="mt-2">
         <MudItem xs="12">
             <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Top đại lý</b></MudText>
+                @if (_topAgents.Any())
+                {
+                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                        <thead>
+                            <tr>
+                                <th>Đại lý</th>
+                                <th style="text-align:right">Ứng viên giới thiệu</th>
+                                <th style="text-align:right">Đã xuất cảnh</th>
+                                <th style="text-align:right">Tỷ lệ xuất cảnh</th>
+                                <th style="text-align:right">Hoa hồng phát sinh</th>
+                                <th style="text-align:right">Đã chi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in _topAgents)
+                            {
+                                <tr>
+                                    <td>@row.AgentName</td>
+                                    <td style="text-align:right">@row.CandidateCount</td>
+                                    <td style="text-align:right">@row.DepartedCount</td>
+                                    <td style="text-align:right"><b>@($"{row.DepartureRate:0.#}%")</b></td>
+                                    <td style="text-align:right">@($"{row.TotalCommission:N0} đ")</td>
+                                    <td style="text-align:right">@($"{row.PaidCommission:N0} đ")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Chưa có dữ liệu đại lý.</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid Class="mt-2">
+        <MudItem xs="12">
+            <MudPaper Class="pa-4" Elevation="1">
                 <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Hoa hồng theo đại lý</b></MudText>
                 @if (_commissionByAgent.Any())
                 {
@@ -351,6 +515,23 @@ else
     private record StaffKpiRow(string Name, int Total, int Converted, double Rate);
     private List<StaffKpiRow> _staffKpi = new();
 
+    private record LeadProvinceRow(string Province, int Total, int Converted, double ConversionRate);
+    private List<LeadProvinceRow> _leadByProvince = new();
+
+    private record RevenueCountryRow(string Country, int OrderCount, int CandidateCount, decimal Revenue);
+    private List<RevenueCountryRow> _revenueByCountry = new();
+    private decimal _maxCountryRevenue;
+
+    private record RevenueJobOrderRow(string OrderName, string Country, int CandidateCount, decimal Revenue);
+    private List<RevenueJobOrderRow> _revenueByJobOrder = new();
+
+    private record FunnelRow(string Stage, int Count, double Rate, Color Color);
+    private List<FunnelRow> _recruitmentFunnel = new();
+    private double _selectedRate, _visaApprovedRate, _departureRate;
+
+    private record TopAgentRow(string AgentName, int CandidateCount, int DepartedCount, double DepartureRate, decimal TotalCommission, decimal PaidCommission);
+    private List<TopAgentRow> _topAgents = new();
+
     private decimal _receivables;
     private int _documentsUploaded;
     private Dictionary<DocumentType, int> _docsByType = new();
@@ -403,15 +584,58 @@ else
                 s.Total == 0 ? 0 : s.Converted * 100.0 / s.Total)).ToList();
         }
 
+        var provinceAgg = await db.Leads
+            .GroupBy(l => string.IsNullOrWhiteSpace(l.Province) ? "Chưa rõ" : l.Province!.Trim())
+            .Select(g => new { Province = g.Key, Total = g.Count(), Converted = g.Count(l => l.Status == LeadStatus.Converted) })
+            .ToListAsync();
+        _leadByProvince = provinceAgg
+            .OrderByDescending(x => x.Total)
+            .ThenBy(x => x.Province)
+            .Take(8)
+            .Select(x => new LeadProvinceRow(x.Province, x.Total, x.Converted,
+                x.Total == 0 ? 0 : x.Converted * 100.0 / x.Total))
+            .ToList();
+
         // --- Ứng viên ---
         _activeCandidates = await db.CandidateJobOrders.CountAsync(c => c.Status == CandidateJobOrderStatus.Active);
         _byStep = await db.CandidateJobOrders
             .GroupBy(c => c.CurrentStep)
             .Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
 
+        var candidateJobs = await db.CandidateJobOrders
+            .Select(c => new { c.CandidateId, c.JobOrderId, c.CurrentStep, c.Status })
+            .ToListAsync();
+        var visaApprovedPairs = await db.Visas
+            .Where(v => v.Status == VisaStatus.Approved)
+            .Select(v => new { v.CandidateId, v.JobOrderId })
+            .ToListAsync();
+        var visaApprovedKeys = visaApprovedPairs.Select(v => (v.CandidateId, v.JobOrderId)).ToHashSet();
+        var actualDepartures = await db.Flights
+            .Where(f => f.ActualDepartureAt != null)
+            .Select(f => new { f.CandidateId, f.JobOrderId })
+            .ToListAsync();
+        var departedKeys = actualDepartures.Select(f => (f.CandidateId, f.JobOrderId)).ToHashSet();
+
+        var funnelBase = candidateJobs.Count;
+        var selectedCount = candidateJobs.Count(c => c.CurrentStep >= WorkflowStep.Selected);
+        var visaApprovedCount = candidateJobs.Count(c =>
+            c.CurrentStep >= WorkflowStep.VisaApproved || visaApprovedKeys.Contains((c.CandidateId, c.JobOrderId)));
+        var departedCount = candidateJobs.Count(c =>
+            c.CurrentStep >= WorkflowStep.Departure || departedKeys.Contains((c.CandidateId, c.JobOrderId)));
+        _selectedRate = Rate(selectedCount, funnelBase);
+        _visaApprovedRate = Rate(visaApprovedCount, funnelBase);
+        _departureRate = Rate(departedCount, funnelBase);
+        _recruitmentFunnel = new List<FunnelRow>
+        {
+            new("Đang trong quy trình", funnelBase, funnelBase == 0 ? 0 : 100, Color.Info),
+            new("Trúng tuyển", selectedCount, _selectedRate, Color.Primary),
+            new("Đậu visa", visaApprovedCount, _visaApprovedRate, Color.Success),
+            new("Xuất cảnh", departedCount, _departureRate, Color.Secondary)
+        };
+
         // --- Tài chính theo tháng (6 tháng gần nhất) ---
         var payments = await db.Payments.Where(p => p.Status == PaymentStatus.Paid)
-            .Select(p => new { p.Amount, p.PaidDate, p.CreatedAt }).ToListAsync();
+            .Select(p => new { p.CandidateId, p.JobOrderId, p.Amount, p.PaidDate, p.CreatedAt }).ToListAsync();
         var expenses = await db.Expenses.Select(e => new { e.Amount, e.ExpenseDate }).ToListAsync();
 
         _totalRevenue = payments.Sum(p => p.Amount);
@@ -432,6 +656,43 @@ else
         }
         _maxMonthAmount = _months.Count == 0 ? 0 : _months.Max(m => Math.Max(m.Revenue, m.Expense));
 
+        // --- Doanh thu theo quốc gia / đơn hàng ---
+        var jobOrders = await db.JobOrders
+            .Select(j => new { j.Id, j.Code, j.Country, j.CompanyName })
+            .ToDictionaryAsync(j => j.Id);
+        var paidWithOrders = payments
+            .Where(p => p.JobOrderId is not null && jobOrders.ContainsKey(p.JobOrderId.Value))
+            .Select(p => new { Payment = p, Job = jobOrders[p.JobOrderId!.Value] })
+            .ToList();
+        _revenueByCountry = paidWithOrders
+            .GroupBy(x => x.Job.Country)
+            .Select(g => new RevenueCountryRow(
+                g.Key,
+                g.Select(x => x.Job.Id).Distinct().Count(),
+                g.Select(x => x.Payment.CandidateId).Distinct().Count(),
+                g.Sum(x => x.Payment.Amount)))
+            .OrderByDescending(x => x.Revenue)
+            .ToList();
+        _maxCountryRevenue = _revenueByCountry.Count == 0 ? 0 : _revenueByCountry.Max(x => x.Revenue);
+
+        _revenueByJobOrder = paidWithOrders
+            .GroupBy(x => x.Job.Id)
+            .Select(g =>
+            {
+                var job = jobOrders[g.Key];
+                var name = string.IsNullOrWhiteSpace(job.CompanyName)
+                    ? job.Code
+                    : $"{job.Code} — {job.CompanyName}";
+                return new RevenueJobOrderRow(
+                    name,
+                    job.Country,
+                    g.Select(x => x.Payment.CandidateId).Distinct().Count(),
+                    g.Sum(x => x.Payment.Amount));
+            })
+            .OrderByDescending(x => x.Revenue)
+            .Take(10)
+            .ToList();
+
         // --- Hoa hồng theo đại lý ---
         var agentNames = await db.Agents.ToDictionaryAsync(a => a.Id, a => a.Name);
         var commissions = await db.AgentCommissions
@@ -443,6 +704,35 @@ else
                 g.Count(),
                 g.Where(c => c.Status == CommissionStatus.Paid).Sum(c => c.CommissionAmount),
                 g.Sum(c => c.CommissionAmount)))
+            .ToList();
+
+        var candidateAgents = await db.Candidates
+            .Where(c => c.AgentId != null)
+            .Select(c => new { c.Id, AgentId = c.AgentId!.Value })
+            .ToListAsync();
+        var departedCandidateIds = candidateJobs
+            .Where(c => c.CurrentStep >= WorkflowStep.Departure || departedKeys.Contains((c.CandidateId, c.JobOrderId)))
+            .Select(c => c.CandidateId)
+            .Distinct()
+            .ToHashSet();
+        _topAgents = candidateAgents
+            .GroupBy(c => c.AgentId)
+            .Select(g =>
+            {
+                var totalCommission = commissions.Where(c => c.AgentId == g.Key).Sum(c => c.CommissionAmount);
+                var paidCommission = commissions.Where(c => c.AgentId == g.Key && c.Status == CommissionStatus.Paid).Sum(c => c.CommissionAmount);
+                var candidates = g.Select(c => c.Id).Distinct().ToList();
+                var departed = candidates.Count(departedCandidateIds.Contains);
+                return new TopAgentRow(
+                    agentNames.GetValueOrDefault(g.Key, "—"),
+                    candidates.Count,
+                    departed,
+                    candidates.Count == 0 ? 0 : departed * 100.0 / candidates.Count,
+                    totalCommission,
+                    paidCommission);
+            })
+            .OrderByDescending(a => a.CandidateCount)
+            .ThenByDescending(a => a.TotalCommission)
             .ToList();
 
         // --- Công nợ + khoản thu quá hạn ---
@@ -502,6 +792,7 @@ else
     }
 
     private static bool SameMonth(DateOnly d, DateOnly month) => d.Year == month.Year && d.Month == month.Month;
+    private static double Rate(int count, int total) => total == 0 ? 0 : count * 100.0 / total;
 
     private RenderFragment Kpi(string title, string value, string icon, Color color) =>@<MudItem xs="12" sm="6" md="4" lg="2">
         <MudPaper Class="pa-4" Elevation="1" Style="height:100%">

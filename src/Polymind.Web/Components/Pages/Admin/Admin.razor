@@ -1,0 +1,415 @@
+@page "/admin"
+@attribute [Authorize(Policy = "users:read")]
+@using Microsoft.AspNetCore.Identity
+@using Polymind.Infrastructure.Identity
+@using Polymind.Infrastructure.Persistence.Constants
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthState
+@inject ISnackbar Snackbar
+
+<PageTitle>Quản trị hệ thống — POLYMIND</PageTitle>
+
+<div class="d-flex justify-space-between align-center flex-wrap mb-4" style="gap:8px">
+    <div>
+        <MudText Typo="Typo.h5"><b>Quản trị hệ thống</b></MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Tài khoản, phân quyền và nhật ký kiểm toán</MudText>
+    </div>
+    <MudButton StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" OnClick="LoadAsync">Tải lại</MudButton>
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTabs Elevation="1" Rounded="true">
+        <MudTabPanel Text="Tài khoản">
+            <AuthorizeView Policy="users:create">
+                <Authorized>
+                    <MudPaper Class="pa-4 mb-4" Elevation="0" Outlined="true">
+                        <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Tạo tài khoản</b></MudText>
+                        <MudGrid>
+                            <MudItem xs="12" md="3">
+                                <MudTextField @bind-Value="_newEmail" Label="Email" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="12" md="3">
+                                <MudTextField @bind-Value="_newFullName" Label="Họ tên" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="12" md="3">
+                                <MudSelect T="string" @bind-Value="_newRole" Label="Vai trò" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                    @foreach (var role in _roles)
+                                    {
+                                        <MudSelectItem Value="@(role.Name ?? "")">@RoleDisplay(role)</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" md="2">
+                                <MudTextField @bind-Value="_newPassword" Label="Mật khẩu" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="12" md="1" Class="d-flex align-center">
+                                <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="CreateUserAsync">Tạo</MudButton>
+                            </MudItem>
+                        </MudGrid>
+                    </MudPaper>
+                </Authorized>
+            </AuthorizeView>
+
+            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>Họ tên</th>
+                        <th>Vai trò</th>
+                        <th>Trạng thái</th>
+                        <th style="text-align:right">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var user in _users)
+                    {
+                        <tr>
+                            <td>@user.Email</td>
+                            <td>@user.FullName</td>
+                            <td style="min-width:220px">
+                                <MudSelect T="string" @bind-Value="user.SelectedRole" Dense="true" Margin="Margin.Dense">
+                                    @foreach (var role in _roles)
+                                    {
+                                        <MudSelectItem Value="@(role.Name ?? "")">@RoleDisplay(role)</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </td>
+                            <td>
+                                <MudChip T="string" Size="Size.Small" Color="@(user.IsActive ? Color.Success : Color.Error)">
+                                    @(user.IsActive ? "Đang hoạt động" : "Đã khóa")
+                                </MudChip>
+                            </td>
+                            <td style="text-align:right;white-space:nowrap">
+                                <AuthorizeView Policy="users:update">
+                                    <Authorized>
+                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => SaveUserRoleAsync(user))">Lưu role</MudButton>
+                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => ToggleUserAsync(user))">
+                                            @(user.IsActive ? "Khóa" : "Mở")
+                                        </MudButton>
+                                        <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => ResetPasswordAsync(user))">Reset mật khẩu</MudButton>
+                                    </Authorized>
+                                </AuthorizeView>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Phân quyền">
+            <AuthorizeView Policy="roles:update">
+                <Authorized>
+                    <MudGrid>
+                        <MudItem xs="12" md="4">
+                            <MudSelect T="Guid" Value="_selectedRoleId" ValueChanged="OnRoleChangedAsync" Label="Vai trò" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                @foreach (var role in _roles)
+                                {
+                                    <MudSelectItem Value="@role.Id">@RoleDisplay(role)</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="8" Class="d-flex align-center justify-end">
+                            <MudButton StartIcon="@Icons.Material.Filled.Save" Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveRolePermissionsAsync">Lưu phân quyền</MudButton>
+                        </MudItem>
+                    </MudGrid>
+
+                    <MudSimpleTable Dense="true" Hover="true" Striped="true" Class="mt-3">
+                        <thead>
+                            <tr><th>Nhóm</th><th>Quyền</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var group in _permissions.GroupBy(p => p.Resource).OrderBy(g => g.Key))
+                            {
+                                <tr>
+                                    <td><b>@group.Key</b></td>
+                                    <td>
+                                        <div class="d-flex flex-wrap" style="gap:8px">
+                                            @foreach (var permission in group.OrderBy(p => p.Action))
+                                            {
+                                                <MudCheckBox T="bool"
+                                                             Label="@permission.Action"
+                                                             Value="@_selectedPermissionIds.Contains(permission.Id)"
+                                                             ValueChanged="@((bool v) => TogglePermission(permission.Id, v))"
+                                                             Dense="true" />
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </Authorized>
+                <NotAuthorized>
+                    <MudAlert Severity="Severity.Warning">Bạn không có quyền cập nhật phân quyền.</MudAlert>
+                </NotAuthorized>
+            </AuthorizeView>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Audit log">
+            <AuthorizeView Policy="audit:read">
+                <Authorized>
+                    <MudGrid Class="mb-3">
+                        <MudItem xs="12" md="3">
+                            <MudTextField @bind-Value="_auditResource" Label="Resource" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="12" md="3">
+                            <MudTextField @bind-Value="_auditAction" Label="Action" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="12" md="2" Class="d-flex align-center">
+                            <MudButton Variant="Variant.Outlined" OnClick="LoadAuditAsync">Lọc</MudButton>
+                        </MudItem>
+                    </MudGrid>
+                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                        <thead>
+                            <tr>
+                                <th>Thời gian</th>
+                                <th>User</th>
+                                <th>Action</th>
+                                <th>Resource</th>
+                                <th>ResourceId</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var log in _auditLogs)
+                            {
+                                <tr>
+                                    <td>@log.CreatedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm")</td>
+                                    <td>@log.UserName</td>
+                                    <td>@log.Action</td>
+                                    <td>@log.Resource</td>
+                                    <td><MudText Typo="Typo.caption">@log.ResourceId</MudText></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </Authorized>
+                <NotAuthorized>
+                    <MudAlert Severity="Severity.Warning">Bạn không có quyền xem audit log.</MudAlert>
+                </NotAuthorized>
+            </AuthorizeView>
+        </MudTabPanel>
+    </MudTabs>
+}
+
+@code {
+    private bool _loading = true;
+    private List<UserRow> _users = new();
+    private List<ApplicationRole> _roles = new();
+    private List<Permission> _permissions = new();
+    private HashSet<Guid> _selectedPermissionIds = new();
+    private Guid _selectedRoleId;
+    private List<AuditRow> _auditLogs = new();
+    private string? _auditResource;
+    private string? _auditAction;
+    private string _newEmail = "";
+    private string _newFullName = "";
+    private string _newPassword = DbSeeder.DefaultAdminPassword;
+    private string? _newRole;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _roles = await db.Roles.OrderBy(r => r.Name).ToListAsync();
+        _permissions = await db.Permissions.OrderBy(p => p.Resource).ThenBy(p => p.Action).ToListAsync();
+        _newRole ??= _roles.FirstOrDefault()?.Name;
+        _selectedRoleId = _selectedRoleId == Guid.Empty ? _roles.FirstOrDefault()?.Id ?? Guid.Empty : _selectedRoleId;
+        await LoadUsersAsync();
+        await LoadRolePermissionsAsync();
+        await LoadAuditAsync();
+        _loading = false;
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var users = await db.Users.OrderBy(u => u.Email).ToListAsync();
+        _users.Clear();
+        foreach (var user in users)
+        {
+            var roles = await UserManager.GetRolesAsync(user);
+            _users.Add(new UserRow
+            {
+                Id = user.Id,
+                Email = user.Email ?? user.UserName ?? "",
+                FullName = user.FullName,
+                IsActive = user.IsActive,
+                Roles = roles.ToList(),
+                SelectedRole = roles.FirstOrDefault() ?? _roles.FirstOrDefault()?.Name,
+            });
+        }
+    }
+
+    private async Task CreateUserAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newEmail) || string.IsNullOrWhiteSpace(_newFullName))
+        {
+            Snackbar.Add("Vui lòng nhập email và họ tên.", Severity.Warning);
+            return;
+        }
+
+        var user = new ApplicationUser
+        {
+            UserName = _newEmail.Trim(),
+            Email = _newEmail.Trim(),
+            EmailConfirmed = true,
+            FullName = _newFullName.Trim(),
+            IsActive = true,
+        };
+        var result = await UserManager.CreateAsync(user, string.IsNullOrWhiteSpace(_newPassword) ? DbSeeder.DefaultAdminPassword : _newPassword);
+        if (!result.Succeeded)
+        {
+            Snackbar.Add(string.Join("; ", result.Errors.Select(e => e.Description)), Severity.Error);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_newRole))
+            await UserManager.AddToRoleAsync(user, _newRole);
+
+        await AddAuditAsync("create", "users", user.Id, null, new { user.Email, user.FullName, Role = _newRole });
+        _newEmail = "";
+        _newFullName = "";
+        _newPassword = DbSeeder.DefaultAdminPassword;
+        await LoadUsersAsync();
+        Snackbar.Add("Đã tạo tài khoản.", Severity.Success);
+    }
+
+    private async Task SaveUserRoleAsync(UserRow row)
+    {
+        var user = await UserManager.FindByIdAsync(row.Id.ToString());
+        if (user is null || string.IsNullOrWhiteSpace(row.SelectedRole)) return;
+        var oldRoles = await UserManager.GetRolesAsync(user);
+        await UserManager.RemoveFromRolesAsync(user, oldRoles);
+        await UserManager.AddToRoleAsync(user, row.SelectedRole);
+        await AddAuditAsync("update_role", "users", user.Id, new { Roles = oldRoles }, new { Role = row.SelectedRole });
+        await LoadUsersAsync();
+        Snackbar.Add("Đã cập nhật vai trò.", Severity.Success);
+    }
+
+    private async Task ToggleUserAsync(UserRow row)
+    {
+        var user = await UserManager.FindByIdAsync(row.Id.ToString());
+        if (user is null) return;
+        var old = user.IsActive;
+        user.IsActive = !user.IsActive;
+        var result = await UserManager.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            Snackbar.Add(string.Join("; ", result.Errors.Select(e => e.Description)), Severity.Error);
+            return;
+        }
+        await AddAuditAsync(user.IsActive ? "unlock" : "lock", "users", user.Id, new { IsActive = old }, new { user.IsActive });
+        await LoadUsersAsync();
+        Snackbar.Add(user.IsActive ? "Đã mở khóa tài khoản." : "Đã khóa tài khoản.", Severity.Success);
+    }
+
+    private async Task ResetPasswordAsync(UserRow row)
+    {
+        var user = await UserManager.FindByIdAsync(row.Id.ToString());
+        if (user is null) return;
+        var token = await UserManager.GeneratePasswordResetTokenAsync(user);
+        var result = await UserManager.ResetPasswordAsync(user, token, DbSeeder.DefaultAdminPassword);
+        if (!result.Succeeded)
+        {
+            Snackbar.Add(string.Join("; ", result.Errors.Select(e => e.Description)), Severity.Error);
+            return;
+        }
+        await AddAuditAsync("reset_password", "users", user.Id, null, new { DefaultPassword = true });
+        Snackbar.Add($"Đã reset mật khẩu về {DbSeeder.DefaultAdminPassword}.", Severity.Success);
+    }
+
+    private async Task OnRoleChangedAsync(Guid roleId)
+    {
+        _selectedRoleId = roleId;
+        await LoadRolePermissionsAsync();
+    }
+
+    private async Task LoadRolePermissionsAsync()
+    {
+        if (_selectedRoleId == Guid.Empty)
+        {
+            _selectedPermissionIds.Clear();
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _selectedPermissionIds = (await db.RolePermissions
+            .Where(rp => rp.RoleId == _selectedRoleId)
+            .Select(rp => rp.PermissionId)
+            .ToListAsync()).ToHashSet();
+    }
+
+    private void TogglePermission(Guid permissionId, bool enabled)
+    {
+        if (enabled) _selectedPermissionIds.Add(permissionId);
+        else _selectedPermissionIds.Remove(permissionId);
+    }
+
+    private async Task SaveRolePermissionsAsync()
+    {
+        if (_selectedRoleId == Guid.Empty) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var existing = await db.RolePermissions.Where(rp => rp.RoleId == _selectedRoleId).ToListAsync();
+        var oldIds = existing.Select(rp => rp.PermissionId).ToHashSet();
+        var toRemove = existing.Where(rp => !_selectedPermissionIds.Contains(rp.PermissionId)).ToList();
+        var toAdd = _selectedPermissionIds
+            .Where(id => !oldIds.Contains(id))
+            .Select(id => new RolePermission { RoleId = _selectedRoleId, PermissionId = id })
+            .ToList();
+        if (toRemove.Count > 0) db.RolePermissions.RemoveRange(toRemove);
+        if (toAdd.Count > 0) db.RolePermissions.AddRange(toAdd);
+        db.AddAudit(await AuthState.GetUserIdAsync(), "update", "role_permissions", _selectedRoleId,
+            new { PermissionIds = oldIds }, new { PermissionIds = _selectedPermissionIds });
+        await db.SaveChangesAsync();
+        Snackbar.Add("Đã lưu phân quyền vai trò.", Severity.Success);
+    }
+
+    private async Task LoadAuditAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var query = db.AuditLogs.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(_auditResource))
+            query = query.Where(a => a.Resource.Contains(_auditResource));
+        if (!string.IsNullOrWhiteSpace(_auditAction))
+            query = query.Where(a => a.Action.Contains(_auditAction));
+
+        var logs = await query.OrderByDescending(a => a.CreatedAt).Take(200).ToListAsync();
+        var userNames = await db.Users.ToDictionaryAsync(u => u.Id, u => u.FullName);
+        _auditLogs = logs.Select(a => new AuditRow(
+            a.CreatedAt,
+            a.UserId is null ? "Hệ thống" : userNames.GetValueOrDefault(a.UserId.Value, "—"),
+            a.Action,
+            a.Resource,
+            a.ResourceId?.ToString() ?? "—")).ToList();
+    }
+
+    private async Task AddAuditAsync(string action, string resource, Guid resourceId, object? oldValue, object? newValue)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.AddAudit(await AuthState.GetUserIdAsync(), action, resource, resourceId, oldValue, newValue);
+        await db.SaveChangesAsync();
+    }
+
+    private static string RoleDisplay(ApplicationRole role)
+        => $"{role.Name} — {RoleNames.All.GetValueOrDefault(role.Name ?? "", role.Description ?? "")}";
+
+    private sealed class UserRow
+    {
+        public Guid Id { get; set; }
+        public string Email { get; set; } = "";
+        public string FullName { get; set; } = "";
+        public bool IsActive { get; set; }
+        public List<string> Roles { get; set; } = new();
+        public string? SelectedRole { get; set; }
+    }
+
+    private sealed record AuditRow(DateTimeOffset CreatedAt, string UserName, string Action, string Resource, string ResourceId);
+}

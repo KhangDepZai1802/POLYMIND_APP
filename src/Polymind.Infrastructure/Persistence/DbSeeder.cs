@@ -64,7 +64,7 @@ public static class DbSeeder
             Read("dashboard", "candidates", "job_orders", "agents", "reports", "notifications")),
 
         [RoleNames.Agent] = Combine(
-            Read("dashboard", "candidates", "commissions", "reports", "notifications")),
+            Read("candidates", "commissions", "notifications")),
     };
 
     public static async Task SeedAsync(IServiceProvider sp)
@@ -142,9 +142,15 @@ public static class DbSeeder
             .Select(p => new RolePermission { RoleId = role.Id, PermissionId = p.Id })
             .ToList();
 
-        if (missing.Count == 0) return;
+        var desiredIds = permissions.Select(p => p.Id).ToHashSet();
+        var extra = await db.RolePermissions
+            .Where(rp => rp.RoleId == role.Id && !desiredIds.Contains(rp.PermissionId))
+            .ToListAsync();
 
-        db.RolePermissions.AddRange(missing);
+        if (missing.Count == 0 && extra.Count == 0) return;
+
+        if (missing.Count > 0) db.RolePermissions.AddRange(missing);
+        if (extra.Count > 0) db.RolePermissions.RemoveRange(extra);
         await db.SaveChangesAsync();
     }
 

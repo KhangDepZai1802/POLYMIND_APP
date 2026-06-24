@@ -30,13 +30,15 @@
 ## 🎯 TRẠNG THÁI HIỆN TẠI
 
 - **Bản demo MVP chạy được**, đã smoke-test toàn bộ trang HTTP 200. App: `http://localhost:5177`, login `admin@polymind.local / Admin@123`.
-- Build sạch (`dotnet build Polymind.slnx` = 0 error, 1 warning cũ `BL0008` ở Login.razor — vô hại). Docker (Postgres/Redis/MinIO) cần `docker compose up -d`.
+- Build sạch (`dotnet build Polymind.slnx` = 0 error, 0 warning). Docker (Postgres/Redis/MinIO) cần `docker compose up -d`.
 - Đã xong: nền tảng + auth + Dashboard + Lead CRM + **Ứng viên CRUD** + **Đơn hàng CRUD** + **Tài chính (Thu/Chi)** + **Đại lý & Hoa hồng** + **Visa & Xuất cảnh (Visa + Vé máy bay CRUD)** + **Báo cáo & Thống kê** + demo data. **Không còn placeholder nào** — tất cả menu đều có trang thật.
 - **Demo data đầy đủ (Session 9):** đã seed bù **Visa(4) + Vé máy bay(3) + Cấu hình hoa hồng(9) + Hoa hồng phát sinh(8)** → trang Báo cáo "Hoa hồng theo đại lý" và trang Visa đã có dữ liệu thật. Đã smoke-test 12 trang (admin 200, không exception) + RBAC 4 role (recruiter/accountant/visa.staff/agent) không lỗi. **Sẵn sàng demo đối tác.**
 - **ĐỢT 1 đã xong (Session 10):** UI cấu hình hoa hồng theo đại lý, tự sinh `AgentCommission` khi ứng viên đạt mốc Deposit/Selected/Departure, duyệt khoản thu và duyệt/đánh dấu đã chi hoa hồng. Build xanh, smoke-test `/finance`, `/agents/{id}`, `/candidates/{id}` HTTP 200.
 - **ĐỢT 2 đã xong (Session 11):** audit log thực thi cho các thao tác chính (ứng viên, payment/expense, chuyển bước, hoa hồng, cấu hình hoa hồng) và thêm section **Công nợ ứng viên** trong `CandidateDetail` gated bằng `payments:read`.
 - **ĐỢT 3 đã xong (Session 12):** wiring MinIO thật bằng package `Minio`, cấu hình bucket `polymind-documents`, service upload/download hồ sơ, UI **Hồ sơ ứng viên** trong `CandidateDetail` với upload version + link tải presigned URL.
 - **PHASE B đã xong (Session 16):** Xuất file thật PDF + Excel. Thêm package **QuestPDF 2026.6** (license Community set trong `Program.cs`) + **ClosedXML 0.105**. Refactor `Reporting/CsvExportEndpoints.cs`: 3 data-builder dùng chung, mỗi báo cáo có 3 endpoint `.csv`/`.xlsx`/`.pdf` (finance-monthly, commissions, overdue-payments). Thêm endpoint `/receipts/{id}.pdf` in phiếu thu/chi (mẫu A5 ngang, có chỗ ký). `Reports.razor`: 3 menu Excel/PDF/CSV. `Finance.razor`: nút "In PDF" ở tab Phiếu thu/chi. Smoke-test: 3 xlsx (sig PK) + 3 pdf báo cáo (sig %PDF) + phiếu pdf = 200 đúng content-type. QuestPDF dùng font Lato bundled (hỗ trợ tiếng Việt, không cần font hệ thống).
+- **PHASE C đã xong (Session 17):** Báo cáo & Dashboard mở rộng. `/reports` thêm doanh thu theo quốc gia/đơn hàng, lead theo tỉnh, phễu trúng tuyển/đậu visa/xuất cảnh, top đại lý; `/` thêm KPI doanh thu tháng này/quốc gia doanh thu cao/tỷ lệ funnel + dashboard doanh thu quốc gia/top đại lý. Export thêm 5 báo cáo mới đủ `.csv`/`.xlsx`/`.pdf`: revenue-by-country, revenue-by-job-order, lead-by-province, recruitment-funnel, top-agents. Build xanh, smoke-test `/` `/reports` + 5 endpoint export mới = 200.
+- **PHASE D + E đã xong (Session 18):** Thông báo đa kênh + chạy nền và quản trị hệ thống. Thêm **Hangfire + PostgreSQL storage** (`/hangfire`, super_admin/director), recurring job 5 phút tạo reminder đúng người phụ trách + dispatcher gửi kênh chờ. Thêm `NotificationPreference` + UI tùy chọn kênh InApp/Email/SMS/Zalo; Email dùng SMTP thật khi cấu hình, SMS/Zalo adapter log/queue. Thêm `/admin`: quản lý user/role/reset password/khóa tài khoản, phân quyền role↔permission, audit log viewer. Seeder role permissions chuyển sang reconcile và gỡ `dashboard:read`/`reports:read` khỏi `agent`.
 - **PHASE A đã xong (Session 15):** Hoàn thiện nghiệp vụ lõi còn hở theo plan production (`v-y-hi-n-gi-web-fizzy-parasol.md`). (A1) **Phiếu thu/chi**: thêm `Receipt.PaymentId/ExpenseId` + migration, nút "Phiếu thu"/"Phiếu chi" sinh phiếu idempotent từ khoản đã thu/khoản chi, tab "Phiếu thu/chi" trong `/finance` (PDF để Phase B). (A2) **Khôi phục phiên bản hồ sơ**: nút "Lịch sử" + "Đặt hiện hành" trong `CandidateDetail`, audit `restore_version`. (A3) **Field Lead §3.2**: `LeadDialog` bổ sung ngày sinh/giới tính/CCCD/địa chỉ/nghề nghiệp/học vấn/kinh nghiệm/ngoại ngữ/đơn hàng quan tâm/người phụ trách (entity đã đủ field từ trước). (A4) **Phân công Lead + KPI**: panel phân công trong `LeadDetail` + section "KPI nhân viên tuyển dụng" trong `/reports`. (A5) **Nhắc lịch hẹn tư vấn**: `Lead.AppointmentAt` + migration + panel đặt lịch + reminder `ReminderInterview`. Build xanh, smoke-test `/finance` `/candidates/{id}` `/leads/{id}` `/reports` = 200 không error-boundary, 2 migration applied. **(Nợ:** file đính kèm Lead hoãn — cần generic storage thay vì candidate-specific.)
 - **ĐỢT 5 đã xong (Session 14):** **Portal đại lý + RBAC data-scope.** Seed gắn tài khoản `agent@` vào đại lý AG-000001 (idempotent). `AgentScope` service phân giải `(IsAgentOnly, AgentId)`. Trang `/candidates` lọc theo `AgentId` cho đại lý; `/candidates/{id}` chặn xem ứng viên không thuộc đại lý mình. Trang mới `/my-commissions` (portal hoa hồng). `/` và `/reports` redirect đại lý về `/my-commissions` (chống lộ số liệu công ty). NavMenu ẩn Tổng quan/Báo cáo cho đại lý, hiện "Hoa hồng của tôi". Smoke-test: agent thấy 3/12 ứng viên, 5 hoa hồng; admin vẫn full. **Hoàn tất lộ trình 5 đợt nâng cấp.**
 - **ĐỢT 4 đã xong (Session 13):** (1) **Báo cáo mở rộng** — thêm 4 KPI (công nợ phải thu, khoản thu quá hạn, hồ sơ đã tải, sắp xuất cảnh 30 ngày) + 4 section mới (hồ sơ theo loại, khoản thu quá hạn, lịch visa & lịch xuất cảnh 30 ngày). (2) **Dashboard Home** thêm 3 KPI (công nợ/quá hạn/sắp xuất cảnh). (3) **Thông báo in-app (stub)** — `NotificationService` sinh reminder idempotent (khoản thu quá hạn/sắp tới, lịch visa, xuất cảnh, hồ sơ thiếu), bell badge ở topbar, trang `/notifications` (list + đánh dấu đã đọc + quét lại). (4) **Export CSV** — 3 endpoint `/export/*.csv` (thu/chi theo tháng, hoa hồng, khoản thu quá hạn) gated `reports:read`, BOM UTF-8 cho tiếng Việt, nút "Xuất CSV" trên trang Báo cáo. Build xanh, smoke-test `/`, `/reports`, `/notifications` = 200 không error-boundary, 3 CSV trả đúng `text/csv` + tiếng Việt đúng dấu, DB sinh 8 reminder thật.
@@ -46,36 +48,48 @@
 
 ## ⏭️ VIỆC TIẾP THEO (baton — làm cái này trước)
 
-**Đang chạy theo plan production end-to-end** (`C:\Users\khang\.claude\plans\v-y-hi-n-gi-web-fizzy-parasol.md`, 8 phase A→H). **Đã xong Phase A + B.** Tiếp theo là **PHASE C — Báo cáo & Dashboard mở rộng (§11–12)**:
-1. Doanh thu **theo quốc gia / theo đơn hàng** (join `JobOrder.Country`) — thêm section trong `Reports.razor` + Dashboard doanh thu (§11.2).
-2. Lead **theo tỉnh / theo nhân viên** (§12.1 — KPI nhân viên đã có ở Phase A, bổ sung theo tỉnh `Lead.Province`); tỷ lệ **trúng tuyển / đậu visa / xuất cảnh** (§12.2) tính theo bước workflow + bảng Visa.
-3. "Top đại lý" + Dashboard đại lý (§11.3). Giữ pattern `MudProgressLinear`/`MudSimpleTable` (tránh MudChart). Cân nhắc thêm các báo cáo mới này vào export (Phase B đã có khung 3 format — thêm builder nếu cần).
+**Đang chạy theo plan production end-to-end** (`C:\Users\khang\.claude\plans\v-y-hi-n-gi-web-fizzy-parasol.md`, 8 phase A→H). **Đã xong Phase A + B + C + D + E.** Tiếp theo là **PHASE F — Production hardening & Bảo mật**:
+1. Secrets: đưa connection string + MinIO + SMTP ra biến môi trường/user-secrets/appsettings.Production; tránh hardcode secret trong `appsettings.json`.
+2. Auth/security: password policy + lockout, HTTPS/cookie review, session timeout, kiểm tra tài khoản inactive đã bị chặn login.
+3. Logging/lỗi/health: thêm Serilog, global exception handling thân thiện, health checks `/health`, rà validation form và lỗi MinIO/DB.
 
 **Lưu ý Đợt 5 cho người sau:**
 - `AgentScope` (scoped, `Identity/AgentScope.cs`) là nguồn sự thật cho data-scope đại lý: `GetAsync()` trả `(IsAgentOnly, AgentId)`, cache trong 1 request. "Agent-only" = có role `agent` và KHÔNG kèm role nội bộ nào. Dùng nó ở mọi trang dùng chung cần bó hẹp.
 - Đại lý gắn user qua `Agent.UserId` (seed ở `SeedExtrasAsync`, idempotent — chỉ gắn nếu chưa có agent nào trỏ tới user đó). Demo: `agent@` ↔ AG-000001.
 - Redirect đại lý khỏi `/` và `/reports` đặt trong `OnInitializedAsync` trước khi load DB (defense-in-depth), cộng ẩn menu trong `NavMenu` (`_isAgentOnly`). Nếu thêm trang nhạy cảm mới, nhớ cả 2 lớp.
-- Permission seed cho `agent` vẫn còn `dashboard:read`/`reports:read` (không gỡ vì `AssignRolePermissions` chỉ thêm, không xóa) — nên chặn bằng redirect + ẩn menu chứ không dựa vào policy. Nếu muốn gỡ hẳn, phải nâng seeder thành reconcile (thêm + xóa).
+- Permission seed cho `agent` đã được reconcile ở Session 18: hiện chỉ còn `candidates:read`, `commissions:read`, `notifications:read`; vẫn giữ redirect/ẩn menu như lớp bảo vệ phụ.
 
 **Lưu ý Đợt 4 cho người sau:**
 - Trang `/notifications`: class page `Notifications` **trùng tên** property inject → đã đổi tên service inject thành `NotificationSvc` (đừng đặt lại thành `Notifications`).
-- Reminder sinh **khi mở trang/topbar** (bell `OnInitializedAsync` gọi `GenerateRemindersAsync`), idempotent theo `(UserId, Type, ReferenceId)`. Hiện nhắm recipient = **user đang đăng nhập** (demo). Nếu cần multi-user thật thì sinh theo người phụ trách.
+- Reminder hiện sinh bằng Hangfire recurring job và nút "Quét nhắc việc" ở `/notifications`; topbar bell chỉ đếm unread. Idempotent theo `(UserId, Type, ReferenceId, Channel)` và nhắm recipient theo người phụ trách/fallback role.
 - Export CSV là **minimal-API endpoint** trong `Program.cs` (`MapCsvExportEndpoints`), gated `.RequireAuthorization("reports:read")` qua policy provider động. Dùng BOM UTF-8 (`Encoding.UTF8.GetPreamble()`) để Excel đọc đúng tiếng Việt. Không ghi file ra repo — stream `Results.File`.
 - MudIcon render ra SVG path (không có tên icon trong HTML) và MudMenu render lazy → grep HTML tìm tên icon/menu sẽ "miss"; verify bằng HTTP 200 + vắng `blazor-error-boundary` + query DB.
 
-**Nợ nhỏ phát hiện ở Session 9:** role `agent` đang thấy `/candidates` và `/reports` hơi rộng so với spec §2.8 (Portal đại lý chỉ xem ứng viên mình giới thiệu + hoa hồng) → siết khi làm Portal đại lý.
+**Nợ nhỏ phát hiện ở Session 9:** role `agent` từng thấy `/reports` hơi rộng; Session 18 đã gỡ `reports:read`/`dashboard:read` bằng seeder reconcile. Vẫn cần dùng `AgentScope` cho mọi trang dữ liệu dùng chung mới.
 
 **LƯU Ý khi tạo trang mới (giữ nguyên):** KHÔNG thêm `@rendermode`; đặt page trong folder + đừng đặt tên class trùng entity. MudBlazor 9.5 — tránh `MudChart` (API đổi, cảnh báo `MUD0002`, attribute bị nuốt im lặng); dùng `MudProgressLinear` + `MudSimpleTable`. **Seed mở rộng:** `DemoDataSeeder.SeedExtrasAsync` chạy idempotent theo từng bảng kể cả khi DB đã có Lead (bù Visa/Flight/Commission mà không cần xóa DB).
 
 ## 🚧 BLOCKERS / NỢ KỸ THUẬT
 
 - (chưa có blocker)
-- Nợ wiring: MinIO, Hangfire, Redis, QuestPDF, ClosedXML — gắn khi tới phần dùng.
+- Nợ hardening: secrets production, Serilog, health checks, HTTPS/cookie/security review — làm ở Phase F.
 - ~~Module placeholder chờ làm thật~~ — ĐÃ XONG HẾT (finance/agents/visa/reports đều có trang thật).
 
 ---
 
 ## 📜 NHẬT KÝ SESSION (mới nhất ở trên)
+
+### [2026-06-24] Session 18 — Codex
+- **Làm được:** Hoàn thành **Phase D + E**. Phase D: thêm Hangfire/PostgreSQL storage, dashboard `/hangfire` chỉ super_admin/director, recurring job `polymind-notification-reminders` mỗi 5 phút, `NotificationJob`, pipeline `INotificationSender` cho InApp/SMTP Email/SMS/Zalo, `NotificationPreference` và UI tab "Kênh nhận" ở `/notifications`; topbar chỉ đếm unread, không tự sinh reminder nữa. Phase E: trang `/admin` gồm quản lý tài khoản (tạo user/gán role/khóa/mở/reset mật khẩu), phân quyền role↔permission, audit log viewer; login chặn tài khoản `IsActive=false`; nav thêm "Quản trị"; seeder permissions chuyển sang reconcile và siết role `agent`.
+- **File chính:** `Polymind.Web.csproj`, `Program.cs`, `Domain/Entities/NotificationPreference.cs`, `ApplicationDbContext.cs` + migration `AddNotificationPreferencesAndHangfire`, `Notifications/*`, `Components/Pages/Notifications/Notifications.razor`, `Components/Pages/Admin/Admin.razor`, `Components/Layout/NavMenu.razor`, `Components/Layout/NotificationBell.razor`, `Components/Account/Login.razor`, `DbSeeder.cs`, `Finance.razor` (dọn warning ForceLoad).
+- **Đã test:** `dotnet build Polymind.slnx` = 0 warning, 0 error. Chạy web `:5177`: migration apply OK, Hangfire server dùng schema `hangfire`. HTTP admin: `/notifications`, `/admin`, `/hangfire` = 200, không `blazor-error-boundary`. HTTP agent: `/my-commissions` = 200; `/reports` và `/` bị chặn/redirect 302 sau reconcile. DB check: `notification_preferences` + `hangfire.job` tồn tại; role `agent` chỉ còn `candidates:read`, `commissions:read`, `notifications:read`.
+- **Lưu ý/cảnh báo cho người sau:** Web app đã được dừng để build cuối. SMTP mặc định `Notifications:Email:Enabled=false`; muốn gửi email thật cần cấu hình Host/Port/Username/Password/From*. SMS/Zalo hiện là adapter log/queue, chờ provider thật ở cấu hình/tích hợp sau. UI phân quyền role lưu runtime nhưng seeder reconcile sẽ đưa role mặc định về `RolePermissionMap` khi app restart; nếu muốn cho admin chỉnh vĩnh viễn, cần tách seed defaults khỏi reconcile.
+
+### [2026-06-24] Session 17 — Codex
+- **Làm được:** Hoàn thành **Phase C — Báo cáo & Dashboard mở rộng**. `/reports` thêm 3 KPI funnel (trúng tuyển/đậu visa/xuất cảnh), section Lead theo tỉnh/thành, phễu tuyển dụng, doanh thu theo quốc gia, doanh thu theo đơn hàng, Top đại lý. `/` thêm KPI doanh thu tháng này/quốc gia doanh thu cao/tỷ lệ funnel + dashboard doanh thu quốc gia và top đại lý.
+- **File chính:** `src/Polymind.Web/Components/Pages/Reports/Reports.razor`, `src/Polymind.Web/Components/Pages/Home.razor`, `src/Polymind.Web/Reporting/CsvExportEndpoints.cs`.
+- **Đã test:** `dotnet build Polymind.slnx` = 0 warning, 0 error. Chạy web `:5177`, login admin qua HTTP: `/` và `/reports` = 200, không `blazor-error-boundary`, có nội dung Phase C. Export mới test 5 endpoint: `revenue-by-country.xlsx` (PK), `revenue-by-job-order.pdf` (%PDF), `lead-by-province.csv` (UTF-8 BOM), `recruitment-funnel.xlsx` (PK), `top-agents.pdf` (%PDF) đều 200 đúng content-type.
+- **Lưu ý/cảnh báo cho người sau:** Web app đang chạy `:5177` (log `C:\tmp\polymind-web-phaseC.*.log`). Khi build, nếu bị lock DLL bởi `Polymind.Web`, dừng process web trước. Smoke-test login HTTP cần lấy `__RequestVerificationToken` đúng regex `name="__RequestVerificationToken" value="..."`.
 
 ### [2026-06-24] Session 16 — Claude
 - **Làm được:** **Phase B — Xuất file thật PDF + Excel** (plan production).

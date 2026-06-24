@@ -5,6 +5,7 @@
 @inject ISnackbar Snackbar
 @inject IAuthorizationService AuthorizationService
 @inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Nav
 
 <PageTitle>Tài chính — POLYMIND</PageTitle>
 
@@ -162,7 +163,7 @@
                             <CellTemplate>
                                 <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
                                            StartIcon="@Icons.Material.Filled.PictureAsPdf"
-                                           Href="@($"/receipts/{context.Item.Id}.pdf")" ForceLoad="true">In PDF</MudButton>
+                                           OnClick="@(() => Nav.NavigateTo($"/receipts/{context.Item.Id}.pdf", forceLoad: true))">In PDF</MudButton>
                             </CellTemplate>
                         </TemplateColumn>
                     </Columns>

@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Hangfire;
+using Hangfire.PostgreSql;
 using MudBlazor.Services;
 using Polymind.Infrastructure;
 using Polymind.Infrastructure.Identity;
@@ -9,6 +11,7 @@ using Polymind.Infrastructure.Persistence;
 using Polymind.Web.Authorization;
 using Polymind.Web.Components;
 using Polymind.Web.Identity;
+using Polymind.Web.Notifications;
 using Polymind.Web.Reporting;
 using Polymind.Web.Storage;
 
@@ -28,8 +31,22 @@ builder.Services.AddMudServices();
 builder.Services.Configure<MinioStorageOptions>(builder.Configuration.GetSection("Minio"));
 builder.Services.AddScoped<IDocumentStorage, MinioDocumentStorage>();
 
-// Thông báo in-app (stub)
-builder.Services.AddScoped<Polymind.Web.Notifications.NotificationService>();
+// Thông báo đa kênh + job nền
+builder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection("Notifications"));
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<NotificationJob>();
+builder.Services.AddScoped<INotificationSender, InAppNotificationSender>();
+builder.Services.AddScoped<INotificationSender, SmtpEmailNotificationSender>();
+builder.Services.AddScoped<INotificationSender, LoggingSmsNotificationSender>();
+builder.Services.AddScoped<INotificationSender, LoggingZaloNotificationSender>();
+
+var dbConnectionString = builder.Configuration.GetConnectionString("Default")!;
+builder.Services.AddHangfire(config => config
+    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+    .UseSimpleAssemblyNameTypeSerializer()
+    .UseRecommendedSerializerSettings()
+    .UsePostgreSqlStorage(options => options.UseNpgsqlConnection(dbConnectionString)));
+builder.Services.AddHangfireServer();
 
 // Phạm vi dữ liệu Portal đại lý
 builder.Services.AddScoped<Polymind.Web.Identity.AgentScope>();
@@ -64,6 +81,10 @@ app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = new[] { new HangfireDashboardAuthorizationFilter() }
+});
 app.UseAntiforgery();
 
 app.MapStaticAssets();
@@ -79,6 +100,11 @@ app.MapPost("/Account/Logout", async (SignInManager<ApplicationUser> signInManag
 
 // Xuất báo cáo CSV (gated reports:read).
 app.MapCsvExportEndpoints();
+
+RecurringJob.AddOrUpdate<NotificationJob>(
+    "polymind-notification-reminders",
+    job => job.RunAsync(),
+    "*/5 * * * *");
 
 // Áp migration + seed roles/permissions/super_admin + dữ liệu mẫu (bỏ qua nếu DB chưa sẵn sàng).
 using (var scope = app.Services.CreateScope())

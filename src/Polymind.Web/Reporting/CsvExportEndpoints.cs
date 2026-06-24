@@ -24,6 +24,11 @@ public static class CsvExportEndpoints
         Register(group, "finance-monthly", BuildFinanceMonthlyAsync);
         Register(group, "commissions", BuildCommissionsAsync);
         Register(group, "overdue-payments", BuildOverdueAsync);
+        Register(group, "revenue-by-country", BuildRevenueByCountryAsync);
+        Register(group, "revenue-by-job-order", BuildRevenueByJobOrderAsync);
+        Register(group, "lead-by-province", BuildLeadByProvinceAsync);
+        Register(group, "recruitment-funnel", BuildRecruitmentFunnelAsync);
+        Register(group, "top-agents", BuildTopAgentsAsync);
 
         // In phiếu thu/chi PDF.
         app.MapGet("/receipts/{id:guid}.pdf", async (Guid id, IDbContextFactory<ApplicationDbContext> dbFactory) =>
@@ -119,6 +124,168 @@ public static class CsvExportEndpoints
             .ToList();
         return new ReportTable("Khoản thu quá hạn", "khoan-thu-qua-han",
             new[] { "Ứng viên", "Loại", "Số tiền", "Hạn thu", "Số ngày quá hạn" }, rows);
+    }
+
+    private static async Task<ReportTable> BuildRevenueByCountryAsync(ApplicationDbContext db)
+    {
+        var payments = await db.Payments.Where(p => p.Status == PaymentStatus.Paid)
+            .Select(p => new { p.CandidateId, p.JobOrderId, p.Amount }).ToListAsync();
+        var jobs = await db.JobOrders.Select(j => new { j.Id, j.Country }).ToDictionaryAsync(j => j.Id);
+        var rows = payments
+            .Where(p => p.JobOrderId is not null && jobs.ContainsKey(p.JobOrderId.Value))
+            .Select(p => new { Payment = p, Job = jobs[p.JobOrderId!.Value] })
+            .GroupBy(x => x.Job.Country)
+            .Select(g => new
+            {
+                Country = g.Key,
+                Orders = g.Select(x => x.Job.Id).Distinct().Count(),
+                Candidates = g.Select(x => x.Payment.CandidateId).Distinct().Count(),
+                Revenue = g.Sum(x => x.Payment.Amount)
+            })
+            .OrderByDescending(x => x.Revenue)
+            .Select(x => new[] { x.Country, x.Orders.ToString(), x.Candidates.ToString(), x.Revenue.ToString("N0") })
+            .ToList();
+
+        return new ReportTable("Doanh thu theo quốc gia", "doanh-thu-theo-quoc-gia",
+            new[] { "Quốc gia", "Số đơn hàng", "Ứng viên đã thu", "Doanh thu" }, rows);
+    }
+
+    private static async Task<ReportTable> BuildRevenueByJobOrderAsync(ApplicationDbContext db)
+    {
+        var payments = await db.Payments.Where(p => p.Status == PaymentStatus.Paid)
+            .Select(p => new { p.CandidateId, p.JobOrderId, p.Amount }).ToListAsync();
+        var jobs = await db.JobOrders
+            .Select(j => new { j.Id, j.Code, j.Country, j.CompanyName })
+            .ToDictionaryAsync(j => j.Id);
+        var rows = payments
+            .Where(p => p.JobOrderId is not null && jobs.ContainsKey(p.JobOrderId.Value))
+            .Select(p => new { Payment = p, Job = jobs[p.JobOrderId!.Value] })
+            .GroupBy(x => x.Job.Id)
+            .Select(g =>
+            {
+                var job = jobs[g.Key];
+                var name = string.IsNullOrWhiteSpace(job.CompanyName)
+                    ? job.Code
+                    : $"{job.Code} — {job.CompanyName}";
+                return new
+                {
+                    Name = name,
+                    job.Country,
+                    Candidates = g.Select(x => x.Payment.CandidateId).Distinct().Count(),
+                    Revenue = g.Sum(x => x.Payment.Amount)
+                };
+            })
+            .OrderByDescending(x => x.Revenue)
+            .Select(x => new[] { x.Name, x.Country, x.Candidates.ToString(), x.Revenue.ToString("N0") })
+            .ToList();
+
+        return new ReportTable("Doanh thu theo đơn hàng", "doanh-thu-theo-don-hang",
+            new[] { "Đơn hàng", "Quốc gia", "Ứng viên đã thu", "Doanh thu" }, rows);
+    }
+
+    private static async Task<ReportTable> BuildLeadByProvinceAsync(ApplicationDbContext db)
+    {
+        var rows = await db.Leads
+            .GroupBy(l => string.IsNullOrWhiteSpace(l.Province) ? "Chưa rõ" : l.Province!.Trim())
+            .Select(g => new { Province = g.Key, Total = g.Count(), Converted = g.Count(l => l.Status == LeadStatus.Converted) })
+            .ToListAsync();
+        var output = rows
+            .OrderByDescending(x => x.Total)
+            .ThenBy(x => x.Province)
+            .Select(x => new[]
+            {
+                x.Province,
+                x.Total.ToString(),
+                x.Converted.ToString(),
+                (x.Total == 0 ? 0 : x.Converted * 100.0 / x.Total).ToString("0.#") + "%"
+            })
+            .ToList();
+
+        return new ReportTable("Lead theo tỉnh/thành", "lead-theo-tinh",
+            new[] { "Tỉnh/Thành", "Tổng Lead", "Đã chuyển ứng viên", "Tỷ lệ chuyển đổi" }, output);
+    }
+
+    private static async Task<ReportTable> BuildRecruitmentFunnelAsync(ApplicationDbContext db)
+    {
+        var candidateJobs = await db.CandidateJobOrders
+            .Select(c => new { c.CandidateId, c.JobOrderId, c.CurrentStep })
+            .ToListAsync();
+        var visaApprovedPairs = await db.Visas.Where(v => v.Status == VisaStatus.Approved)
+            .Select(v => new { v.CandidateId, v.JobOrderId }).ToListAsync();
+        var visaApprovedKeys = visaApprovedPairs.Select(v => (v.CandidateId, v.JobOrderId)).ToHashSet();
+        var actualDepartures = await db.Flights.Where(f => f.ActualDepartureAt != null)
+            .Select(f => new { f.CandidateId, f.JobOrderId }).ToListAsync();
+        var departedKeys = actualDepartures.Select(f => (f.CandidateId, f.JobOrderId)).ToHashSet();
+
+        var total = candidateJobs.Count;
+        var selected = candidateJobs.Count(c => c.CurrentStep >= WorkflowStep.Selected);
+        var visaApproved = candidateJobs.Count(c =>
+            c.CurrentStep >= WorkflowStep.VisaApproved || visaApprovedKeys.Contains((c.CandidateId, c.JobOrderId)));
+        var departed = candidateJobs.Count(c =>
+            c.CurrentStep >= WorkflowStep.Departure || departedKeys.Contains((c.CandidateId, c.JobOrderId)));
+
+        var rows = new[]
+        {
+            Row("Đang trong quy trình", total, total),
+            Row("Trúng tuyển", selected, total),
+            Row("Đậu visa", visaApproved, total),
+            Row("Xuất cảnh", departed, total)
+        }.ToList();
+
+        return new ReportTable("Phễu tuyển dụng", "pheu-tuyen-dung",
+            new[] { "Mốc", "Số ứng viên", "Tỷ lệ trên tổng" }, rows);
+    }
+
+    private static async Task<ReportTable> BuildTopAgentsAsync(ApplicationDbContext db)
+    {
+        var agentNames = await db.Agents.ToDictionaryAsync(a => a.Id, a => a.Name);
+        var candidateAgents = await db.Candidates.Where(c => c.AgentId != null)
+            .Select(c => new { c.Id, AgentId = c.AgentId!.Value }).ToListAsync();
+        var candidateJobs = await db.CandidateJobOrders.Select(c => new { c.CandidateId, c.JobOrderId, c.CurrentStep }).ToListAsync();
+        var actualDepartures = await db.Flights.Where(f => f.ActualDepartureAt != null)
+            .Select(f => new { f.CandidateId, f.JobOrderId }).ToListAsync();
+        var departedKeys = actualDepartures.Select(f => (f.CandidateId, f.JobOrderId)).ToHashSet();
+        var departedCandidateIds = candidateJobs
+            .Where(c => c.CurrentStep >= WorkflowStep.Departure || departedKeys.Contains((c.CandidateId, c.JobOrderId)))
+            .Select(c => c.CandidateId)
+            .Distinct()
+            .ToHashSet();
+        var commissions = await db.AgentCommissions
+            .Select(c => new { c.AgentId, c.CommissionAmount, c.Status }).ToListAsync();
+
+        var rows = candidateAgents
+            .GroupBy(c => c.AgentId)
+            .Select(g =>
+            {
+                var candidates = g.Select(c => c.Id).Distinct().ToList();
+                var departed = candidates.Count(departedCandidateIds.Contains);
+                var totalCommission = commissions.Where(c => c.AgentId == g.Key).Sum(c => c.CommissionAmount);
+                var paidCommission = commissions.Where(c => c.AgentId == g.Key && c.Status == CommissionStatus.Paid).Sum(c => c.CommissionAmount);
+                return new
+                {
+                    AgentName = agentNames.GetValueOrDefault(g.Key, "—"),
+                    CandidateCount = candidates.Count,
+                    DepartedCount = departed,
+                    DepartureRate = candidates.Count == 0 ? 0 : departed * 100.0 / candidates.Count,
+                    TotalCommission = totalCommission,
+                    PaidCommission = paidCommission
+                };
+            })
+            .OrderByDescending(x => x.CandidateCount)
+            .ThenByDescending(x => x.TotalCommission)
+            .Select(x => new[]
+            {
+                x.AgentName,
+                x.CandidateCount.ToString(),
+                x.DepartedCount.ToString(),
+                x.DepartureRate.ToString("0.#") + "%",
+                x.TotalCommission.ToString("N0"),
+                x.PaidCommission.ToString("N0")
+            })
+            .ToList();
+
+        return new ReportTable("Top đại lý", "top-dai-ly",
+            new[] { "Đại lý", "Ứng viên giới thiệu", "Đã xuất cảnh", "Tỷ lệ xuất cảnh", "Hoa hồng phát sinh", "Đã chi" }, rows);
     }
 
     // ---------- Formatters ----------
@@ -258,6 +425,9 @@ public static class CsvExportEndpoints
     }
 
     private static bool Same(DateOnly d, DateOnly m) => d.Year == m.Year && d.Month == m.Month;
+
+    private static string[] Row(string label, int count, int total) =>
+        new[] { label, count.ToString(), (total == 0 ? 0 : count * 100.0 / total).ToString("0.#") + "%" };
 
     private static string EscapeCsv(string? value)
     {

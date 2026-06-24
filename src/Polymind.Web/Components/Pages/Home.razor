@@ -25,6 +25,11 @@ else
         @Card("Công nợ phải thu", $"{_receivables:N0} đ", Icons.Material.Filled.RequestQuote, Color.Warning)
         @Card("Khoản thu quá hạn", _overdueCount.ToString(), Icons.Material.Filled.RunningWithErrors, _overdueCount > 0 ? Color.Error : Color.Success)
         @Card("Sắp xuất cảnh (30 ngày)", _upcomingDepartures.ToString(), Icons.Material.Filled.FlightTakeoff, Color.Secondary)
+        @Card("Doanh thu tháng này", $"{_monthRevenue:N0} đ", Icons.Material.Filled.Payments, Color.Success)
+        @Card("Quốc gia doanh thu cao", _topRevenueCountry, Icons.Material.Filled.Public, Color.Info)
+        @Card("Tỷ lệ trúng tuyển", $"{_selectedRate:0.#}%", Icons.Material.Filled.HowToReg, Color.Primary)
+        @Card("Tỷ lệ đậu visa", $"{_visaApprovedRate:0.#}%", Icons.Material.Filled.AssignmentTurnedIn, Color.Success)
+        @Card("Tỷ lệ xuất cảnh", $"{_departureRate:0.#}%", Icons.Material.Filled.FlightTakeoff, Color.Secondary)
     </MudGrid>
 
     <MudGrid Class="mt-2">
@@ -54,16 +59,68 @@ else
             </MudPaper>
         </MudItem>
     </MudGrid>
+
+    <MudGrid Class="mt-2">
+        <MudItem xs="12" md="7">
+            <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Dashboard doanh thu theo quốc gia</b></MudText>
+                @if (_revenueByCountry.Any())
+                {
+                    @foreach (var row in _revenueByCountry)
+                    {
+                        <div class="mb-3">
+                            <div class="d-flex justify-space-between mb-1">
+                                <b>@row.Country</b>
+                                <span class="mud-text-secondary">@($"{row.Revenue:N0} đ")</span>
+                            </div>
+                            <MudProgressLinear Color="Color.Success" Value="@(_maxCountryRevenue == 0 ? 0 : (double)(row.Revenue * 100 / _maxCountryRevenue))" Style="height:10px" Rounded="true" />
+                        </div>
+                    }
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Chưa có doanh thu gắn với đơn hàng.</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="5">
+            <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Top đại lý</b></MudText>
+                @if (_topAgents.Any())
+                {
+                    @foreach (var row in _topAgents)
+                    {
+                        <div class="d-flex justify-space-between align-center mb-2">
+                            <div>
+                                <b>@row.AgentName</b>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@row.CandidateCount ứng viên • @row.DepartedCount xuất cảnh</MudText>
+                            </div>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success">@($"{row.TotalCommission:N0} đ")</MudChip>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Chưa có dữ liệu đại lý.</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
 }
 
 @code {
     private bool _loading = true;
     private int _totalLeads, _newLeadsToday, _activeCandidates, _departed, _openJobOrders;
     private int _overdueCount, _upcomingDepartures;
-    private decimal _receivables;
-    private double _conversionRate;
+    private decimal _receivables, _monthRevenue, _maxCountryRevenue;
+    private double _conversionRate, _selectedRate, _visaApprovedRate, _departureRate;
+    private string _topRevenueCountry = "—";
     private Dictionary<LeadStatus, int> _byStatus = new();
     private Dictionary<LeadSource, int> _bySource = new();
+    private record RevenueCountryRow(string Country, decimal Revenue);
+    private List<RevenueCountryRow> _revenueByCountry = new();
+    private record TopAgentRow(string AgentName, int CandidateCount, int DepartedCount, decimal TotalCommission);
+    private List<TopAgentRow> _topAgents = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -103,8 +160,75 @@ else
         _upcomingDepartures = await db.Flights.CountAsync(f => f.ActualDepartureAt == null
             && f.DepartureDate != null && f.DepartureDate >= todayDate && f.DepartureDate <= horizon);
 
+        // --- Dashboard doanh thu + phễu tuyển dụng ---
+        var firstOfMonth = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+        var paidPayments = await db.Payments.Where(p => p.Status == PaymentStatus.Paid)
+            .Select(p => new { p.CandidateId, p.JobOrderId, p.Amount, p.PaidDate, p.CreatedAt })
+            .ToListAsync();
+        _monthRevenue = paidPayments
+            .Where(p => SameMonth(p.PaidDate ?? DateOnly.FromDateTime(p.CreatedAt.UtcDateTime), firstOfMonth))
+            .Sum(p => p.Amount);
+
+        var jobCountries = await db.JobOrders.Select(j => new { j.Id, j.Country }).ToDictionaryAsync(j => j.Id, j => j.Country);
+        _revenueByCountry = paidPayments
+            .Where(p => p.JobOrderId is not null && jobCountries.ContainsKey(p.JobOrderId.Value))
+            .GroupBy(p => jobCountries[p.JobOrderId!.Value])
+            .Select(g => new RevenueCountryRow(g.Key, g.Sum(p => p.Amount)))
+            .OrderByDescending(x => x.Revenue)
+            .Take(5)
+            .ToList();
+        _maxCountryRevenue = _revenueByCountry.Count == 0 ? 0 : _revenueByCountry.Max(x => x.Revenue);
+        _topRevenueCountry = _revenueByCountry.FirstOrDefault()?.Country ?? "—";
+
+        var candidateJobs = await db.CandidateJobOrders.Select(c => new { c.CandidateId, c.JobOrderId, c.CurrentStep }).ToListAsync();
+        var visaApprovedPairs = await db.Visas.Where(v => v.Status == VisaStatus.Approved)
+            .Select(v => new { v.CandidateId, v.JobOrderId }).ToListAsync();
+        var visaApprovedKeys = visaApprovedPairs.Select(v => (v.CandidateId, v.JobOrderId)).ToHashSet();
+        var actualDepartures = await db.Flights.Where(f => f.ActualDepartureAt != null)
+            .Select(f => new { f.CandidateId, f.JobOrderId }).ToListAsync();
+        var departedKeys = actualDepartures.Select(f => (f.CandidateId, f.JobOrderId)).ToHashSet();
+
+        var funnelBase = candidateJobs.Count;
+        var selectedCount = candidateJobs.Count(c => c.CurrentStep >= WorkflowStep.Selected);
+        var visaApprovedCount = candidateJobs.Count(c =>
+            c.CurrentStep >= WorkflowStep.VisaApproved || visaApprovedKeys.Contains((c.CandidateId, c.JobOrderId)));
+        var departedCount = candidateJobs.Count(c =>
+            c.CurrentStep >= WorkflowStep.Departure || departedKeys.Contains((c.CandidateId, c.JobOrderId)));
+        _selectedRate = Rate(selectedCount, funnelBase);
+        _visaApprovedRate = Rate(visaApprovedCount, funnelBase);
+        _departureRate = Rate(departedCount, funnelBase);
+
+        var agentNames = await db.Agents.ToDictionaryAsync(a => a.Id, a => a.Name);
+        var candidateAgents = await db.Candidates.Where(c => c.AgentId != null)
+            .Select(c => new { c.Id, AgentId = c.AgentId!.Value }).ToListAsync();
+        var commissions = await db.AgentCommissions
+            .Select(c => new { c.AgentId, c.CommissionAmount }).ToListAsync();
+        var departedCandidateIds = candidateJobs
+            .Where(c => c.CurrentStep >= WorkflowStep.Departure || departedKeys.Contains((c.CandidateId, c.JobOrderId)))
+            .Select(c => c.CandidateId)
+            .Distinct()
+            .ToHashSet();
+        _topAgents = candidateAgents
+            .GroupBy(c => c.AgentId)
+            .Select(g =>
+            {
+                var candidates = g.Select(c => c.Id).Distinct().ToList();
+                return new TopAgentRow(
+                    agentNames.GetValueOrDefault(g.Key, "—"),
+                    candidates.Count,
+                    candidates.Count(departedCandidateIds.Contains),
+                    commissions.Where(c => c.AgentId == g.Key).Sum(c => c.CommissionAmount));
+            })
+            .OrderByDescending(x => x.CandidateCount)
+            .ThenByDescending(x => x.TotalCommission)
+            .Take(5)
+            .ToList();
+
         _loading = false;
     }
+
+    private static bool SameMonth(DateOnly d, DateOnly month) => d.Year == month.Year && d.Month == month.Month;
+    private static double Rate(int count, int total) => total == 0 ? 0 : count * 100.0 / total;
 
     private RenderFragment Card(string title, string value, string icon, Color color) =>@<MudItem xs="12" sm="6" md="4" lg="2">
         <MudPaper Class="pa-4" Elevation="1" Style="height:100%">

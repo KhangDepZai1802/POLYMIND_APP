@@ -58,6 +58,14 @@
             <MudNavLink Href="/notifications" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Notifications">Thông báo</MudNavLink>
         </Authorized>
     </AuthorizeView>
+    @if (!_isAgentOnly)
+    {
+        <AuthorizeView Policy="users:read">
+            <Authorized>
+                <MudNavLink Href="/admin" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AdminPanelSettings">Quản trị</MudNavLink>
+            </Authorized>
+        </AuthorizeView>
+    }
 </MudNavMenu>
 
 @code {

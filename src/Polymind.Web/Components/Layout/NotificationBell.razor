@@ -16,8 +16,6 @@
     {
         var userId = await AuthState.GetUserIdAsync();
         if (userId is null) return;
-        // Sinh reminder mới (idempotent) rồi đếm chưa đọc.
-        await Notifications.GenerateRemindersAsync(userId.Value);
         _unread = await Notifications.GetUnreadCountAsync(userId.Value);
     }
 }
