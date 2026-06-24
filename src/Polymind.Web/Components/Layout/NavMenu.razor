@@ -39,4 +39,9 @@
             <MudNavLink Href="/reports" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment">Báo cáo</MudNavLink>
         </Authorized>
     </AuthorizeView>
+    <AuthorizeView Policy="notifications:read">
+        <Authorized>
+            <MudNavLink Href="/notifications" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Notifications">Thông báo</MudNavLink>
+        </Authorized>
+    </AuthorizeView>
 </MudNavMenu>

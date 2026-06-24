@@ -4,9 +4,16 @@
 
 <PageTitle>Báo cáo — POLYMIND</PageTitle>
 
-<div class="mb-4">
-    <MudText Typo="Typo.h5"><b>Báo cáo & Thống kê</b></MudText>
-    <MudText Typo="Typo.body2" Class="mud-text-secondary">Tổng hợp số liệu marketing, tuyển dụng và tài chính</MudText>
+<div class="d-flex justify-space-between align-center flex-wrap mb-4" style="gap:8px">
+    <div>
+        <MudText Typo="Typo.h5"><b>Báo cáo & Thống kê</b></MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Tổng hợp số liệu marketing, tuyển dụng và tài chính</MudText>
+    </div>
+    <MudMenu Label="Xuất CSV" StartIcon="@Icons.Material.Filled.Download" Variant="Variant.Outlined" Color="Color.Primary">
+        <MudMenuItem Href="/export/finance-monthly.csv" ForceLoad="true" Icon="@Icons.Material.Filled.CalendarMonth">Thu/chi theo tháng</MudMenuItem>
+        <MudMenuItem Href="/export/commissions.csv" ForceLoad="true" Icon="@Icons.Material.Filled.Handshake">Hoa hồng theo đại lý</MudMenuItem>
+        <MudMenuItem Href="/export/overdue-payments.csv" ForceLoad="true" Icon="@Icons.Material.Filled.MoneyOff">Khoản thu quá hạn</MudMenuItem>
+    </MudMenu>
 </div>
 
 @if (_loading)
@@ -22,6 +29,10 @@ else
         @Kpi("Doanh thu (đã thu)", $"{_totalRevenue:N0} đ", Icons.Material.Filled.Payments, Color.Success)
         @Kpi("Tổng chi phí", $"{_totalExpense:N0} đ", Icons.Material.Filled.MoneyOff, Color.Error)
         @Kpi("Lợi nhuận gộp", $"{(_totalRevenue - _totalExpense):N0} đ", Icons.Material.Filled.AccountBalance, (_totalRevenue - _totalExpense) >= 0 ? Color.Success : Color.Error)
+        @Kpi("Công nợ phải thu", $"{_receivables:N0} đ", Icons.Material.Filled.RequestQuote, Color.Warning)
+        @Kpi("Khoản thu quá hạn", _overduePayments.Count.ToString("N0"), Icons.Material.Filled.RunningWithErrors, _overduePayments.Count > 0 ? Color.Error : Color.Success)
+        @Kpi("Hồ sơ đã tải lên", _documentsUploaded.ToString("N0"), Icons.Material.Filled.FolderShared, Color.Info)
+        @Kpi("Sắp xuất cảnh (30 ngày)", _upcomingFlights.Count.ToString("N0"), Icons.Material.Filled.FlightTakeoff, Color.Secondary)
     </MudGrid>
 
     <MudGrid Class="mt-2">
@@ -114,6 +125,123 @@ else
     </MudGrid>
 
     <MudGrid Class="mt-2">
+        <MudItem xs="12" md="5">
+            <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Hồ sơ đã tải theo loại</b></MudText>
+                @if (_docsByType.Any())
+                {
+                    @foreach (var kv in _docsByType.OrderByDescending(x => x.Value))
+                    {
+                        <div class="d-flex align-center mb-2">
+                            <div style="width:140px">@Labels.Vi(kv.Key)</div>
+                            <MudProgressLinear Color="Color.Info" Value="@(_maxDocType == 0 ? 0 : kv.Value * 100.0 / _maxDocType)" Class="flex-grow-1 mx-3" Style="height:10px" Rounded="true" />
+                            <b>@kv.Value</b>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Chưa có hồ sơ nào được tải lên.</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="7">
+            <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Khoản thu quá hạn</b></MudText>
+                @if (_overduePayments.Any())
+                {
+                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                        <thead>
+                            <tr>
+                                <th>Ứng viên</th>
+                                <th>Loại</th>
+                                <th style="text-align:right">Số tiền</th>
+                                <th>Hạn thu</th>
+                                <th style="text-align:right">Quá hạn</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var p in _overduePayments.OrderBy(p => p.DueDate))
+                            {
+                                <tr>
+                                    <td>@p.CandidateName</td>
+                                    <td>@Labels.Vi(p.Type)</td>
+                                    <td style="text-align:right">@($"{p.Amount:N0} đ")</td>
+                                    <td>@(p.DueDate?.ToString("dd/MM/yyyy"))</td>
+                                    <td style="text-align:right"><MudChip T="string" Size="Size.Small" Color="Color.Error">@p.DaysOverdue ngày</MudChip></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Không có khoản thu quá hạn.</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid Class="mt-2">
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Lịch visa sắp tới (30 ngày)</b></MudText>
+                @if (_upcomingVisas.Any())
+                {
+                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                        <thead>
+                            <tr><th>Ứng viên</th><th>Quốc gia</th><th>Trạng thái</th><th>Mốc</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var v in _upcomingVisas.OrderBy(v => v.Date))
+                            {
+                                <tr>
+                                    <td>@v.CandidateName</td>
+                                    <td>@v.Country</td>
+                                    <td><MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(v.Status)">@Labels.Vi(v.Status)</MudChip></td>
+                                    <td>@v.What — @v.Date.ToString("dd/MM")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Không có lịch visa trong 30 ngày tới.</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Lịch xuất cảnh sắp tới (30 ngày)</b></MudText>
+                @if (_upcomingFlights.Any())
+                {
+                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                        <thead>
+                            <tr><th>Ứng viên</th><th>Hãng</th><th>Điểm đến</th><th>Ngày bay</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var f in _upcomingFlights.OrderBy(f => f.DepartureDate))
+                            {
+                                <tr>
+                                    <td>@f.CandidateName</td>
+                                    <td>@f.Airline</td>
+                                    <td>@f.Destination</td>
+                                    <td>@f.DepartureDate.ToString("dd/MM/yyyy")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Không có lịch xuất cảnh trong 30 ngày tới.</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid Class="mt-2">
         <MudItem xs="12">
             <MudPaper Class="pa-4" Elevation="1">
                 <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Hoa hồng theo đại lý</b></MudText>
@@ -169,6 +297,20 @@ else
 
     private record CommissionRow(string AgentName, int Count, decimal Paid, decimal Total);
     private List<CommissionRow> _commissionByAgent = new();
+
+    private decimal _receivables;
+    private int _documentsUploaded;
+    private Dictionary<DocumentType, int> _docsByType = new();
+    private int _maxDocType;
+
+    private record OverdueRow(string CandidateName, PaymentType Type, decimal Amount, DateOnly? DueDate, int DaysOverdue);
+    private List<OverdueRow> _overduePayments = new();
+
+    private record VisaRow(string CandidateName, string Country, VisaStatus Status, string What, DateOnly Date);
+    private List<VisaRow> _upcomingVisas = new();
+
+    private record FlightRow(string CandidateName, string? Airline, string? Destination, DateOnly DepartureDate);
+    private List<FlightRow> _upcomingFlights = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -227,6 +369,59 @@ else
                 g.Count(),
                 g.Where(c => c.Status == CommissionStatus.Paid).Sum(c => c.CommissionAmount),
                 g.Sum(c => c.CommissionAmount)))
+            .ToList();
+
+        // --- Công nợ + khoản thu quá hạn ---
+        var todayDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+        var candidateNames = await db.Candidates.ToDictionaryAsync(c => c.Id, c => c.FullName);
+        var openPayments = await db.Payments
+            .Where(p => p.Status != PaymentStatus.Paid && p.Status != PaymentStatus.Refunded)
+            .Select(p => new { p.CandidateId, p.PaymentType, p.Amount, p.DueDate, p.Status })
+            .ToListAsync();
+        _receivables = openPayments.Sum(p => p.Amount);
+        _overduePayments = openPayments
+            .Where(p => p.Status == PaymentStatus.Overdue || (p.DueDate != null && p.DueDate < todayDate))
+            .Select(p => new OverdueRow(
+                candidateNames.GetValueOrDefault(p.CandidateId, "—"), p.PaymentType, p.Amount, p.DueDate,
+                p.DueDate is null ? 0 : todayDate.DayNumber - p.DueDate.Value.DayNumber))
+            .ToList();
+
+        // --- Hồ sơ đã tải lên ---
+        var docs = await db.CandidateDocuments
+            .Where(d => d.CurrentVersionId != null)
+            .Select(d => d.DocType).ToListAsync();
+        _documentsUploaded = docs.Count;
+        _docsByType = docs.GroupBy(t => t).ToDictionary(g => g.Key, g => g.Count());
+        _maxDocType = _docsByType.Count == 0 ? 0 : _docsByType.Values.Max();
+
+        // --- Visa sắp tới (30 ngày) ---
+        var horizon = todayDate.AddDays(30);
+        var visas = await db.Visas
+            .Where(v => v.Status != VisaStatus.Approved && v.Status != VisaStatus.Rejected)
+            .Select(v => new { v.CandidateId, v.Country, v.Status, v.InterviewDate, v.ResultDate })
+            .ToListAsync();
+        _upcomingVisas = visas
+            .Select(v =>
+            {
+                DateOnly? d = v.InterviewDate;
+                var what = "Phỏng vấn";
+                if (d is null && v.ResultDate is not null) { d = v.ResultDate; what = "Kết quả"; }
+                return (v, d, what);
+            })
+            .Where(x => x.d is not null && x.d >= todayDate && x.d <= horizon)
+            .Select(x => new VisaRow(candidateNames.GetValueOrDefault(x.v.CandidateId, "—"),
+                x.v.Country, x.v.Status, x.what, x.d!.Value))
+            .ToList();
+
+        // --- Xuất cảnh sắp tới (30 ngày) ---
+        var flights = await db.Flights
+            .Where(f => f.ActualDepartureAt == null && f.DepartureDate != null
+                        && f.DepartureDate >= todayDate && f.DepartureDate <= horizon)
+            .Select(f => new { f.CandidateId, f.Airline, f.DestinationCountry, f.DepartureDate })
+            .ToListAsync();
+        _upcomingFlights = flights
+            .Select(f => new FlightRow(candidateNames.GetValueOrDefault(f.CandidateId, "—"),
+                f.Airline, f.DestinationCountry, f.DepartureDate!.Value))
             .ToList();
 
         _loading = false;

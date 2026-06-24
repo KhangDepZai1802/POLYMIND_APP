@@ -225,4 +225,36 @@ public static class Labels
         VisaStatus.Rejected => Color.Error,
         _ => Color.Default
     };
+
+    public static string Vi(NotificationType t) => t switch
+    {
+        NotificationType.ReminderDocument => "Nhắc hồ sơ",
+        NotificationType.ReminderPayment => "Nhắc khoản thu",
+        NotificationType.ReminderInterview => "Nhắc phỏng vấn",
+        NotificationType.ReminderVisa => "Nhắc visa",
+        NotificationType.ReminderDeparture => "Nhắc xuất cảnh",
+        NotificationType.CommissionPayment => "Chi hoa hồng",
+        _ => t.ToString()
+    };
+
+    public static string IconOf(NotificationType t) => t switch
+    {
+        NotificationType.ReminderDocument => Icons.Material.Filled.FolderShared,
+        NotificationType.ReminderPayment => Icons.Material.Filled.Payments,
+        NotificationType.ReminderInterview => Icons.Material.Filled.RecordVoiceOver,
+        NotificationType.ReminderVisa => Icons.Material.Filled.Approval,
+        NotificationType.ReminderDeparture => Icons.Material.Filled.FlightTakeoff,
+        NotificationType.CommissionPayment => Icons.Material.Filled.Handshake,
+        _ => Icons.Material.Filled.Notifications
+    };
+
+    public static Color ColorOf(NotificationType t) => t switch
+    {
+        NotificationType.ReminderPayment => Color.Error,
+        NotificationType.ReminderVisa or NotificationType.ReminderInterview => Color.Info,
+        NotificationType.ReminderDeparture => Color.Success,
+        NotificationType.ReminderDocument => Color.Warning,
+        NotificationType.CommissionPayment => Color.Secondary,
+        _ => Color.Default
+    };
 }

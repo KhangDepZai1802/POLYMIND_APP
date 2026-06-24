@@ -1,0 +1,107 @@
+@page "/notifications"
+@attribute [Authorize(Policy = "notifications:read")]
+@inject Polymind.Web.Notifications.NotificationService NotificationSvc
+@inject AuthenticationStateProvider AuthState
+@inject ISnackbar Snackbar
+
+<PageTitle>Thông báo — POLYMIND</PageTitle>
+
+<div class="d-flex justify-space-between align-center mb-4">
+    <div>
+        <MudText Typo="Typo.h5"><b>Thông báo</b></MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Nhắc việc tự động: khoản thu, visa, xuất cảnh, hồ sơ</MudText>
+    </div>
+    <div class="d-flex gap-2">
+        <MudButton StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" OnClick="RefreshAsync">Quét nhắc việc</MudButton>
+        <MudButton StartIcon="@Icons.Material.Filled.DoneAll" Variant="Variant.Filled" Color="Color.Primary"
+                   Disabled="@(_unread == 0)" OnClick="MarkAllAsync">Đánh dấu đã đọc</MudButton>
+    </div>
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_items.Count == 0)
+{
+    <MudPaper Class="pa-8" Elevation="1">
+        <div class="d-flex flex-column align-center mud-text-secondary">
+            <MudIcon Icon="@Icons.Material.Filled.NotificationsNone" Size="Size.Large" />
+            <MudText Class="mt-2">Không có thông báo nào.</MudText>
+        </div>
+    </MudPaper>
+}
+else
+{
+    <MudPaper Elevation="1">
+        <MudList T="Notification" Dense="false">
+            @foreach (var n in _items)
+            {
+                <MudListItem T="Notification" OnClick="@(() => MarkAsync(n))"
+                             Style="@(n.IsRead ? "" : "background-color: var(--mud-palette-action-default-hover)")">
+                    <div class="d-flex align-center" style="gap:12px">
+                        <MudIcon Icon="@Labels.IconOf(n.Type)" Color="@Labels.ColorOf(n.Type)" />
+                        <div class="flex-grow-1">
+                            <div class="d-flex align-center" style="gap:8px">
+                                <MudText Typo="Typo.body1"><b>@n.Title</b></MudText>
+                                @if (!n.IsRead)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">Mới</MudChip>
+                                }
+                            </div>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@n.Body</MudText>
+                        </div>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@n.CreatedAt.LocalDateTime.ToString("dd/MM HH:mm")</MudText>
+                    </div>
+                </MudListItem>
+                <MudDivider />
+            }
+        </MudList>
+    </MudPaper>
+}
+
+@code {
+    private bool _loading = true;
+    private List<Notification> _items = new();
+    private int _unread;
+    private Guid? _userId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _userId = await AuthState.GetUserIdAsync();
+        if (_userId is not null)
+            await NotificationSvc.GenerateRemindersAsync(_userId.Value);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_userId is null) { _loading = false; return; }
+        _items = await NotificationSvc.GetForUserAsync(_userId.Value);
+        _unread = _items.Count(n => !n.IsRead);
+        _loading = false;
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (_userId is null) return;
+        var created = await NotificationSvc.GenerateRemindersAsync(_userId.Value);
+        await LoadAsync();
+        Snackbar.Add(created > 0 ? $"Đã tạo {created} nhắc việc mới." : "Không có nhắc việc mới.", Severity.Info);
+    }
+
+    private async Task MarkAsync(Notification n)
+    {
+        if (n.IsRead || _userId is null) return;
+        await NotificationSvc.MarkReadAsync(n.Id);
+        await LoadAsync();
+    }
+
+    private async Task MarkAllAsync()
+    {
+        if (_userId is null) return;
+        await NotificationSvc.MarkAllReadAsync(_userId.Value);
+        await LoadAsync();
+        Snackbar.Add("Đã đánh dấu tất cả là đã đọc.", Severity.Success);
+    }
+}

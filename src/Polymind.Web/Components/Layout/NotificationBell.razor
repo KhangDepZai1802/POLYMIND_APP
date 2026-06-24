@@ -1,0 +1,23 @@
+@inject Polymind.Web.Notifications.NotificationService Notifications
+@inject AuthenticationStateProvider AuthState
+@inject NavigationManager Nav
+
+<MudBadge Content="_unread" Color="Color.Error" Overlap="true" Visible="_unread > 0" Bordered="true">
+    <MudTooltip Text="Thông báo">
+        <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit"
+                       OnClick="@(() => Nav.NavigateTo("/notifications"))" />
+    </MudTooltip>
+</MudBadge>
+
+@code {
+    private int _unread;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = await AuthState.GetUserIdAsync();
+        if (userId is null) return;
+        // Sinh reminder mới (idempotent) rồi đếm chưa đọc.
+        await Notifications.GenerateRemindersAsync(userId.Value);
+        _unread = await Notifications.GetUnreadCountAsync(userId.Value);
+    }
+}

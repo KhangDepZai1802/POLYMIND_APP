@@ -36,18 +36,23 @@
 - **ĐỢT 1 đã xong (Session 10):** UI cấu hình hoa hồng theo đại lý, tự sinh `AgentCommission` khi ứng viên đạt mốc Deposit/Selected/Departure, duyệt khoản thu và duyệt/đánh dấu đã chi hoa hồng. Build xanh, smoke-test `/finance`, `/agents/{id}`, `/candidates/{id}` HTTP 200.
 - **ĐỢT 2 đã xong (Session 11):** audit log thực thi cho các thao tác chính (ứng viên, payment/expense, chuyển bước, hoa hồng, cấu hình hoa hồng) và thêm section **Công nợ ứng viên** trong `CandidateDetail` gated bằng `payments:read`.
 - **ĐỢT 3 đã xong (Session 12):** wiring MinIO thật bằng package `Minio`, cấu hình bucket `polymind-documents`, service upload/download hồ sơ, UI **Hồ sơ ứng viên** trong `CandidateDetail` với upload version + link tải presigned URL.
+- **ĐỢT 4 đã xong (Session 13):** (1) **Báo cáo mở rộng** — thêm 4 KPI (công nợ phải thu, khoản thu quá hạn, hồ sơ đã tải, sắp xuất cảnh 30 ngày) + 4 section mới (hồ sơ theo loại, khoản thu quá hạn, lịch visa & lịch xuất cảnh 30 ngày). (2) **Dashboard Home** thêm 3 KPI (công nợ/quá hạn/sắp xuất cảnh). (3) **Thông báo in-app (stub)** — `NotificationService` sinh reminder idempotent (khoản thu quá hạn/sắp tới, lịch visa, xuất cảnh, hồ sơ thiếu), bell badge ở topbar, trang `/notifications` (list + đánh dấu đã đọc + quét lại). (4) **Export CSV** — 3 endpoint `/export/*.csv` (thu/chi theo tháng, hoa hồng, khoản thu quá hạn) gated `reports:read`, BOM UTF-8 cho tiếng Việt, nút "Xuất CSV" trên trang Báo cáo. Build xanh, smoke-test `/`, `/reports`, `/notifications` = 200 không error-boundary, 3 CSV trả đúng `text/csv` + tiếng Việt đúng dấu, DB sinh 8 reminder thật.
 - **Kế hoạch nâng cấp:** xem `C:\Users\khang\.claude\plans\t-nh-ng-c-i-b-n-lexical-hejlsberg.md` (lộ trình 5 đợt; chốt giữ kiến trúc Blazor Server + Cookie, MinIO wiring thật, Email/SMS/Zalo stub).
 - **RBAC thực thi đã có code nền:** seed 8 user mẫu/role permissions, permission claims khi login, policy động dạng `resource:action`, ẩn menu theo quyền và chặn các nút ghi dữ liệu chính.
 - **Đã sửa lỗi nút/dialog không bấm được:** chuyển sang **interactivity toàn cục** (render mode đặt ở `Routes`/`HeadOutlet` trong `App.razor`, Login dùng `[ExcludeFromInteractiveRouting]` để giữ SSR). Trước đó layout + MudBlazor providers bị render tĩnh nên dialog/snackbar/drawer chết.
 
 ## ⏭️ VIỆC TIẾP THEO (baton — làm cái này trước)
 
-**Đã xong ĐỢT 3 — Upload hồ sơ + MinIO.** Tiếp theo theo kế hoạch là **ĐỢT 4 — Báo cáo/Dashboard mở rộng + thông báo stub + export**:
-1. **Dashboard/Báo cáo mở rộng:** thêm KPI công nợ, hồ sơ đã upload, hồ sơ theo loại, visa/flight sắp tới, payment overdue. Tránh `MudChart`; dùng `MudProgressLinear`/`MudSimpleTable` theo bẫy MudBlazor 9.5.
-2. **Thông báo stub:** tạo nền `Notification` cho reminder payment/document/visa/departure, hiển thị in-app list hoặc badge; chưa cần Email/SMS/Zalo thật.
-3. **Export:** thêm export Excel/PDF cho báo cáo chính nếu package đã có/được thêm rõ ràng; tránh ghi file output vào repo.
+**Đã xong ĐỢT 4 — Báo cáo/Dashboard mở rộng + thông báo stub + export CSV.** Tiếp theo là **ĐỢT 5 — Portal đại lý + siết RBAC data-scope** (mục cuối plan file):
+1. **Portal đại lý (spec §2.8):** role `agent` chỉ xem ứng viên **mình giới thiệu** (`Candidate.AgentId == currentAgentId`) + hoa hồng của mình; siết `/candidates` và `/reports` đang quá rộng. Cần map user↔Agent (hiện chưa có liên kết) — kiểm `ApplicationUser`/seed để biết cách gắn.
+2. **RBAC data-scope:** lọc dữ liệu theo quyền sở hữu, không chỉ ẩn menu. Cân nhắc helper scope chung cho các trang list.
+3. (Tùy chọn) Nâng cấp thông báo: gửi Email/SMS/Zalo thật (hiện chỉ stub in-app); chạy sinh reminder định kỳ bằng Hangfire thay vì sinh khi mở trang.
 
-(Sau Đợt 4: siết Portal đại lý/RBAC data-scope nếu còn thời gian. Chi tiết trong plan file.)
+**Lưu ý Đợt 4 cho người sau:**
+- Trang `/notifications`: class page `Notifications` **trùng tên** property inject → đã đổi tên service inject thành `NotificationSvc` (đừng đặt lại thành `Notifications`).
+- Reminder sinh **khi mở trang/topbar** (bell `OnInitializedAsync` gọi `GenerateRemindersAsync`), idempotent theo `(UserId, Type, ReferenceId)`. Hiện nhắm recipient = **user đang đăng nhập** (demo). Nếu cần multi-user thật thì sinh theo người phụ trách.
+- Export CSV là **minimal-API endpoint** trong `Program.cs` (`MapCsvExportEndpoints`), gated `.RequireAuthorization("reports:read")` qua policy provider động. Dùng BOM UTF-8 (`Encoding.UTF8.GetPreamble()`) để Excel đọc đúng tiếng Việt. Không ghi file ra repo — stream `Results.File`.
+- MudIcon render ra SVG path (không có tên icon trong HTML) và MudMenu render lazy → grep HTML tìm tên icon/menu sẽ "miss"; verify bằng HTTP 200 + vắng `blazor-error-boundary` + query DB.
 
 **Nợ nhỏ phát hiện ở Session 9:** role `agent` đang thấy `/candidates` và `/reports` hơi rộng so với spec §2.8 (Portal đại lý chỉ xem ứng viên mình giới thiệu + hoa hồng) → siết khi làm Portal đại lý.
 
@@ -62,6 +67,16 @@
 ---
 
 ## 📜 NHẬT KÝ SESSION (mới nhất ở trên)
+
+### [2026-06-24] Session 13 — Claude
+- **Làm được:** Hoàn thành **ĐỢT 4 — Báo cáo/Dashboard mở rộng + Thông báo stub + Export CSV**.
+  - **Thông báo in-app:** `Notifications/NotificationService.cs` (scoped DI) sinh reminder idempotent theo `(UserId, Type, ReferenceId)` cho: khoản thu quá hạn/sắp đến hạn (≤7 ngày), lịch phỏng vấn/kết quả visa (≤7 ngày), lịch xuất cảnh (≤7 ngày), hồ sơ còn thiếu (ứng viên ≥ bước Hoàn thiện hồ sơ nhưng chưa có tài liệu). Bell badge `Components/Layout/NotificationBell.razor` ở topbar (đếm chưa đọc), trang `/notifications` (gate `notifications:read`): list + đánh dấu đã đọc/đọc tất cả + nút "Quét nhắc việc". Nhãn + icon + màu `NotificationType` trong `Labels.cs`. Link NavMenu.
+  - **Báo cáo mở rộng** (`Reports.razor`): thêm 4 KPI (công nợ phải thu, khoản thu quá hạn, hồ sơ đã tải, sắp xuất cảnh 30 ngày) + 4 section MudSimpleTable/MudProgressLinear (hồ sơ theo loại, khoản thu quá hạn, lịch visa 30 ngày, lịch xuất cảnh 30 ngày). Nút **Xuất CSV** (MudMenu).
+  - **Dashboard Home:** thêm 3 KPI (công nợ phải thu, khoản thu quá hạn, sắp xuất cảnh 30 ngày).
+  - **Export CSV:** `Reporting/CsvExportEndpoints.cs` + `app.MapCsvExportEndpoints()`; 3 endpoint `/export/finance-monthly.csv`, `/export/commissions.csv`, `/export/overdue-payments.csv` gated `reports:read`, BOM UTF-8, stream trực tiếp (không ghi file repo).
+- **File thay đổi chính:** `Notifications/NotificationService.cs` (mới), `Reporting/CsvExportEndpoints.cs` (mới), `Components/Layout/NotificationBell.razor` (mới), `Components/Pages/Notifications/Notifications.razor` (mới), `Components/Pages/Reports/Reports.razor`, `Components/Pages/Home.razor`, `Components/Layout/MainLayout.razor`, `Components/Layout/NavMenu.razor`, `Display/Labels.cs`, `Program.cs`.
+- **Đã test:** `dotnet build Polymind.slnx` = 0 error, 1 warning cũ `BL0008` (Login.razor). Docker up; chạy web `:5177`, login admin qua HTTP: `/`, `/reports`, `/notifications` = 200, không `blazor-error-boundary`. 3 endpoint CSV = 200 `text/csv; charset=utf-8`, tiếng Việt đúng dấu (BOM OK), finance CSV có 12 dòng tháng. DB: `notifications` sinh 8 bản ghi thật (ReminderDocument) — chứng minh sinh + persist idempotent chạy đúng.
+- **Lưu ý/cảnh báo cho người sau:** (1) Class page `Notifications` trùng tên property inject → service inject đặt tên `NotificationSvc`. (2) Reminder hiện nhắm recipient = user đang đăng nhập (demo); demo data không có payment quá hạn/visa/flight trong 7 ngày tới nên chỉ phát ReminderDocument — đúng logic, không phải lỗi. (3) Web app đang chạy `:5177` (PID khi chạy, log `C:\tmp\polymind-web-phase4.*.log`) — `Stop-Process -Name Polymind.Web` trước khi build lại. (4) Grep HTML tìm tên icon/menu sẽ miss (MudIcon→SVG, MudMenu lazy) — verify bằng 200 + vắng error-boundary + query DB.
 
 ### [2026-06-24] Session 12 — Codex
 - **Làm được:** Hoàn thành **ĐỢT 3 — Upload hồ sơ + MinIO**. Thêm package `Minio` 7.0.0 cho Web, cấu hình `Minio` trong `appsettings.json`, service `IDocumentStorage`/`MinioDocumentStorage` upload object vào bucket `polymind-documents`, tạo presigned URL tải hồ sơ, validate file PDF/ảnh/Word/Excel tối đa 20MB. Mở rộng `CandidateDetail`: section **Hồ sơ ứng viên**, chọn `DocumentType`, chọn file bằng `InputFile`, upload version mới vào `CandidateDocument` + `DocumentVersion`, cập nhật `CurrentVersionId`, audit `create/upload_version`, danh sách hồ sơ hiện hành + nút tải.

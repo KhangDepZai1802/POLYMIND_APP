@@ -9,6 +9,7 @@ using Polymind.Infrastructure.Persistence;
 using Polymind.Web.Authorization;
 using Polymind.Web.Components;
 using Polymind.Web.Identity;
+using Polymind.Web.Reporting;
 using Polymind.Web.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -23,6 +24,9 @@ builder.Services.AddMudServices();
 // MinIO/S3 document storage
 builder.Services.Configure<MinioStorageOptions>(builder.Configuration.GetSection("Minio"));
 builder.Services.AddScoped<IDocumentStorage, MinioDocumentStorage>();
+
+// Thông báo in-app (stub)
+builder.Services.AddScoped<Polymind.Web.Notifications.NotificationService>();
 
 // EF Core (PostgreSQL) + ASP.NET Core Identity
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -66,6 +70,9 @@ app.MapPost("/Account/Logout", async (SignInManager<ApplicationUser> signInManag
     await signInManager.SignOutAsync();
     return Results.Redirect("/login");
 });
+
+// Xuất báo cáo CSV (gated reports:read).
+app.MapCsvExportEndpoints();
 
 // Áp migration + seed roles/permissions/super_admin + dữ liệu mẫu (bỏ qua nếu DB chưa sẵn sàng).
 using (var scope = app.Services.CreateScope())
