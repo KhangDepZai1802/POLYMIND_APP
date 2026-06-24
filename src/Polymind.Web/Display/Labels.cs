@@ -113,6 +113,22 @@ public static class Labels
         _ => s.ToString()
     };
 
+    public static string Vi(DocumentType t) => t switch
+    {
+        DocumentType.Cccd => "CCCD",
+        DocumentType.Passport => "Hộ chiếu",
+        DocumentType.HouseholdBook => "Sổ hộ khẩu",
+        DocumentType.BirthCert => "Giấy khai sinh",
+        DocumentType.Degree => "Bằng cấp",
+        DocumentType.Certificate => "Chứng chỉ",
+        DocumentType.HealthCheck => "Khám sức khỏe",
+        DocumentType.Photo => "Ảnh thẻ",
+        DocumentType.CriminalRecord => "Lý lịch tư pháp",
+        DocumentType.Contract => "Hợp đồng",
+        DocumentType.Other => "Khác",
+        _ => t.ToString()
+    };
+
     public static string Vi(PaymentType t) => t switch
     {
         PaymentType.Deposit => "Đặt cọc",

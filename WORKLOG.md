@@ -33,18 +33,21 @@
 - Build sạch (`dotnet build Polymind.slnx` = 0 error, 1 warning cũ `BL0008` ở Login.razor — vô hại). Docker (Postgres/Redis/MinIO) cần `docker compose up -d`.
 - Đã xong: nền tảng + auth + Dashboard + Lead CRM + **Ứng viên CRUD** + **Đơn hàng CRUD** + **Tài chính (Thu/Chi)** + **Đại lý & Hoa hồng** + **Visa & Xuất cảnh (Visa + Vé máy bay CRUD)** + **Báo cáo & Thống kê** + demo data. **Không còn placeholder nào** — tất cả menu đều có trang thật.
 - **Demo data đầy đủ (Session 9):** đã seed bù **Visa(4) + Vé máy bay(3) + Cấu hình hoa hồng(9) + Hoa hồng phát sinh(8)** → trang Báo cáo "Hoa hồng theo đại lý" và trang Visa đã có dữ liệu thật. Đã smoke-test 12 trang (admin 200, không exception) + RBAC 4 role (recruiter/accountant/visa.staff/agent) không lỗi. **Sẵn sàng demo đối tác.**
+- **ĐỢT 1 đã xong (Session 10):** UI cấu hình hoa hồng theo đại lý, tự sinh `AgentCommission` khi ứng viên đạt mốc Deposit/Selected/Departure, duyệt khoản thu và duyệt/đánh dấu đã chi hoa hồng. Build xanh, smoke-test `/finance`, `/agents/{id}`, `/candidates/{id}` HTTP 200.
+- **ĐỢT 2 đã xong (Session 11):** audit log thực thi cho các thao tác chính (ứng viên, payment/expense, chuyển bước, hoa hồng, cấu hình hoa hồng) và thêm section **Công nợ ứng viên** trong `CandidateDetail` gated bằng `payments:read`.
+- **ĐỢT 3 đã xong (Session 12):** wiring MinIO thật bằng package `Minio`, cấu hình bucket `polymind-documents`, service upload/download hồ sơ, UI **Hồ sơ ứng viên** trong `CandidateDetail` với upload version + link tải presigned URL.
 - **Kế hoạch nâng cấp:** xem `C:\Users\khang\.claude\plans\t-nh-ng-c-i-b-n-lexical-hejlsberg.md` (lộ trình 5 đợt; chốt giữ kiến trúc Blazor Server + Cookie, MinIO wiring thật, Email/SMS/Zalo stub).
 - **RBAC thực thi đã có code nền:** seed 8 user mẫu/role permissions, permission claims khi login, policy động dạng `resource:action`, ẩn menu theo quyền và chặn các nút ghi dữ liệu chính.
 - **Đã sửa lỗi nút/dialog không bấm được:** chuyển sang **interactivity toàn cục** (render mode đặt ở `Routes`/`HeadOutlet` trong `App.razor`, Login dùng `[ExcludeFromInteractiveRouting]` để giữ SSR). Trước đó layout + MudBlazor providers bị render tĩnh nên dialog/snackbar/drawer chết.
 
 ## ⏭️ VIỆC TIẾP THEO (baton — làm cái này trước)
 
-**Đã xong ĐỢT 0 (chuẩn bị demo).** Tiếp theo theo kế hoạch là **ĐỢT 1 — Hoa hồng tự tính + Phê duyệt** (nghiệp vụ lõi §8.2/8.3 + §2.2):
-1. **UI cấu hình hoa hồng:** dialog tạo/sửa `AgentCommissionConfig` trong `Components/Pages/Agents/AgentDetail.razor` (mốc/%, áp dụng theo quốc gia/đơn hàng), gate `agents:update`.
-2. **Tự động tính hoa hồng:** tại logic chuyển bước ứng viên (`CandidateDetail.razor`), khi đạt mốc Deposit/Selected/Departure và ứng viên có `AgentId` → sinh `AgentCommission` từ config (idempotent, không trùng mốc). Cân nhắc tách thành service trong `Polymind.Application`.
-3. **Nút phê duyệt:** Giám đốc/Kế toán duyệt `Payment` + `AgentCommission` (set `ApprovedBy`, đổi trạng thái). **Trước tiên kiểm tra/补 permission `payments:approve` / `commissions:approve` trong `DbSeeder.cs`** (danh mục + map role Director/Accountant).
+**Đã xong ĐỢT 3 — Upload hồ sơ + MinIO.** Tiếp theo theo kế hoạch là **ĐỢT 4 — Báo cáo/Dashboard mở rộng + thông báo stub + export**:
+1. **Dashboard/Báo cáo mở rộng:** thêm KPI công nợ, hồ sơ đã upload, hồ sơ theo loại, visa/flight sắp tới, payment overdue. Tránh `MudChart`; dùng `MudProgressLinear`/`MudSimpleTable` theo bẫy MudBlazor 9.5.
+2. **Thông báo stub:** tạo nền `Notification` cho reminder payment/document/visa/departure, hiển thị in-app list hoặc badge; chưa cần Email/SMS/Zalo thật.
+3. **Export:** thêm export Excel/PDF cho báo cáo chính nếu package đã có/được thêm rõ ràng; tránh ghi file output vào repo.
 
-(Các đợt sau: Đợt 2 Audit Log + công nợ theo ứng viên; Đợt 3 Upload hồ sơ + MinIO; Đợt 4 Báo cáo/Dashboard mở rộng + thông báo stub + export. Chi tiết trong plan file.)
+(Sau Đợt 4: siết Portal đại lý/RBAC data-scope nếu còn thời gian. Chi tiết trong plan file.)
 
 **Nợ nhỏ phát hiện ở Session 9:** role `agent` đang thấy `/candidates` và `/reports` hơi rộng so với spec §2.8 (Portal đại lý chỉ xem ứng viên mình giới thiệu + hoa hồng) → siết khi làm Portal đại lý.
 
@@ -59,6 +62,24 @@
 ---
 
 ## 📜 NHẬT KÝ SESSION (mới nhất ở trên)
+
+### [2026-06-24] Session 12 — Codex
+- **Làm được:** Hoàn thành **ĐỢT 3 — Upload hồ sơ + MinIO**. Thêm package `Minio` 7.0.0 cho Web, cấu hình `Minio` trong `appsettings.json`, service `IDocumentStorage`/`MinioDocumentStorage` upload object vào bucket `polymind-documents`, tạo presigned URL tải hồ sơ, validate file PDF/ảnh/Word/Excel tối đa 20MB. Mở rộng `CandidateDetail`: section **Hồ sơ ứng viên**, chọn `DocumentType`, chọn file bằng `InputFile`, upload version mới vào `CandidateDocument` + `DocumentVersion`, cập nhật `CurrentVersionId`, audit `create/upload_version`, danh sách hồ sơ hiện hành + nút tải.
+- **File thay đổi chính:** `src/Polymind.Web/Storage/*`, `Polymind.Web.csproj`, `Program.cs`, `appsettings.json`, `Components/Pages/Candidates/CandidateDetail.razor`, `Display/Labels.cs`, `Components/_Imports.razor`.
+- **Đã test:** `dotnet build Polymind.slnx` = 0 error, 1 warning cũ `BL0008` ở `Login.razor`. `docker compose up -d`; MinIO health `http://localhost:9000/minio/health/live` = 200. Chạy web + login admin qua HTTP: `/candidates/{id}` = 200, render "Hồ sơ ứng viên", "Upload hồ sơ", "Công nợ ứng viên", không lỗi hiển thị.
+- **Lưu ý/cảnh báo cho người sau:** Chưa click upload file thật trong browser nên chưa xác nhận object/bucket được tạo thực tế qua UI; service đã compile với SDK MinIO và MinIO container health OK. `DocumentVersion.FileUrl` hiện lưu **object key** trong bucket, không lưu public URL. Web app đang chạy tại `http://localhost:5177` (log `C:\tmp\polymind-web-phase3.out.log`).
+
+### [2026-06-24] Session 11 — Codex
+- **Làm được:** Hoàn thành **ĐỢT 2 — Audit Log + Công nợ theo ứng viên**. Thêm helper `AuditLogHelpers` để lấy actor từ claim `NameIdentifier` và ghi `AuditLog` JSONB. Gắn audit cho tạo/sửa ứng viên, tạo/sửa khoản thu, tạo/sửa khoản chi, duyệt payment, cấu hình hoa hồng, duyệt/đánh dấu đã chi hoa hồng, gắn ứng viên vào đơn hàng, chuyển bước workflow và hoa hồng tự sinh. Thêm section **Công nợ ứng viên** trong `CandidateDetail` gồm phải thu/đã thu/còn nợ, cảnh báo quá hạn, lịch sử payment; section chỉ hiện khi user có `payments:read`.
+- **File thay đổi chính:** `src/Polymind.Web/Auditing/AuditLogHelpers.cs`, `Components/_Imports.razor`, `Components/Pages/Candidates/CandidateDetail.razor`, `CandidateDialog.razor`, `Finance/PaymentDialog.razor`, `Finance/ExpenseDialog.razor`, `Finance/Finance.razor`, `Agents/AgentDetail.razor`, `Agents/CommissionConfigDialog.razor`.
+- **Đã test:** `dotnet build Polymind.slnx` = 0 error, 0 warning sau khi dừng process web cũ giữ lock. Bật Docker + web app, login admin qua HTTP, smoke-test `/finance`, `/agents/{id}`, `/candidates/{id}` đều 200, không lỗi hiển thị; trang ứng viên render "Công nợ ứng viên", trang đại lý vẫn render "Cấu hình hoa hồng".
+- **Lưu ý/cảnh báo cho người sau:** Web app đang chạy lại tại `http://localhost:5177` (process `Polymind.Web`, log `C:\tmp\polymind-web-phase2.out.log`). Chưa click thủ công các dialog/nút duyệt để tạo audit rows thật; mới kiểm tra build + HTTP render. Audit helper không set IP/UserAgent vì component Blazor hiện chưa inject `HttpContext`; nếu cần truy vết security sâu hơn thì bổ sung accessor/service riêng.
+
+### [2026-06-24] Session 10 — Codex
+- **Làm được:** Tiếp quản phần ĐỢT 1 Claude đang làm dở/đã commit (`3ff886f done phase 1`) và xác minh hoàn tất: `CommissionConfigDialog` tạo/sửa cấu hình hoa hồng; `AgentDetail` hiển thị cấu hình + duyệt/đánh dấu đã chi hoa hồng; `CandidateDetail` tự sinh hoa hồng idempotent khi chuyển bước đạt Deposit/Selected/Departure; `Finance` có nút duyệt khoản thu. Xác nhận `payments:approve` / `commissions:approve` đã có trong `PermissionRegistry` và đã map cho Director/Accountant trong `DbSeeder`.
+- **File thay đổi chính:** `WORKLOG.md` cập nhật baton; code Đợt 1 đã có ở `CandidateDetail.razor`, `Finance.razor`, `AgentDetail.razor`, `CommissionConfigDialog.razor`.
+- **Đã test:** `dotnet build Polymind.slnx` = 0 error, 1 warning cũ `BL0008` ở `Login.razor`. Bật Docker + web app, login admin qua HTTP, smoke-test `/finance`, `/agents/{id}`, `/candidates/{id}` đều 200, không có lỗi hiển thị; section "Cấu hình hoa hồng" và "Quy trình 17 bước" render đúng.
+- **Lưu ý/cảnh báo cho người sau:** Web app đang chạy tại `http://localhost:5177` (process `Polymind.Web`, log `C:\tmp\polymind-web-phase1.out.log`). Khi start bằng `Start-Process`, project path có dấu cách phải bọc quote trong `ArgumentList`; nếu không dotnet báo `The provided file path does not exist: ...\POLYMIND`. Chưa click thủ công dialog/nút duyệt trong browser, mới smoke-test HTTP render.
 
 ### [2026-06-24] Session 9 — Claude
 - **Bối cảnh:** đối chiếu toàn web với `POLYMIND APP.docx` → lập kế hoạch nâng cấp 5 đợt (plan file `t-nh-ng-c-i-b-n-lexical-hejlsberg.md`). Demo đối tác **ngày mai** → làm **ĐỢT 0** (rủi ro thấp, giá trị demo cao). Chốt: giữ Blazor Server + Cookie (không thêm REST/JWT trước demo), MinIO wiring thật/còn lại stub.

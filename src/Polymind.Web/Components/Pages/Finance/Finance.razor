@@ -141,10 +141,23 @@
         await using var db = await DbFactory.CreateDbContextAsync();
         var p = await db.Payments.FirstOrDefaultAsync(x => x.Id == id);
         if (p is null) return;
-        p.ApprovedBy = await db.Users.Select(u => u.Id).FirstOrDefaultAsync();
+        var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+        var oldValue = new
+        {
+            p.Status,
+            p.PaidDate,
+            p.ApprovedBy,
+        };
+        p.ApprovedBy = actorId;
         p.Status = PaymentStatus.Paid;
         p.PaidDate ??= DateOnly.FromDateTime(DateTime.UtcNow);
         p.UpdatedAt = DateTimeOffset.UtcNow;
+        db.AddAudit(actorId, "approve", "payments", p.Id, oldValue, new
+        {
+            p.Status,
+            p.PaidDate,
+            p.ApprovedBy,
+        });
         await db.SaveChangesAsync();
         Snackbar.Add("Đã duyệt & ghi nhận khoản thu", Severity.Success);
         await Load();

@@ -83,18 +83,23 @@
                     Snackbar.Add("Không tìm thấy khoản chi.", Severity.Error);
                     return;
                 }
+                var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+                var oldValue = Snapshot(e);
                 _m.ApplyTo(e);
                 e.UpdatedAt = DateTimeOffset.UtcNow;
+                db.AddAudit(actorId, "update", "expenses", e.Id, oldValue, Snapshot(e));
             }
             else
             {
+                var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
                 var e = new Expense
                 {
                     Code = $"EX-{DateTime.Now:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}",
-                    CreatedBy = await db.Users.Select(u => u.Id).FirstOrDefaultAsync(),
+                    CreatedBy = actorId,
                 };
                 _m.ApplyTo(e);
                 db.Expenses.Add(e);
+                db.AddAudit(actorId, "create", "expenses", e.Id, null, Snapshot(e));
             }
             await db.SaveChangesAsync();
         }
@@ -112,6 +117,17 @@
         var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
         return result.Succeeded;
     }
+
+    private static object Snapshot(Expense e) => new
+    {
+        e.Code,
+        e.Category,
+        e.Amount,
+        e.Description,
+        e.ExpenseDate,
+        e.CreatedBy,
+        e.ApprovedBy,
+    };
 
     private sealed class FormModel
     {

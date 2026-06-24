@@ -184,9 +184,12 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         var c = await db.AgentCommissions.FirstOrDefaultAsync(x => x.Id == id);
         if (c is null) return;
+        var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+        var oldValue = CommissionState(c);
         c.Status = CommissionStatus.Approved;
-        c.ApprovedBy = await db.Users.Select(u => u.Id).FirstOrDefaultAsync();
+        c.ApprovedBy = actorId;
         c.UpdatedAt = DateTimeOffset.UtcNow;
+        db.AddAudit(actorId, "approve", "agent_commissions", c.Id, oldValue, CommissionState(c));
         await db.SaveChangesAsync();
         Snackbar.Add("Đã duyệt hoa hồng", Severity.Success);
         await Load();
@@ -198,9 +201,12 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         var c = await db.AgentCommissions.FirstOrDefaultAsync(x => x.Id == id);
         if (c is null) return;
+        var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+        var oldValue = CommissionState(c);
         c.Status = CommissionStatus.Paid;
         c.PaidDate = DateOnly.FromDateTime(DateTime.UtcNow);
         c.UpdatedAt = DateTimeOffset.UtcNow;
+        db.AddAudit(actorId, "mark_paid", "agent_commissions", c.Id, oldValue, CommissionState(c));
         await db.SaveChangesAsync();
         Snackbar.Add("Đã đánh dấu hoa hồng đã chi", Severity.Success);
         await Load();
@@ -263,6 +269,13 @@ else
         var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
         return result.Succeeded;
     }
+
+    private static object CommissionState(AgentCommission c) => new
+    {
+        c.Status,
+        c.PaidDate,
+        c.ApprovedBy,
+    };
 
     private RenderFragment Field(string label, string? value) =>@<MudItem xs="6">
         <MudText Typo="Typo.caption" Class="mud-text-secondary">@label</MudText>

@@ -118,18 +118,23 @@
                     Snackbar.Add("Không tìm thấy khoản thu.", Severity.Error);
                     return;
                 }
+                var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+                var oldValue = Snapshot(p);
                 _m.ApplyTo(p);
                 p.UpdatedAt = DateTimeOffset.UtcNow;
+                db.AddAudit(actorId, "update", "payments", p.Id, oldValue, Snapshot(p));
             }
             else
             {
+                var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
                 var p = new Payment
                 {
                     Code = $"PT-{DateTime.Now:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}",
-                    CreatedBy = await db.Users.Select(u => u.Id).FirstOrDefaultAsync(),
+                    CreatedBy = actorId,
                 };
                 _m.ApplyTo(p);
                 db.Payments.Add(p);
+                db.AddAudit(actorId, "create", "payments", p.Id, null, Snapshot(p));
             }
             await db.SaveChangesAsync();
         }
@@ -147,6 +152,22 @@
         var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
         return result.Succeeded;
     }
+
+    private static object Snapshot(Payment p) => new
+    {
+        p.Code,
+        p.CandidateId,
+        p.JobOrderId,
+        p.PaymentType,
+        p.Amount,
+        p.DueDate,
+        p.PaidDate,
+        p.Status,
+        p.PaymentMethod,
+        p.Notes,
+        p.CreatedBy,
+        p.ApprovedBy,
+    };
 
     private sealed class FormModel
     {

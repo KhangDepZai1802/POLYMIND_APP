@@ -147,18 +147,23 @@
                     Snackbar.Add("Không tìm thấy ứng viên.", Severity.Error);
                     return;
                 }
+                var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+                var oldValue = Snapshot(c);
                 _m.ApplyTo(c);
                 c.UpdatedAt = DateTimeOffset.UtcNow;
+                db.AddAudit(actorId, "update", "candidates", c.Id, oldValue, Snapshot(c));
             }
             else
             {
+                var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
                 var c = new Candidate
                 {
                     Code = $"UV-{DateTime.Now:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}",
-                    CreatedBy = await db.Users.Select(u => u.Id).FirstOrDefaultAsync(),
+                    CreatedBy = actorId,
                 };
                 _m.ApplyTo(c);
                 db.Candidates.Add(c);
+                db.AddAudit(actorId, "create", "candidates", c.Id, null, Snapshot(c));
             }
             await db.SaveChangesAsync();
         }
@@ -176,6 +181,31 @@
         var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
         return result.Succeeded;
     }
+
+    private static object Snapshot(Candidate c) => new
+    {
+        c.Code,
+        c.FullName,
+        c.Phone,
+        c.Gender,
+        c.Dob,
+        c.Province,
+        c.Address,
+        c.MaritalStatus,
+        c.CccdNumber,
+        c.CccdIssueDate,
+        c.CccdIssuePlace,
+        c.PassportNumber,
+        c.PassportExpiry,
+        c.EmergencyContactName,
+        c.EmergencyContactPhone,
+        c.EmergencyContactRelation,
+        c.BankAccountNumber,
+        c.BankName,
+        c.BankAccountName,
+        c.AgentId,
+        c.CreatedBy,
+    };
 
     /// <summary>Model tách riêng để dùng DateTime? cho MudDatePicker rồi map sang DateOnly?.</summary>
     private sealed class FormModel

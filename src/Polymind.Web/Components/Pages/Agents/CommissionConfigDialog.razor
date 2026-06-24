@@ -82,18 +82,22 @@
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
+            var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
             if (IsEdit)
             {
                 var cfg = await db.AgentCommissionConfigs.FirstOrDefaultAsync(x => x.Id == ConfigId);
                 if (cfg is null) { Snackbar.Add("Không tìm thấy cấu hình.", Severity.Error); return; }
+                var oldValue = Snapshot(cfg);
                 _m.ApplyTo(cfg);
                 cfg.UpdatedAt = DateTimeOffset.UtcNow;
+                db.AddAudit(actorId, "update", "agent_commission_configs", cfg.Id, oldValue, Snapshot(cfg));
             }
             else
             {
                 var cfg = new AgentCommissionConfig { AgentId = AgentId };
                 _m.ApplyTo(cfg);
                 db.AgentCommissionConfigs.Add(cfg);
+                db.AddAudit(actorId, "create", "agent_commission_configs", cfg.Id, null, Snapshot(cfg));
             }
             await db.SaveChangesAsync();
         }
@@ -111,6 +115,16 @@
         var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
         return result.Succeeded;
     }
+
+    private static object Snapshot(AgentCommissionConfig c) => new
+    {
+        c.AgentId,
+        c.Milestone,
+        c.Country,
+        c.JobOrderId,
+        c.Percentage,
+        c.FixedAmount,
+    };
 
     private sealed class FormModel
     {

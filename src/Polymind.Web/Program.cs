@@ -9,6 +9,7 @@ using Polymind.Infrastructure.Persistence;
 using Polymind.Web.Authorization;
 using Polymind.Web.Components;
 using Polymind.Web.Identity;
+using Polymind.Web.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,6 +19,10 @@ builder.Services.AddRazorComponents()
 
 // MudBlazor UI
 builder.Services.AddMudServices();
+
+// MinIO/S3 document storage
+builder.Services.Configure<MinioStorageOptions>(builder.Configuration.GetSection("Minio"));
+builder.Services.AddScoped<IDocumentStorage, MinioDocumentStorage>();
 
 // EF Core (PostgreSQL) + ASP.NET Core Identity
 builder.Services.AddInfrastructure(builder.Configuration);

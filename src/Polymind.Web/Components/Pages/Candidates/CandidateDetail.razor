@@ -6,6 +6,7 @@
 @inject ISnackbar Snackbar
 @inject IAuthorizationService AuthorizationService
 @inject AuthenticationStateProvider AuthStateProvider
+@inject IDocumentStorage DocumentStorage
 
 <PageTitle>Chi tiết Ứng viên — POLYMIND</PageTitle>
 
@@ -123,6 +124,63 @@ else
                     }
                 </MudPaper>
             }
+
+            @if (_canReadPayments)
+            {
+                <MudPaper Class="pa-4 mt-4" Elevation="1">
+                    <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Công nợ ứng viên</b></MudText>
+                    <MudGrid Class="mb-2">
+                        <MudItem xs="4">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Phải thu</MudText>
+                            <MudText Typo="Typo.body1"><b>@($"{_paymentTotal:N0} đ")</b></MudText>
+                        </MudItem>
+                        <MudItem xs="4">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Đã thu</MudText>
+                            <MudText Typo="Typo.body1" Color="Color.Success"><b>@($"{_paymentPaid:N0} đ")</b></MudText>
+                        </MudItem>
+                        <MudItem xs="4">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Còn nợ</MudText>
+                            <MudText Typo="Typo.body1" Color="@(_paymentOutstanding > 0 ? Color.Warning : Color.Success)"><b>@($"{_paymentOutstanding:N0} đ")</b></MudText>
+                        </MudItem>
+                    </MudGrid>
+                    @if (_overduePaymentCount > 0)
+                    {
+                        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
+                            Có @_overduePaymentCount khoản quá hạn/chưa thu đủ.
+                        </MudAlert>
+                    }
+                    @if (_payments.Count == 0)
+                    {
+                        <MudAlert Severity="Severity.Info" Dense="true">Chưa có khoản thu nào cho ứng viên này.</MudAlert>
+                    }
+                    else
+                    {
+                        <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                            <thead>
+                                <tr>
+                                    <th>Mã</th>
+                                    <th>Loại</th>
+                                    <th style="text-align:right">Số tiền</th>
+                                    <th>Trạng thái</th>
+                                    <th>Hạn thu</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var payment in _payments)
+                                {
+                                    <tr>
+                                        <td>@payment.Code</td>
+                                        <td>@Labels.Vi(payment.Type)</td>
+                                        <td style="text-align:right">@($"{payment.Amount:N0} đ")</td>
+                                        <td><MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(payment.Status)">@Labels.Vi(payment.Status)</MudChip></td>
+                                        <td>@(payment.DueDate?.ToString("dd/MM/yyyy") ?? "—")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+                </MudPaper>
+            }
         </MudItem>
 
         <MudItem xs="12" md="7">
@@ -152,6 +210,94 @@ else
                     </MudTimeline>
                 }
             </MudPaper>
+
+            <MudPaper Class="pa-4 mt-4" Elevation="1">
+                <div class="d-flex justify-space-between align-center mb-3">
+                    <MudText Typo="Typo.subtitle1"><b>Hồ sơ ứng viên (@_documents.Count)</b></MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">MinIO</MudChip>
+                </div>
+
+                @if (_canUpdateCandidate)
+                {
+                    <MudGrid Class="mb-3">
+                        <MudItem xs="12" sm="4">
+                            <MudSelect T="DocumentType" @bind-Value="_uploadDocType" Label="Loại hồ sơ" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                @foreach (var type in Enum.GetValues<DocumentType>())
+                                {
+                                    <MudSelectItem Value="@type">@Labels.Vi(type)</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" sm="5">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">File hồ sơ</MudText>
+                            <InputFile OnChange="OnDocumentSelected" />
+                            @if (_selectedDocumentFile is not null)
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    @_selectedDocumentFile.Name (@FormatFileSize(_selectedDocumentFile.Size))
+                                </MudText>
+                            }
+                        </MudItem>
+                        <MudItem xs="12" sm="3">
+                            <MudTextField @bind-Value="_documentNotes" Label="Ghi chú" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.UploadFile"
+                                       Disabled="_uploading || _selectedDocumentFile is null" OnClick="UploadDocument">
+                                Upload hồ sơ
+                            </MudButton>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary ml-2">
+                                Hỗ trợ PDF, ảnh, Word, Excel. Tối đa @FormatFileSize(DocumentStorage.MaxUploadBytes).
+                            </MudText>
+                        </MudItem>
+                    </MudGrid>
+                }
+
+                @if (_documents.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true">Chưa có hồ sơ nào được upload.</MudAlert>
+                }
+                else
+                {
+                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                        <thead>
+                            <tr>
+                                <th>Loại</th>
+                                <th>File hiện hành</th>
+                                <th>Phiên bản</th>
+                                <th>Dung lượng</th>
+                                <th>Upload lúc</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var document in _documents)
+                            {
+                                <tr>
+                                    <td>@Labels.Vi(document.DocType)</td>
+                                    <td>
+                                        <div>@document.FileName</div>
+                                        @if (!string.IsNullOrWhiteSpace(document.Notes))
+                                        {
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@document.Notes</MudText>
+                                        }
+                                    </td>
+                                    <td>v@document.VersionNumber</td>
+                                    <td>@FormatFileSize(document.FileSize)</td>
+                                    <td>@document.UploadedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                                    <td style="text-align:right">
+                                        <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                                                   StartIcon="@Icons.Material.Filled.Download"
+                                                   OnClick="@(() => DownloadDocument(document.VersionId))">
+                                            Tải
+                                        </MudButton>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+            </MudPaper>
         </MudItem>
     </MudGrid>
 }
@@ -164,10 +310,33 @@ else
     private string? _country;
     private bool _busy;
     private bool _canUpdateCandidate;
+    private bool _canReadPayments;
 
     private List<JobOrder> _jobOrders = new();
+    private List<CandidatePaymentRow> _payments = new();
+    private List<CandidateDocumentRow> _documents = new();
     private Guid? _selectedJobOrderId;
     private string _assignNotes = "";
+    private decimal _paymentTotal;
+    private decimal _paymentPaid;
+    private decimal _paymentOutstanding;
+    private int _overduePaymentCount;
+    private DocumentType _uploadDocType = DocumentType.Cccd;
+    private IBrowserFile? _selectedDocumentFile;
+    private string _documentNotes = "";
+    private bool _uploading;
+
+    private record CandidatePaymentRow(Guid Id, string Code, PaymentType Type, decimal Amount, PaymentStatus Status, DateOnly? DueDate, DateOnly? PaidDate);
+    private record CandidateDocumentRow(
+        Guid DocumentId,
+        Guid VersionId,
+        DocumentType DocType,
+        string FileName,
+        long FileSize,
+        string? MimeType,
+        int VersionNumber,
+        DateTimeOffset UploadedAt,
+        string? Notes);
 
     private bool HasEmergencyInfo => !string.IsNullOrWhiteSpace(_candidate?.EmergencyContactName)
         || !string.IsNullOrWhiteSpace(_candidate?.EmergencyContactPhone);
@@ -177,6 +346,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         _canUpdateCandidate = await HasPermission("candidates:update");
+        _canReadPayments = await HasPermission("payments:read");
         await Load();
     }
 
@@ -197,6 +367,74 @@ else
                 .Where(j => j.Status != JobOrderStatus.Cancelled)
                 .OrderByDescending(j => j.CreatedAt).ToListAsync();
         }
+
+        if (_canReadPayments)
+        {
+            var payments = await db.Payments
+                .Where(p => p.CandidateId == Id)
+                .OrderByDescending(p => p.CreatedAt)
+                .ToListAsync();
+
+            _payments = payments.Select(p => new CandidatePaymentRow(
+                p.Id,
+                p.Code,
+                p.PaymentType,
+                p.Amount,
+                p.Status,
+                p.DueDate,
+                p.PaidDate)).ToList();
+
+            _paymentTotal = payments.Where(p => p.Status != PaymentStatus.Refunded).Sum(p => p.Amount);
+            _paymentPaid = payments.Where(p => p.Status == PaymentStatus.Paid).Sum(p => p.Amount);
+            _paymentOutstanding = Math.Max(0, _paymentTotal - _paymentPaid);
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            _overduePaymentCount = payments.Count(p =>
+                p.Status is PaymentStatus.Pending or PaymentStatus.Partial or PaymentStatus.Overdue
+                && p.DueDate is not null
+                && p.DueDate.Value < today);
+        }
+
+        var documents = await db.CandidateDocuments
+            .Where(d => d.CandidateId == Id)
+            .OrderBy(d => d.DocType)
+            .ToListAsync();
+
+        if (documents.Count == 0)
+        {
+            _documents = new();
+            return;
+        }
+
+        var documentIds = documents.Select(d => d.Id).ToList();
+        var versions = await db.DocumentVersions
+            .Where(v => documentIds.Contains(v.DocumentId))
+            .OrderByDescending(v => v.VersionNumber)
+            .ToListAsync();
+
+        _documents = documents
+            .Select(d =>
+            {
+                var current = d.CurrentVersionId is null
+                    ? versions.FirstOrDefault(v => v.DocumentId == d.Id)
+                    : versions.FirstOrDefault(v => v.Id == d.CurrentVersionId.Value)
+                        ?? versions.FirstOrDefault(v => v.DocumentId == d.Id);
+
+                return current is null
+                    ? null
+                    : new CandidateDocumentRow(
+                        d.Id,
+                        current.Id,
+                        d.DocType,
+                        current.FileName,
+                        current.FileSize,
+                        current.MimeType,
+                        current.VersionNumber,
+                        current.CreatedAt,
+                        current.Notes);
+            })
+            .Where(row => row is not null)
+            .Cast<CandidateDocumentRow>()
+            .ToList();
     }
 
     private async Task OpenEdit()
@@ -224,15 +462,24 @@ else
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            var adminId = await db.Users.Select(u => u.Id).FirstOrDefaultAsync();
-            db.CandidateJobOrders.Add(new CandidateJobOrder
+            var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+            var assignment = new CandidateJobOrder
             {
                 CandidateId = Id,
                 JobOrderId = _selectedJobOrderId.Value,
                 CurrentStep = WorkflowStep.Lead,
                 Status = CandidateJobOrderStatus.Active,
-                AssignedTo = adminId,
+                AssignedTo = actorId,
                 Notes = string.IsNullOrWhiteSpace(_assignNotes) ? null : _assignNotes,
+            };
+            db.CandidateJobOrders.Add(assignment);
+            db.AddAudit(actorId, "assign", "candidate_job_orders", assignment.Id, null, new
+            {
+                assignment.CandidateId,
+                assignment.JobOrderId,
+                assignment.CurrentStep,
+                assignment.Status,
+                assignment.AssignedTo,
             });
             await db.SaveChangesAsync();
 
@@ -269,24 +516,36 @@ else
         {
             await using var db = await DbFactory.CreateDbContextAsync();
             var cjo = await db.CandidateJobOrders.FirstAsync(j => j.Id == _cjo.Id);
-            var adminId = await db.Users.Select(u => u.Id).FirstOrDefaultAsync();
+            var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
             var completed = cjo.CurrentStep;
             var next = (WorkflowStep)((int)cjo.CurrentStep + 1);
+            var oldStatus = cjo.Status;
 
             db.WorkflowStepRecords.Add(new WorkflowStepRecord
             {
                 CandidateJobOrderId = cjo.Id,
                 Step = completed,
                 Status = WorkflowStepStatus.Completed,
-                AssignedTo = adminId,
+                AssignedTo = actorId,
                 CompletedAt = DateTimeOffset.UtcNow,
-                CreatedBy = adminId,
+                CreatedBy = actorId,
             });
             cjo.CurrentStep = next;
             cjo.UpdatedAt = DateTimeOffset.UtcNow;
             if (next == WorkflowStep.Completed) cjo.Status = CandidateJobOrderStatus.Completed;
 
-            var newCommissions = await EnsureCommissionsAsync(db, cjo, _candidate?.AgentId);
+            var newCommissions = await EnsureCommissionsAsync(db, cjo, _candidate?.AgentId, actorId);
+            db.AddAudit(actorId, "advance_step", "candidate_job_orders", cjo.Id, new
+            {
+                CurrentStep = completed,
+                Status = oldStatus,
+            }, new
+            {
+                CurrentStep = next,
+                cjo.Status,
+                CompletedStep = completed,
+                NewCommissions = newCommissions,
+            });
             await db.SaveChangesAsync();
 
             Snackbar.Add($"Đã chuyển sang bước: {Labels.Vi(next)}", Severity.Success);
@@ -300,6 +559,118 @@ else
         }
     }
 
+    private void OnDocumentSelected(InputFileChangeEventArgs args)
+    {
+        _selectedDocumentFile = args.File;
+    }
+
+    private async Task UploadDocument()
+    {
+        if (_selectedDocumentFile is null)
+        {
+            Snackbar.Add("Vui lòng chọn file hồ sơ.", Severity.Warning);
+            return;
+        }
+        if (!await HasPermission("candidates:update"))
+        {
+            Snackbar.Add("Bạn không có quyền upload hồ sơ ứng viên.", Severity.Warning);
+            return;
+        }
+
+        _uploading = true;
+        try
+        {
+            var uploaded = await DocumentStorage.UploadAsync(Id, _uploadDocType, _selectedDocumentFile);
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+            var document = await db.CandidateDocuments
+                .FirstOrDefaultAsync(d => d.CandidateId == Id && d.DocType == _uploadDocType);
+
+            var createdDocument = false;
+            if (document is null)
+            {
+                document = new CandidateDocument
+                {
+                    CandidateId = Id,
+                    DocType = _uploadDocType,
+                };
+                db.CandidateDocuments.Add(document);
+                createdDocument = true;
+            }
+
+            var nextVersion = await db.DocumentVersions
+                .Where(v => v.DocumentId == document.Id)
+                .MaxAsync(v => (int?)v.VersionNumber) ?? 0;
+
+            var version = new DocumentVersion
+            {
+                DocumentId = document.Id,
+                VersionNumber = nextVersion + 1,
+                FileUrl = uploaded.ObjectKey,
+                FileName = uploaded.FileName,
+                FileSize = uploaded.FileSize,
+                MimeType = uploaded.ContentType,
+                UploadedBy = actorId,
+                Notes = string.IsNullOrWhiteSpace(_documentNotes) ? null : _documentNotes.Trim(),
+            };
+            db.DocumentVersions.Add(version);
+            document.CurrentVersionId = version.Id;
+            document.UpdatedAt = DateTimeOffset.UtcNow;
+            db.AddAudit(actorId, createdDocument ? "create" : "upload_version", "candidate_documents", document.Id, null, new
+            {
+                document.CandidateId,
+                document.DocType,
+                document.CurrentVersionId,
+                VersionId = version.Id,
+                version.VersionNumber,
+                ObjectKey = version.FileUrl,
+                version.FileName,
+                version.FileSize,
+                version.MimeType,
+            });
+
+            await db.SaveChangesAsync();
+            Snackbar.Add("Đã upload hồ sơ lên MinIO.", Severity.Success);
+            _selectedDocumentFile = null;
+            _documentNotes = "";
+            await Load();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Không upload được hồ sơ: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _uploading = false;
+        }
+    }
+
+    private async Task DownloadDocument(Guid versionId)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var version = await db.DocumentVersions.FirstOrDefaultAsync(v => v.Id == versionId);
+            if (version is null)
+            {
+                Snackbar.Add("Không tìm thấy phiên bản hồ sơ.", Severity.Warning);
+                return;
+            }
+
+            var url = await DocumentStorage.GetDownloadUrlAsync(version.FileUrl);
+            Nav.NavigateTo(url, forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Không tạo được link tải hồ sơ: {ex.Message}", Severity.Error);
+        }
+    }
+
     // Mốc hoa hồng ↔ bước workflow tương ứng (mục 8.3).
     private static readonly (CommissionMilestone Milestone, WorkflowStep Step)[] CommissionMilestones =
     {
@@ -309,7 +680,7 @@ else
     };
 
     /// <summary>Tự sinh hoa hồng cho các mốc đã đạt (nếu ứng viên có đại lý và có cấu hình). Idempotent.</summary>
-    private static async Task<int> EnsureCommissionsAsync(ApplicationDbContext db, CandidateJobOrder cjo, Guid? agentId)
+    private static async Task<int> EnsureCommissionsAsync(ApplicationDbContext db, CandidateJobOrder cjo, Guid? agentId, Guid actorId)
     {
         if (agentId is null) return 0;
         var jo = await db.JobOrders.FirstOrDefaultAsync(j => j.Id == cjo.JobOrderId);
@@ -338,7 +709,7 @@ else
                 ? baseAmount * cfg.Percentage.Value / 100m
                 : (cfg.FixedAmount ?? 0m);
 
-            db.AgentCommissions.Add(new AgentCommission
+            var commission = new AgentCommission
             {
                 AgentId = agentId.Value,
                 CandidateId = cjo.CandidateId,
@@ -348,6 +719,18 @@ else
                 BaseAmount = baseAmount,
                 CommissionAmount = amount,
                 Status = CommissionStatus.Pending,
+            };
+            db.AgentCommissions.Add(commission);
+            db.AddAudit(actorId, "create", "agent_commissions", commission.Id, null, new
+            {
+                commission.AgentId,
+                commission.CandidateId,
+                commission.JobOrderId,
+                commission.ConfigId,
+                commission.Milestone,
+                commission.BaseAmount,
+                commission.CommissionAmount,
+                commission.Status,
             });
             created++;
         }
@@ -365,4 +748,13 @@ else
         <MudText Typo="Typo.caption" Class="mud-text-secondary">@label</MudText>
         <MudText Typo="Typo.body2">@(string.IsNullOrWhiteSpace(value) ? "—" : value)</MudText>
     </MudItem>;
+
+    private static string FormatFileSize(long bytes)
+    {
+        if (bytes >= 1024 * 1024)
+            return $"{bytes / 1024d / 1024d:N1} MB";
+        if (bytes >= 1024)
+            return $"{bytes / 1024d:N1} KB";
+        return $"{bytes:N0} B";
+    }
 }
