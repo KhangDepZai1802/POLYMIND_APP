@@ -158,6 +158,13 @@
                             <CellTemplate>@context.Item.Date.ToString("dd/MM/yyyy")</CellTemplate>
                         </TemplateColumn>
                         <PropertyColumn Property="x => x.Description" Title="Diễn giải" />
+                        <TemplateColumn Title="" Sortable="false">
+                            <CellTemplate>
+                                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
+                                           StartIcon="@Icons.Material.Filled.PictureAsPdf"
+                                           Href="@($"/receipts/{context.Item.Id}.pdf")" ForceLoad="true">In PDF</MudButton>
+                            </CellTemplate>
+                        </TemplateColumn>
                     </Columns>
                     <PagerContent><MudDataGridPager T="ReceiptRow" /></PagerContent>
                 </MudDataGrid>

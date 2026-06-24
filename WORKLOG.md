@@ -36,6 +36,7 @@
 - **ĐỢT 1 đã xong (Session 10):** UI cấu hình hoa hồng theo đại lý, tự sinh `AgentCommission` khi ứng viên đạt mốc Deposit/Selected/Departure, duyệt khoản thu và duyệt/đánh dấu đã chi hoa hồng. Build xanh, smoke-test `/finance`, `/agents/{id}`, `/candidates/{id}` HTTP 200.
 - **ĐỢT 2 đã xong (Session 11):** audit log thực thi cho các thao tác chính (ứng viên, payment/expense, chuyển bước, hoa hồng, cấu hình hoa hồng) và thêm section **Công nợ ứng viên** trong `CandidateDetail` gated bằng `payments:read`.
 - **ĐỢT 3 đã xong (Session 12):** wiring MinIO thật bằng package `Minio`, cấu hình bucket `polymind-documents`, service upload/download hồ sơ, UI **Hồ sơ ứng viên** trong `CandidateDetail` với upload version + link tải presigned URL.
+- **PHASE B đã xong (Session 16):** Xuất file thật PDF + Excel. Thêm package **QuestPDF 2026.6** (license Community set trong `Program.cs`) + **ClosedXML 0.105**. Refactor `Reporting/CsvExportEndpoints.cs`: 3 data-builder dùng chung, mỗi báo cáo có 3 endpoint `.csv`/`.xlsx`/`.pdf` (finance-monthly, commissions, overdue-payments). Thêm endpoint `/receipts/{id}.pdf` in phiếu thu/chi (mẫu A5 ngang, có chỗ ký). `Reports.razor`: 3 menu Excel/PDF/CSV. `Finance.razor`: nút "In PDF" ở tab Phiếu thu/chi. Smoke-test: 3 xlsx (sig PK) + 3 pdf báo cáo (sig %PDF) + phiếu pdf = 200 đúng content-type. QuestPDF dùng font Lato bundled (hỗ trợ tiếng Việt, không cần font hệ thống).
 - **PHASE A đã xong (Session 15):** Hoàn thiện nghiệp vụ lõi còn hở theo plan production (`v-y-hi-n-gi-web-fizzy-parasol.md`). (A1) **Phiếu thu/chi**: thêm `Receipt.PaymentId/ExpenseId` + migration, nút "Phiếu thu"/"Phiếu chi" sinh phiếu idempotent từ khoản đã thu/khoản chi, tab "Phiếu thu/chi" trong `/finance` (PDF để Phase B). (A2) **Khôi phục phiên bản hồ sơ**: nút "Lịch sử" + "Đặt hiện hành" trong `CandidateDetail`, audit `restore_version`. (A3) **Field Lead §3.2**: `LeadDialog` bổ sung ngày sinh/giới tính/CCCD/địa chỉ/nghề nghiệp/học vấn/kinh nghiệm/ngoại ngữ/đơn hàng quan tâm/người phụ trách (entity đã đủ field từ trước). (A4) **Phân công Lead + KPI**: panel phân công trong `LeadDetail` + section "KPI nhân viên tuyển dụng" trong `/reports`. (A5) **Nhắc lịch hẹn tư vấn**: `Lead.AppointmentAt` + migration + panel đặt lịch + reminder `ReminderInterview`. Build xanh, smoke-test `/finance` `/candidates/{id}` `/leads/{id}` `/reports` = 200 không error-boundary, 2 migration applied. **(Nợ:** file đính kèm Lead hoãn — cần generic storage thay vì candidate-specific.)
 - **ĐỢT 5 đã xong (Session 14):** **Portal đại lý + RBAC data-scope.** Seed gắn tài khoản `agent@` vào đại lý AG-000001 (idempotent). `AgentScope` service phân giải `(IsAgentOnly, AgentId)`. Trang `/candidates` lọc theo `AgentId` cho đại lý; `/candidates/{id}` chặn xem ứng viên không thuộc đại lý mình. Trang mới `/my-commissions` (portal hoa hồng). `/` và `/reports` redirect đại lý về `/my-commissions` (chống lộ số liệu công ty). NavMenu ẩn Tổng quan/Báo cáo cho đại lý, hiện "Hoa hồng của tôi". Smoke-test: agent thấy 3/12 ứng viên, 5 hoa hồng; admin vẫn full. **Hoàn tất lộ trình 5 đợt nâng cấp.**
 - **ĐỢT 4 đã xong (Session 13):** (1) **Báo cáo mở rộng** — thêm 4 KPI (công nợ phải thu, khoản thu quá hạn, hồ sơ đã tải, sắp xuất cảnh 30 ngày) + 4 section mới (hồ sơ theo loại, khoản thu quá hạn, lịch visa & lịch xuất cảnh 30 ngày). (2) **Dashboard Home** thêm 3 KPI (công nợ/quá hạn/sắp xuất cảnh). (3) **Thông báo in-app (stub)** — `NotificationService` sinh reminder idempotent (khoản thu quá hạn/sắp tới, lịch visa, xuất cảnh, hồ sơ thiếu), bell badge ở topbar, trang `/notifications` (list + đánh dấu đã đọc + quét lại). (4) **Export CSV** — 3 endpoint `/export/*.csv` (thu/chi theo tháng, hoa hồng, khoản thu quá hạn) gated `reports:read`, BOM UTF-8 cho tiếng Việt, nút "Xuất CSV" trên trang Báo cáo. Build xanh, smoke-test `/`, `/reports`, `/notifications` = 200 không error-boundary, 3 CSV trả đúng `text/csv` + tiếng Việt đúng dấu, DB sinh 8 reminder thật.
@@ -45,10 +46,10 @@
 
 ## ⏭️ VIỆC TIẾP THEO (baton — làm cái này trước)
 
-**Đang chạy theo plan production end-to-end** (`C:\Users\khang\.claude\plans\v-y-hi-n-gi-web-fizzy-parasol.md`, 8 phase A→H). **Đã xong Phase A.** Tiếp theo là **PHASE B — Xuất file thật PDF + Excel**:
-1. Thêm package **QuestPDF** (PDF) + **ClosedXML** (Excel) vào `Polymind.Web`.
-2. In **phiếu thu/chi PDF** (từ `Receipt`: mã, ứng viên, số tiền, ngày, chỗ ký) — nối tiếp A1; thêm nút "In PDF" ở tab Phiếu thu/chi.
-3. Export **Excel + PDF** cho báo cáo chính: mở rộng `Reporting/CsvExportEndpoints.cs` (thêm endpoint `.xlsx`/`.pdf`), thêm nút tải trong `/reports`. Stream trực tiếp, không ghi file repo; tiếng Việt đúng dấu/font (QuestPDF cần font hỗ trợ Unicode).
+**Đang chạy theo plan production end-to-end** (`C:\Users\khang\.claude\plans\v-y-hi-n-gi-web-fizzy-parasol.md`, 8 phase A→H). **Đã xong Phase A + B.** Tiếp theo là **PHASE C — Báo cáo & Dashboard mở rộng (§11–12)**:
+1. Doanh thu **theo quốc gia / theo đơn hàng** (join `JobOrder.Country`) — thêm section trong `Reports.razor` + Dashboard doanh thu (§11.2).
+2. Lead **theo tỉnh / theo nhân viên** (§12.1 — KPI nhân viên đã có ở Phase A, bổ sung theo tỉnh `Lead.Province`); tỷ lệ **trúng tuyển / đậu visa / xuất cảnh** (§12.2) tính theo bước workflow + bảng Visa.
+3. "Top đại lý" + Dashboard đại lý (§11.3). Giữ pattern `MudProgressLinear`/`MudSimpleTable` (tránh MudChart). Cân nhắc thêm các báo cáo mới này vào export (Phase B đã có khung 3 format — thêm builder nếu cần).
 
 **Lưu ý Đợt 5 cho người sau:**
 - `AgentScope` (scoped, `Identity/AgentScope.cs`) là nguồn sự thật cho data-scope đại lý: `GetAsync()` trả `(IsAgentOnly, AgentId)`, cache trong 1 request. "Agent-only" = có role `agent` và KHÔNG kèm role nội bộ nào. Dùng nó ở mọi trang dùng chung cần bó hẹp.
@@ -75,6 +76,16 @@
 ---
 
 ## 📜 NHẬT KÝ SESSION (mới nhất ở trên)
+
+### [2026-06-24] Session 16 — Claude
+- **Làm được:** **Phase B — Xuất file thật PDF + Excel** (plan production).
+  - Thêm **QuestPDF 2026.6.0** + **ClosedXML 0.105.0** vào `Polymind.Web.csproj`; set `QuestPDF.Settings.License = Community` đầu `Program.cs`.
+  - Refactor `Reporting/CsvExportEndpoints.cs` thành kiến trúc dùng chung: record `ReportTable` + 3 builder async (`BuildFinanceMonthly/Commissions/Overdue`) + 3 formatter (`Csv`/`Xlsx`/`Pdf`). Mỗi báo cáo tự đăng ký 3 endpoint `/export/{slug}.{csv|xlsx|pdf}`. Excel: ClosedXML có tiêu đề + header tô màu `#1e3a8a` + auto-fit. PDF: QuestPDF A4 bảng có header xanh + footer số trang.
+  - **Phiếu thu/chi PDF:** endpoint `/receipts/{id}.pdf` (gate `receipts:read`) — mẫu A5 ngang: tiêu đề PHIẾU THU/CHI, mã, đối tượng, số tiền, ngày, diễn giải, 2 ô ký. `Finance.razor`: nút "In PDF" ở tab Phiếu thu/chi.
+  - `Reports.razor`: thay menu CSV đơn bằng 3 menu **Excel / PDF / CSV** (mỗi menu 3 báo cáo).
+- **File chính:** `Polymind.Web.csproj`, `Program.cs`, `Reporting/CsvExportEndpoints.cs` (viết lại), `Components/Pages/Reports/Reports.razor`, `Components/Pages/Finance/Finance.razor`.
+- **Đã test:** `dotnet build` = 0 error (1 warning cũ BL0008). Chạy `:5177`, login admin: 3 endpoint `.xlsx` (sig `PK`, ctype spreadsheetml) + 3 `.pdf` báo cáo (sig `%PDF`) = 200; chèn receipt mẫu → `/receipts/{id}.pdf` = 200 `application/pdf` 34KB, dọn sau test. (QuestPDF font Lato bundled hỗ trợ tiếng Việt, render không cần font hệ thống → an toàn cho Linux container Phase G.)
+- **Lưu ý/cảnh báo:** (1) Khi test PDF receipt bằng psql, dùng `returning id` rồi `-A -t` bị dính command-tag "INSERT 0 1" vào biến → URL hỏng 404; phải `select id ... where code=...` riêng. (2) Route `/receipts/{id:guid}.pdf` (param + literal extension) hoạt động OK. (3) Web chạy `:5177` (log `C:\tmp\polymind-web-phaseB.*.log`).
 
 ### [2026-06-24] Session 15 — Claude
 - **Bối cảnh:** user duyệt plan production end-to-end 8 phase (`v-y-hi-n-gi-web-fizzy-parasol.md`) — đích cuối ra web dùng được thật. Bắt đầu **Phase A — hoàn thiện nghiệp vụ lõi còn hở**.

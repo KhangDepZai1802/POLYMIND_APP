@@ -11,11 +11,23 @@
         <MudText Typo="Typo.h5"><b>Báo cáo & Thống kê</b></MudText>
         <MudText Typo="Typo.body2" Class="mud-text-secondary">Tổng hợp số liệu marketing, tuyển dụng và tài chính</MudText>
     </div>
-    <MudMenu Label="Xuất CSV" StartIcon="@Icons.Material.Filled.Download" Variant="Variant.Outlined" Color="Color.Primary">
-        <MudMenuItem Href="/export/finance-monthly.csv" ForceLoad="true" Icon="@Icons.Material.Filled.CalendarMonth">Thu/chi theo tháng</MudMenuItem>
-        <MudMenuItem Href="/export/commissions.csv" ForceLoad="true" Icon="@Icons.Material.Filled.Handshake">Hoa hồng theo đại lý</MudMenuItem>
-        <MudMenuItem Href="/export/overdue-payments.csv" ForceLoad="true" Icon="@Icons.Material.Filled.MoneyOff">Khoản thu quá hạn</MudMenuItem>
-    </MudMenu>
+    <div class="d-flex flex-wrap" style="gap:8px">
+        <MudMenu Label="Excel" StartIcon="@Icons.Material.Filled.GridOn" Variant="Variant.Outlined" Color="Color.Success">
+            <MudMenuItem Href="/export/finance-monthly.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.CalendarMonth">Thu/chi theo tháng</MudMenuItem>
+            <MudMenuItem Href="/export/commissions.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.Handshake">Hoa hồng theo đại lý</MudMenuItem>
+            <MudMenuItem Href="/export/overdue-payments.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.MoneyOff">Khoản thu quá hạn</MudMenuItem>
+        </MudMenu>
+        <MudMenu Label="PDF" StartIcon="@Icons.Material.Filled.PictureAsPdf" Variant="Variant.Outlined" Color="Color.Error">
+            <MudMenuItem Href="/export/finance-monthly.pdf" ForceLoad="true" Icon="@Icons.Material.Filled.CalendarMonth">Thu/chi theo tháng</MudMenuItem>
+            <MudMenuItem Href="/export/commissions.pdf" ForceLoad="true" Icon="@Icons.Material.Filled.Handshake">Hoa hồng theo đại lý</MudMenuItem>
+            <MudMenuItem Href="/export/overdue-payments.pdf" ForceLoad="true" Icon="@Icons.Material.Filled.MoneyOff">Khoản thu quá hạn</MudMenuItem>
+        </MudMenu>
+        <MudMenu Label="CSV" StartIcon="@Icons.Material.Filled.Download" Variant="Variant.Outlined" Color="Color.Default">
+            <MudMenuItem Href="/export/finance-monthly.csv" ForceLoad="true" Icon="@Icons.Material.Filled.CalendarMonth">Thu/chi theo tháng</MudMenuItem>
+            <MudMenuItem Href="/export/commissions.csv" ForceLoad="true" Icon="@Icons.Material.Filled.Handshake">Hoa hồng theo đại lý</MudMenuItem>
+            <MudMenuItem Href="/export/overdue-payments.csv" ForceLoad="true" Icon="@Icons.Material.Filled.MoneyOff">Khoản thu quá hạn</MudMenuItem>
+        </MudMenu>
+    </div>
 </div>
 
 @if (_loading)

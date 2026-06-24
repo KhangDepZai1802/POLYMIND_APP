@@ -12,6 +12,9 @@ using Polymind.Web.Identity;
 using Polymind.Web.Reporting;
 using Polymind.Web.Storage;
 
+// QuestPDF: dùng giấy phép Community (miễn phí) cho xuất PDF.
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Blazor (Interactive Server)
