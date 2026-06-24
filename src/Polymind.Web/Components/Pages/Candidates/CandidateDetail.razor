@@ -7,10 +7,16 @@
 @inject IAuthorizationService AuthorizationService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IDocumentStorage DocumentStorage
+@inject AgentScope AgentScope
 
 <PageTitle>Chi tiết Ứng viên — POLYMIND</PageTitle>
 
-@if (_candidate is null)
+@if (_accessDenied)
+{
+    <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-3" OnClick="@(() => Nav.NavigateTo("/candidates"))">Quay lại</MudButton>
+    <MudAlert Severity="Severity.Error">Bạn không có quyền xem ứng viên này (chỉ xem được ứng viên do mình giới thiệu).</MudAlert>
+}
+else if (_candidate is null)
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
 }
@@ -309,6 +315,7 @@ else
     private CandidateJobOrder? _cjo;
     private string? _country;
     private bool _busy;
+    private bool _accessDenied;
     private bool _canUpdateCandidate;
     private bool _canReadPayments;
 
@@ -355,6 +362,15 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         _candidate = await db.Candidates.FirstOrDefaultAsync(c => c.Id == Id);
         if (_candidate is null) return;
+
+        // Đại lý chỉ được xem ứng viên do mình giới thiệu (spec §2.8).
+        var scope = await AgentScope.GetAsync();
+        if (scope.IsAgentOnly && _candidate.AgentId != scope.AgentId)
+        {
+            _accessDenied = true;
+            _candidate = null;
+            return;
+        }
         _cjo = await db.CandidateJobOrders.Where(j => j.CandidateId == Id)
             .OrderByDescending(j => j.CreatedAt).FirstOrDefaultAsync();
         if (_cjo is not null)

@@ -1,9 +1,12 @@
 <MudNavMenu>
-    <AuthorizeView Policy="dashboard:read">
-        <Authorized>
-            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Tổng quan</MudNavLink>
-        </Authorized>
-    </AuthorizeView>
+    @if (!_isAgentOnly)
+    {
+        <AuthorizeView Policy="dashboard:read">
+            <Authorized>
+                <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Tổng quan</MudNavLink>
+            </Authorized>
+        </AuthorizeView>
+    }
     <AuthorizeView Policy="leads:read">
         <Authorized>
             <MudNavLink Href="/leads" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ContactPhone">Lead (CRM)</MudNavLink>
@@ -34,14 +37,36 @@
             <MudNavLink Href="/visa" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.FlightTakeoff">Visa &amp; Xuất cảnh</MudNavLink>
         </Authorized>
     </AuthorizeView>
-    <AuthorizeView Policy="reports:read">
-        <Authorized>
-            <MudNavLink Href="/reports" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment">Báo cáo</MudNavLink>
-        </Authorized>
-    </AuthorizeView>
+    @if (_isAgentOnly)
+    {
+        <AuthorizeView Policy="commissions:read">
+            <Authorized>
+                <MudNavLink Href="/my-commissions" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Handshake">Hoa hồng của tôi</MudNavLink>
+            </Authorized>
+        </AuthorizeView>
+    }
+    else
+    {
+        <AuthorizeView Policy="reports:read">
+            <Authorized>
+                <MudNavLink Href="/reports" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment">Báo cáo</MudNavLink>
+            </Authorized>
+        </AuthorizeView>
+    }
     <AuthorizeView Policy="notifications:read">
         <Authorized>
             <MudNavLink Href="/notifications" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Notifications">Thông báo</MudNavLink>
         </Authorized>
     </AuthorizeView>
 </MudNavMenu>
+
+@code {
+    [Inject] private AgentScope AgentScope { get; set; } = default!;
+    private bool _isAgentOnly;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var scope = await AgentScope.GetAsync();
+        _isAgentOnly = scope.IsAgentOnly;
+    }
+}

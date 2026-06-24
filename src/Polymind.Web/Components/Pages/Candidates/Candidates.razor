@@ -6,6 +6,7 @@
 @inject ISnackbar Snackbar
 @inject IAuthorizationService AuthorizationService
 @inject AuthenticationStateProvider AuthStateProvider
+@inject AgentScope AgentScope
 
 <PageTitle>Ứng viên — POLYMIND</PageTitle>
 
@@ -93,7 +94,14 @@
     private async Task Load()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        var data = await db.Candidates
+
+        // Đại lý chỉ thấy ứng viên do mình giới thiệu (spec §2.8).
+        var scope = await AgentScope.GetAsync();
+        var query = db.Candidates.AsQueryable();
+        if (scope.IsAgentOnly)
+            query = query.Where(c => c.AgentId == scope.AgentId);
+
+        var data = await query
             .Select(c => new
             {
                 c.Id, c.Code, c.FullName, c.Phone,

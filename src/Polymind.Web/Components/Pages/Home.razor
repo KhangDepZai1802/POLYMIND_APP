@@ -1,6 +1,8 @@
 @page "/"
 @attribute [Authorize(Policy = "dashboard:read")]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AgentScope AgentScope
+@inject NavigationManager Nav
 
 <PageTitle>Tổng quan — POLYMIND</PageTitle>
 
@@ -65,6 +67,14 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        // Đại lý không xem dashboard toàn công ty — chuyển về portal hoa hồng của họ.
+        var scope = await AgentScope.GetAsync();
+        if (scope.IsAgentOnly)
+        {
+            Nav.NavigateTo("/my-commissions", replace: true);
+            return;
+        }
+
         await using var db = await DbFactory.CreateDbContextAsync();
         var startOfDay = new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero);
 

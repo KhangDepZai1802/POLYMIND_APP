@@ -1,0 +1,105 @@
+@page "/my-commissions"
+@attribute [Authorize(Policy = "commissions:read")]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AgentScope AgentScope
+
+<PageTitle>Hoa hồng của tôi — POLYMIND</PageTitle>
+
+<div class="mb-4">
+    <MudText Typo="Typo.h5"><b>Hoa hồng của tôi</b></MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">Theo dõi hoa hồng và ứng viên bạn đã giới thiệu</MudText>
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_agentId is null)
+{
+    <MudAlert Severity="Severity.Warning">Tài khoản của bạn chưa được gắn với đại lý nào. Vui lòng liên hệ quản trị viên.</MudAlert>
+}
+else
+{
+    <MudGrid>
+        @Kpi("Ứng viên giới thiệu", _candidateCount.ToString("N0"), Icons.Material.Filled.Groups, Color.Info)
+        @Kpi("Tổng hoa hồng", $"{_total:N0} đ", Icons.Material.Filled.Handshake, Color.Primary)
+        @Kpi("Đã chi", $"{_paid:N0} đ", Icons.Material.Filled.Paid, Color.Success)
+        @Kpi("Chờ/đang duyệt", $"{(_total - _paid):N0} đ", Icons.Material.Filled.HourglassBottom, Color.Warning)
+    </MudGrid>
+
+    <MudPaper Class="pa-4 mt-2" Elevation="1">
+        <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Chi tiết hoa hồng (@_rows.Count)</b></MudText>
+        @if (_rows.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">Chưa có hoa hồng phát sinh.</MudAlert>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                <thead>
+                    <tr>
+                        <th>Ứng viên</th>
+                        <th>Mốc</th>
+                        <th style="text-align:right">Hoa hồng</th>
+                        <th>Trạng thái</th>
+                        <th>Ngày chi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _rows)
+                    {
+                        <tr>
+                            <td>@r.CandidateName</td>
+                            <td>@Labels.Vi(r.Milestone)</td>
+                            <td style="text-align:right">@($"{r.Amount:N0} đ")</td>
+                            <td><MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(r.Status)">@Labels.Vi(r.Status)</MudChip></td>
+                            <td>@(r.PaidDate?.ToString("dd/MM/yyyy") ?? "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </MudPaper>
+}
+
+@code {
+    private bool _loading = true;
+    private Guid? _agentId;
+    private int _candidateCount;
+    private decimal _total, _paid;
+
+    private record Row(string CandidateName, CommissionMilestone Milestone, decimal Amount, CommissionStatus Status, DateOnly? PaidDate);
+    private List<Row> _rows = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var scope = await AgentScope.GetAsync();
+        _agentId = scope.AgentId;
+        if (_agentId is null) { _loading = false; return; }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _candidateCount = await db.Candidates.CountAsync(c => c.AgentId == _agentId);
+
+        var names = await db.Candidates.ToDictionaryAsync(c => c.Id, c => c.FullName);
+        var commissions = await db.AgentCommissions.Where(c => c.AgentId == _agentId)
+            .OrderByDescending(c => c.CreatedAt).ToListAsync();
+        _rows = commissions.Select(c => new Row(
+            names.GetValueOrDefault(c.CandidateId, "—"), c.Milestone, c.CommissionAmount, c.Status, c.PaidDate)).ToList();
+        _total = commissions.Sum(c => c.CommissionAmount);
+        _paid = commissions.Where(c => c.Status == CommissionStatus.Paid).Sum(c => c.CommissionAmount);
+
+        _loading = false;
+    }
+
+    private RenderFragment Kpi(string title, string value, string icon, Color color) =>@<MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+            <div class="d-flex justify-space-between align-start">
+                <div>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@title</MudText>
+                    <MudText Typo="Typo.h6"><b>@value</b></MudText>
+                </div>
+                <MudIcon Icon="@icon" Color="@color" Size="Size.Large" />
+            </div>
+        </MudPaper>
+    </MudItem>;
+}

@@ -1,6 +1,8 @@
 @page "/reports"
 @attribute [Authorize(Policy = "reports:read")]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AgentScope AgentScope
+@inject NavigationManager Nav
 
 <PageTitle>Báo cáo — POLYMIND</PageTitle>
 
@@ -314,6 +316,14 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        // Đại lý không xem báo cáo tài chính toàn công ty — chuyển về portal hoa hồng của họ.
+        var scope = await AgentScope.GetAsync();
+        if (scope.IsAgentOnly)
+        {
+            Nav.NavigateTo("/my-commissions", replace: true);
+            return;
+        }
+
         await using var db = await DbFactory.CreateDbContextAsync();
 
         // --- Lead ---

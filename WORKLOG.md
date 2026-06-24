@@ -36,6 +36,7 @@
 - **ĐỢT 1 đã xong (Session 10):** UI cấu hình hoa hồng theo đại lý, tự sinh `AgentCommission` khi ứng viên đạt mốc Deposit/Selected/Departure, duyệt khoản thu và duyệt/đánh dấu đã chi hoa hồng. Build xanh, smoke-test `/finance`, `/agents/{id}`, `/candidates/{id}` HTTP 200.
 - **ĐỢT 2 đã xong (Session 11):** audit log thực thi cho các thao tác chính (ứng viên, payment/expense, chuyển bước, hoa hồng, cấu hình hoa hồng) và thêm section **Công nợ ứng viên** trong `CandidateDetail` gated bằng `payments:read`.
 - **ĐỢT 3 đã xong (Session 12):** wiring MinIO thật bằng package `Minio`, cấu hình bucket `polymind-documents`, service upload/download hồ sơ, UI **Hồ sơ ứng viên** trong `CandidateDetail` với upload version + link tải presigned URL.
+- **ĐỢT 5 đã xong (Session 14):** **Portal đại lý + RBAC data-scope.** Seed gắn tài khoản `agent@` vào đại lý AG-000001 (idempotent). `AgentScope` service phân giải `(IsAgentOnly, AgentId)`. Trang `/candidates` lọc theo `AgentId` cho đại lý; `/candidates/{id}` chặn xem ứng viên không thuộc đại lý mình. Trang mới `/my-commissions` (portal hoa hồng). `/` và `/reports` redirect đại lý về `/my-commissions` (chống lộ số liệu công ty). NavMenu ẩn Tổng quan/Báo cáo cho đại lý, hiện "Hoa hồng của tôi". Smoke-test: agent thấy 3/12 ứng viên, 5 hoa hồng; admin vẫn full. **Hoàn tất lộ trình 5 đợt nâng cấp.**
 - **ĐỢT 4 đã xong (Session 13):** (1) **Báo cáo mở rộng** — thêm 4 KPI (công nợ phải thu, khoản thu quá hạn, hồ sơ đã tải, sắp xuất cảnh 30 ngày) + 4 section mới (hồ sơ theo loại, khoản thu quá hạn, lịch visa & lịch xuất cảnh 30 ngày). (2) **Dashboard Home** thêm 3 KPI (công nợ/quá hạn/sắp xuất cảnh). (3) **Thông báo in-app (stub)** — `NotificationService` sinh reminder idempotent (khoản thu quá hạn/sắp tới, lịch visa, xuất cảnh, hồ sơ thiếu), bell badge ở topbar, trang `/notifications` (list + đánh dấu đã đọc + quét lại). (4) **Export CSV** — 3 endpoint `/export/*.csv` (thu/chi theo tháng, hoa hồng, khoản thu quá hạn) gated `reports:read`, BOM UTF-8 cho tiếng Việt, nút "Xuất CSV" trên trang Báo cáo. Build xanh, smoke-test `/`, `/reports`, `/notifications` = 200 không error-boundary, 3 CSV trả đúng `text/csv` + tiếng Việt đúng dấu, DB sinh 8 reminder thật.
 - **Kế hoạch nâng cấp:** xem `C:\Users\khang\.claude\plans\t-nh-ng-c-i-b-n-lexical-hejlsberg.md` (lộ trình 5 đợt; chốt giữ kiến trúc Blazor Server + Cookie, MinIO wiring thật, Email/SMS/Zalo stub).
 - **RBAC thực thi đã có code nền:** seed 8 user mẫu/role permissions, permission claims khi login, policy động dạng `resource:action`, ẩn menu theo quyền và chặn các nút ghi dữ liệu chính.
@@ -43,10 +44,17 @@
 
 ## ⏭️ VIỆC TIẾP THEO (baton — làm cái này trước)
 
-**Đã xong ĐỢT 4 — Báo cáo/Dashboard mở rộng + thông báo stub + export CSV.** Tiếp theo là **ĐỢT 5 — Portal đại lý + siết RBAC data-scope** (mục cuối plan file):
-1. **Portal đại lý (spec §2.8):** role `agent` chỉ xem ứng viên **mình giới thiệu** (`Candidate.AgentId == currentAgentId`) + hoa hồng của mình; siết `/candidates` và `/reports` đang quá rộng. Cần map user↔Agent (hiện chưa có liên kết) — kiểm `ApplicationUser`/seed để biết cách gắn.
-2. **RBAC data-scope:** lọc dữ liệu theo quyền sở hữu, không chỉ ẩn menu. Cân nhắc helper scope chung cho các trang list.
-3. (Tùy chọn) Nâng cấp thông báo: gửi Email/SMS/Zalo thật (hiện chỉ stub in-app); chạy sinh reminder định kỳ bằng Hangfire thay vì sinh khi mở trang.
+**Đã xong cả 5 đợt nâng cấp (Đợt 1→5).** Không còn baton bắt buộc. Việc tiếp theo là **polish/tùy chọn** — chọn theo ưu tiên đối tác:
+1. **Thông báo nâng cao:** gửi Email/SMS/Zalo thật (hiện chỉ stub in-app); sinh reminder định kỳ bằng Hangfire thay vì sinh khi mở trang/topbar; thông báo nhắm đúng người phụ trách (hiện nhắm user đang đăng nhập).
+2. **Export nâng cao:** Excel thật (ClosedXML) / PDF (QuestPDF) thay CSV nếu đối tác cần định dạng đẹp.
+3. **Siết RBAC sâu hơn:** scope dữ liệu cho các role nội bộ khác (vd recruiter chỉ thấy lead/ứng viên mình phụ trách) nếu spec yêu cầu; hiện mới scope role `agent`.
+4. **Wiring còn nợ:** Redis cache, Hangfire job, QuestPDF/ClosedXML — gắn khi tới phần dùng.
+
+**Lưu ý Đợt 5 cho người sau:**
+- `AgentScope` (scoped, `Identity/AgentScope.cs`) là nguồn sự thật cho data-scope đại lý: `GetAsync()` trả `(IsAgentOnly, AgentId)`, cache trong 1 request. "Agent-only" = có role `agent` và KHÔNG kèm role nội bộ nào. Dùng nó ở mọi trang dùng chung cần bó hẹp.
+- Đại lý gắn user qua `Agent.UserId` (seed ở `SeedExtrasAsync`, idempotent — chỉ gắn nếu chưa có agent nào trỏ tới user đó). Demo: `agent@` ↔ AG-000001.
+- Redirect đại lý khỏi `/` và `/reports` đặt trong `OnInitializedAsync` trước khi load DB (defense-in-depth), cộng ẩn menu trong `NavMenu` (`_isAgentOnly`). Nếu thêm trang nhạy cảm mới, nhớ cả 2 lớp.
+- Permission seed cho `agent` vẫn còn `dashboard:read`/`reports:read` (không gỡ vì `AssignRolePermissions` chỉ thêm, không xóa) — nên chặn bằng redirect + ẩn menu chứ không dựa vào policy. Nếu muốn gỡ hẳn, phải nâng seeder thành reconcile (thêm + xóa).
 
 **Lưu ý Đợt 4 cho người sau:**
 - Trang `/notifications`: class page `Notifications` **trùng tên** property inject → đã đổi tên service inject thành `NotificationSvc` (đừng đặt lại thành `Notifications`).
@@ -67,6 +75,18 @@
 ---
 
 ## 📜 NHẬT KÝ SESSION (mới nhất ở trên)
+
+### [2026-06-24] Session 14 — Claude
+- **Làm được:** Hoàn thành **ĐỢT 5 — Portal đại lý + RBAC data-scope** (đợt cuối lộ trình).
+  - **Seed:** `DemoDataSeeder.SeedExtrasAsync` gắn user `agent@polymind.local` → đại lý AG-000001 qua `Agent.UserId` (idempotent, chỉ gắn nếu chưa agent nào trỏ tới user). Xác minh DB: AG-000001 `linked=t`.
+  - **AgentScope** (`Identity/AgentScope.cs`, scoped DI): `GetAsync()` trả `(IsAgentOnly, AgentId)` — agent-only = role `agent` & không kèm role nội bộ; resolve `AgentId` từ `Agents.UserId == userId`. Cache 1 request.
+  - **Scope dữ liệu:** `/candidates` lọc `c.AgentId == scope.AgentId` cho đại lý; `/candidates/{id}` thêm guard `_accessDenied` (đại lý xem ứng viên không thuộc mình → alert đỏ, không render chi tiết).
+  - **Portal:** trang mới `Components/Pages/Portal/MyCommissions.razor` (`/my-commissions`, gate `commissions:read`): 4 KPI (ứng viên giới thiệu / tổng / đã chi / chờ duyệt) + bảng hoa hồng của đại lý; nếu user chưa gắn đại lý → cảnh báo.
+  - **Chống lộ:** `/` (Home) và `/reports` redirect đại lý về `/my-commissions` ngay trong `OnInitializedAsync`. `NavMenu` ẩn "Tổng quan" + "Báo cáo" cho đại lý, hiện "Hoa hồng của tôi" (inject `AgentScope`, `_isAgentOnly`).
+  - **README:** `docs/00-README.md` thêm bảng **8 tài khoản demo theo vai trò** (email + quyền chính, mật khẩu chung `Admin@123`) theo yêu cầu user.
+- **File thay đổi chính:** `Identity/AgentScope.cs` (mới), `Components/Pages/Portal/MyCommissions.razor` (mới), `DemoDataSeeder.cs`, `Components/Pages/Candidates/Candidates.razor` + `CandidateDetail.razor`, `Components/Pages/Reports/Reports.razor`, `Components/Pages/Home.razor`, `Components/Layout/NavMenu.razor`, `Program.cs`, `Components/_Imports.razor`, `docs/00-README.md`.
+- **Đã test:** `dotnet build Polymind.slnx` = 0 error, 1 warning cũ `BL0008`. Chạy web `:5177`. **Admin:** `/`, `/reports`, `/candidates`, `/my-commissions` = 200 (full). **Agent (`agent@`):** `/candidates` = 200 (thấy **3/12** ứng viên — scoped đúng), `/my-commissions` = 200 (5 hoa hồng), `/` & `/reports` redirect → `/my-commissions`, xem chi tiết ứng viên đại lý khác → **bị chặn** (alert denied). DB xác minh: total 12 / AG-000001 = 3 ứng viên / 5 hoa hồng.
+- **Lưu ý/cảnh báo cho người sau:** (1) Permission `agent` vẫn còn `dashboard:read`/`reports:read` (seeder chỉ thêm không xóa) → bảo vệ bằng **redirect + ẩn menu**, không dựa policy; muốn gỡ hẳn phải nâng seeder thành reconcile. (2) Dùng `AgentScope` cho mọi trang dùng chung cần bó hẹp; nếu thêm trang nhạy cảm mới nhớ cả 2 lớp (redirect + ẩn menu). (3) Web app đang chạy `:5177` (log `C:\tmp\polymind-web-phase5.*.log`) — `Stop-Process -Name Polymind.Web` trước khi build lại.
 
 ### [2026-06-24] Session 13 — Claude
 - **Làm được:** Hoàn thành **ĐỢT 4 — Báo cáo/Dashboard mở rộng + Thông báo stub + Export CSV**.

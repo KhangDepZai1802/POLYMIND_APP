@@ -28,6 +28,9 @@ builder.Services.AddScoped<IDocumentStorage, MinioDocumentStorage>();
 // Thông báo in-app (stub)
 builder.Services.AddScoped<Polymind.Web.Notifications.NotificationService>();
 
+// Phạm vi dữ liệu Portal đại lý
+builder.Services.AddScoped<Polymind.Web.Identity.AgentScope>();
+
 // EF Core (PostgreSQL) + ASP.NET Core Identity
 builder.Services.AddInfrastructure(builder.Configuration);
 

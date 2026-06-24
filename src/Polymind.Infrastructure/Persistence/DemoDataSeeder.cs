@@ -162,6 +162,19 @@ public static class DemoDataSeeder
         var jobOrders = await db.JobOrders.ToDictionaryAsync(j => j.Id);
         var candAgent = await db.Candidates.ToDictionaryAsync(c => c.Id, c => c.AgentId);
 
+        // ---- Portal đại lý: gắn tài khoản agent@ vào 1 đại lý (để demo data-scope) ----
+        var agentUser = await db.Users.FirstOrDefaultAsync(u => u.NormalizedEmail == "AGENT@POLYMIND.LOCAL");
+        if (agentUser is not null && !await db.Agents.AnyAsync(a => a.UserId == agentUser.Id))
+        {
+            var firstAgent = await db.Agents.OrderBy(a => a.Code).FirstOrDefaultAsync(a => a.UserId == null);
+            if (firstAgent is not null)
+            {
+                firstAgent.UserId = agentUser.Id;
+                firstAgent.UpdatedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync();
+            }
+        }
+
         // ---- Visa: ứng viên đã tới bước Nộp hồ sơ Visa trở đi ----
         if (!await db.Visas.AnyAsync())
         {
