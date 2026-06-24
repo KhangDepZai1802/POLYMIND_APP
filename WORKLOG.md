@@ -51,6 +51,12 @@
 
 ## 📜 NHẬT KÝ SESSION (mới nhất ở trên)
 
+### [2026-06-24] Session 5 — Codex
+- **Làm được:** Khởi tạo Git repository local hợp lệ, thêm remote `https://github.com/KhangDepZai1802/POLYMIND_APP.git`, commit source dự án và push lên GitHub branch `main`.
+- **File thay đổi chính:** `.gitignore` thêm `.claude/` để không đẩy cấu hình local; `WORKLOG.md` cập nhật nhật ký push GitHub.
+- **Đã test:** `dotnet build Polymind.slnx` = 0 error, 0 warning sau khi dừng web app đang giữ lock DLL. `git push -u origin main` thành công.
+- **Lưu ý/cảnh báo cho người sau:** Web app process chạy nền trước đó đã được dừng để build/push. Remote GitHub hiện track `origin/main`; `.claude/settings.local.json` không được commit.
+
 ### [2026-06-24] Session 4 — Codex
 - **Làm được:** Chạy lại web app phục vụ kiểm tra thủ công. Docker services đang chạy (`polymind-postgres`, `polymind-redis`, `polymind-minio`), web app listen tại `http://localhost:5177`.
 - **File thay đổi chính:** Không đổi source code; chỉ cập nhật `WORKLOG.md`.
