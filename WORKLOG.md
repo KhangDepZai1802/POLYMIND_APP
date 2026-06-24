@@ -31,6 +31,7 @@
 
 - **Bản demo MVP chạy được**, đã smoke-test toàn bộ trang HTTP 200. App: `http://localhost:5177`, login `admin@polymind.local / Admin@123`.
 - Build sạch (`dotnet build Polymind.slnx` = 0 error, 0 warning). Docker (Postgres/Redis/MinIO) cần `docker compose up -d`.
+- **Session 20:** Docker services đã bật; Codex chưa start được web app do lệnh chạy nền/DLL bị hệ thống approval chặn. Chạy thủ công bằng lệnh trong nhật ký Session 20 nếu cần mở demo ngay.
 - Đã xong: nền tảng + auth + Dashboard + Lead CRM + **Ứng viên CRUD** + **Đơn hàng CRUD** + **Tài chính (Thu/Chi)** + **Đại lý & Hoa hồng** + **Visa & Xuất cảnh (Visa + Vé máy bay CRUD)** + **Báo cáo & Thống kê** + demo data. **Không còn placeholder nào** — tất cả menu đều có trang thật.
 - **Demo data đầy đủ (Session 9):** đã seed bù **Visa(4) + Vé máy bay(3) + Cấu hình hoa hồng(9) + Hoa hồng phát sinh(8)** → trang Báo cáo "Hoa hồng theo đại lý" và trang Visa đã có dữ liệu thật. Đã smoke-test 12 trang (admin 200, không exception) + RBAC 4 role (recruiter/accountant/visa.staff/agent) không lỗi. **Sẵn sàng demo đối tác.**
 - **ĐỢT 1 đã xong (Session 10):** UI cấu hình hoa hồng theo đại lý, tự sinh `AgentCommission` khi ứng viên đạt mốc Deposit/Selected/Departure, duyệt khoản thu và duyệt/đánh dấu đã chi hoa hồng. Build xanh, smoke-test `/finance`, `/agents/{id}`, `/candidates/{id}` HTTP 200.
@@ -53,6 +54,7 @@
 1. Chốt scope Phase H trước khi code: REST API/JWT cho tích hợp ngoài, Facebook/TikTok/Google Lead API, Zalo OA/SMS provider thật, OCR CCCD/Passport, chữ ký số, mobile app, BI/AI là các hạng mục phụ thuộc provider/thiết kế riêng.
 2. Nếu chưa chốt Phase H, việc thực tế nên làm ngay là **deploy rehearsal**: tạo `.env.production`, đặt chứng chỉ thật vào `deploy/nginx/certs/`, chạy `docker compose --env-file .env.production -f docker-compose.production.yml up -d --build`, test `/health`, chạy `scripts/smoke-test.ps1` qua domain thật.
 3. Commit/push các thay đổi Phase F→G lên GitHub nếu muốn đồng bộ remote trước khi triển khai.
+4. Nếu chỉ cần chạy demo local: `docker compose up -d`, rồi trong terminal chạy DLL build sẵn từ `src/Polymind.Web`: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet bin\Debug\net10.0\Polymind.Web.dll --urls http://localhost:5177`.
 
 **Lưu ý Đợt 5 cho người sau:**
 - `AgentScope` (scoped, `Identity/AgentScope.cs`) là nguồn sự thật cho data-scope đại lý: `GetAsync()` trả `(IsAgentOnly, AgentId)`, cache trong 1 request. "Agent-only" = có role `agent` và KHÔNG kèm role nội bộ nào. Dùng nó ở mọi trang dùng chung cần bó hẹp.
@@ -79,6 +81,12 @@
 ---
 
 ## 📜 NHẬT KÝ SESSION (mới nhất ở trên)
+
+### [2026-06-24] Session 20 — Codex
+- **Làm được:** Đọc lại `WORKLOG.md`, bật Docker services bằng `docker compose up -d` (Postgres/Redis/MinIO đều Running), kiểm tra cổng `5177` ban đầu chưa có listener.
+- **File chính:** `WORKLOG.md` cập nhật trạng thái chạy web.
+- **Đã test:** `dotnet run` bị chặn restore NuGet do sandbox không truy cập `api.nuget.org`; `dotnet run --no-restore` vẫn chạm restore. Lệnh start trực tiếp DLL build sẵn bị hệ thống approval/usage limit chặn, nên web app chưa được Codex start. Không đổi code app.
+- **Lưu ý/cảnh báo cho người sau:** Docker services đang chạy. Để mở web ngay, chạy thủ công: `cd "C:\Users\khang\OneDrive\Documents\POLYMIND APP\src\Polymind.Web"; $env:ASPNETCORE_ENVIRONMENT='Development'; dotnet bin\Debug\net10.0\Polymind.Web.dll --urls http://localhost:5177`. Nếu muốn dùng `dotnet run`, cần môi trường có quyền restore NuGet/network hoặc package cache hợp lệ.
 
 ### [2026-06-24] Session 19 — Codex
 - **Làm được:** Hoàn thành **Phase F + G**. Phase F: tách secrets khỏi `appsettings.json`, thêm `appsettings.Development/Production`, Serilog console + rolling file, health check `/health` cho DB/MinIO, forwarded headers, security headers, cookie hardening, password policy + lockout, cập nhật login ghi `LastLoginAt` và báo tài khoản khóa, trang lỗi thân thiện. Phase G: Dockerfile multi-stage, `docker-compose.production.yml`, Nginx HTTPS reverse proxy, `.env.production.example`, script backup/restore/smoke-test, cập nhật README vận hành.
