@@ -1,0 +1,141 @@
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudSelect T="CommissionMilestone" @bind-Value="_m.Milestone" Label="Mốc *" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var ms in Enum.GetValues<CommissionMilestone>())
+                    {
+                        <MudSelectItem Value="@ms">@Labels.Vi(ms)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudSelect T="Guid?" @bind-Value="_m.JobOrderId" Label="Áp dụng cho đơn hàng (để trống = mọi đơn)" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                    @foreach (var j in _jobOrders)
+                    {
+                        <MudSelectItem T="Guid?" Value="@j.Id">@j.Code — @j.Country</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_m.Country" Label="Áp dụng cho quốc gia (để trống = mọi quốc gia)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudNumericField @bind-Value="_m.Percentage" Label="% hoa hồng" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="100" Adornment="Adornment.End" AdornmentText="%" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudNumericField @bind-Value="_m.FixedAmount" Label="Hoặc số tiền cố định (đ)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Nhập % (tính trên chi phí tham gia của đơn hàng) hoặc số tiền cố định. Nếu nhập cả hai, hệ thống ưu tiên %.</MudText>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Hủy</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="_saving">Lưu</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public Guid AgentId { get; set; }
+    /// <summary>Null = tạo mới; có giá trị = sửa cấu hình hiện có.</summary>
+    [Parameter] public Guid? ConfigId { get; set; }
+
+    private readonly FormModel _m = new();
+    private List<JobOrder> _jobOrders = new();
+    private bool _saving;
+    private bool IsEdit => ConfigId is not null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _jobOrders = await db.JobOrders.OrderByDescending(j => j.CreatedAt).ToListAsync();
+        if (ConfigId is null) return;
+        var cfg = await db.AgentCommissionConfigs.FirstOrDefaultAsync(x => x.Id == ConfigId);
+        if (cfg is not null) _m.LoadFrom(cfg);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        if (_m.Percentage is null && _m.FixedAmount is null)
+        {
+            Snackbar.Add("Nhập % hoặc số tiền cố định.", Severity.Warning);
+            return;
+        }
+        if (!await HasPermission("agents:update"))
+        {
+            Snackbar.Add("Bạn không có quyền cấu hình hoa hồng.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (IsEdit)
+            {
+                var cfg = await db.AgentCommissionConfigs.FirstOrDefaultAsync(x => x.Id == ConfigId);
+                if (cfg is null) { Snackbar.Add("Không tìm thấy cấu hình.", Severity.Error); return; }
+                _m.ApplyTo(cfg);
+                cfg.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+            else
+            {
+                var cfg = new AgentCommissionConfig { AgentId = AgentId };
+                _m.ApplyTo(cfg);
+                db.AgentCommissionConfigs.Add(cfg);
+            }
+            await db.SaveChangesAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private async Task<bool> HasPermission(string permission)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        return result.Succeeded;
+    }
+
+    private sealed class FormModel
+    {
+        public CommissionMilestone Milestone { get; set; } = CommissionMilestone.Deposit;
+        public Guid? JobOrderId { get; set; }
+        public string? Country { get; set; }
+        public decimal? Percentage { get; set; }
+        public decimal? FixedAmount { get; set; }
+
+        public void LoadFrom(AgentCommissionConfig c)
+        {
+            Milestone = c.Milestone;
+            JobOrderId = c.JobOrderId;
+            Country = c.Country;
+            Percentage = c.Percentage;
+            FixedAmount = c.FixedAmount;
+        }
+
+        public void ApplyTo(AgentCommissionConfig c)
+        {
+            c.Milestone = Milestone;
+            c.JobOrderId = JobOrderId;
+            c.Country = string.IsNullOrWhiteSpace(Country) ? null : Country.Trim();
+            c.Percentage = Percentage;
+            c.FixedAmount = Percentage.HasValue ? null : FixedAmount;
+        }
+    }
+}

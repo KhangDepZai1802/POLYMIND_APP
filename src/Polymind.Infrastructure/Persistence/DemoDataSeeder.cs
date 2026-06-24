@@ -13,10 +13,14 @@ public static class DemoDataSeeder
         using var scope = sp.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        if (await db.Leads.AnyAsync()) return; // đã có dữ liệu → bỏ qua
-
         var adminId = await db.Users.Select(u => u.Id).FirstOrDefaultAsync();
         var rnd = new Random(42);
+
+        if (await db.Leads.AnyAsync()) // core đã seed → chỉ bù dữ liệu mở rộng (idempotent theo bảng)
+        {
+            await SeedExtrasAsync(db, rnd, adminId);
+            return;
+        }
 
         // ---- Đơn hàng tuyển dụng ----
         var jobOrders = new[]
@@ -142,7 +146,130 @@ public static class DemoDataSeeder
             c++;
         }
         await db.SaveChangesAsync();
+
+        await SeedExtrasAsync(db, rnd, adminId);
     }
+
+    /// <summary>Bù dữ liệu demo cho Visa / Vé máy bay / Cấu hình &amp; phát sinh hoa hồng.
+    /// Idempotent theo từng bảng nên an toàn chạy lại trên DB đã seed.</summary>
+    private static async Task SeedExtrasAsync(ApplicationDbContext db, Random rnd, Guid adminId)
+    {
+        var cjos = await db.CandidateJobOrders
+            .Select(x => new { x.CandidateId, x.JobOrderId, x.CurrentStep })
+            .ToListAsync();
+        if (cjos.Count == 0) return;
+
+        var jobOrders = await db.JobOrders.ToDictionaryAsync(j => j.Id);
+        var candAgent = await db.Candidates.ToDictionaryAsync(c => c.Id, c => c.AgentId);
+
+        // ---- Visa: ứng viên đã tới bước Nộp hồ sơ Visa trở đi ----
+        if (!await db.Visas.AnyAsync())
+        {
+            foreach (var x in cjos.Where(x => (int)x.CurrentStep >= (int)WorkflowStep.VisaSubmit))
+            {
+                var jo = jobOrders[x.JobOrderId];
+                var status = x.CurrentStep switch
+                {
+                    WorkflowStep.VisaSubmit => VisaStatus.Submitted,
+                    >= WorkflowStep.VisaApproved => VisaStatus.Approved,
+                    _ => VisaStatus.Submitted
+                };
+                var submitted = DateTimeOffset.UtcNow.AddDays(-rnd.Next(20, 60));
+                db.Visas.Add(new Visa
+                {
+                    CandidateId = x.CandidateId,
+                    JobOrderId = x.JobOrderId,
+                    Country = jo.Country,
+                    VisaType = jo.Country == "Nhật Bản" ? "Tokutei Ginou" : "Lao động",
+                    Status = status,
+                    SubmittedDate = DateOnly.FromDateTime(submitted.UtcDateTime),
+                    InterviewDate = DateOnly.FromDateTime(submitted.AddDays(10).UtcDateTime),
+                    ResultDate = status == VisaStatus.Approved ? DateOnly.FromDateTime(submitted.AddDays(20).UtcDateTime) : null,
+                    HandledBy = adminId,
+                });
+            }
+        }
+
+        // ---- Vé máy bay: ứng viên đã tới bước Đặt vé máy bay trở đi ----
+        if (!await db.Flights.AnyAsync())
+        {
+            string[] airlines = { "Vietnam Airlines", "Vietjet Air", "Japan Airlines", "Korean Air", "China Airlines" };
+            foreach (var x in cjos.Where(x => (int)x.CurrentStep >= (int)WorkflowStep.BookFlight))
+            {
+                var jo = jobOrders[x.JobOrderId];
+                var dep = DateTimeOffset.UtcNow.AddDays(rnd.Next(5, 40));
+                db.Flights.Add(new Flight
+                {
+                    CandidateId = x.CandidateId,
+                    JobOrderId = x.JobOrderId,
+                    Airline = airlines[rnd.Next(airlines.Length)],
+                    TicketCode = $"VN{rnd.Next(100, 999)}-{rnd.Next(1000, 9999)}",
+                    DepartureDate = DateOnly.FromDateTime(dep.UtcDateTime),
+                    DepartureTime = new TimeOnly(rnd.Next(6, 22), rnd.Next(0, 60)),
+                    DepartureAirport = "Nội Bài (HAN)",
+                    DestinationCountry = jo.Country,
+                    DestinationAirport = AirportOf(jo.Country),
+                    ActualDepartureAt = x.CurrentStep >= WorkflowStep.Departure ? dep : null,
+                    AssignedTo = adminId,
+                });
+            }
+        }
+
+        // ---- Cấu hình hoa hồng cho mỗi đại lý: 20% đặt cọc / 30% trúng tuyển / 50% xuất cảnh ----
+        if (!await db.AgentCommissionConfigs.AnyAsync())
+        {
+            var agentIds = await db.Agents.Select(a => a.Id).ToListAsync();
+            foreach (var aid in agentIds)
+            {
+                db.AgentCommissionConfigs.Add(new AgentCommissionConfig { AgentId = aid, Milestone = CommissionMilestone.Deposit, Percentage = 20 });
+                db.AgentCommissionConfigs.Add(new AgentCommissionConfig { AgentId = aid, Milestone = CommissionMilestone.Selected, Percentage = 30 });
+                db.AgentCommissionConfigs.Add(new AgentCommissionConfig { AgentId = aid, Milestone = CommissionMilestone.Departure, Percentage = 50 });
+            }
+        }
+
+        // ---- Hoa hồng phát sinh theo mốc cho ứng viên có đại lý ----
+        if (!await db.AgentCommissions.AnyAsync())
+        {
+            var milestones = new (CommissionMilestone Milestone, WorkflowStep Step, decimal Percent)[]
+            {
+                (CommissionMilestone.Deposit, WorkflowStep.Deposit, 20m),
+                (CommissionMilestone.Selected, WorkflowStep.Selected, 30m),
+                (CommissionMilestone.Departure, WorkflowStep.Departure, 50m),
+            };
+            foreach (var x in cjos)
+            {
+                var agentId = candAgent.GetValueOrDefault(x.CandidateId);
+                if (agentId is null) continue;
+                var jo = jobOrders[x.JobOrderId];
+                var baseAmount = jo.CostAmount ?? 120_000_000m;
+                foreach (var m in milestones)
+                {
+                    if ((int)x.CurrentStep < (int)m.Step) continue;
+                    db.AgentCommissions.Add(new AgentCommission
+                    {
+                        AgentId = agentId.Value,
+                        CandidateId = x.CandidateId,
+                        JobOrderId = x.JobOrderId,
+                        Milestone = m.Milestone,
+                        BaseAmount = baseAmount,
+                        CommissionAmount = baseAmount * m.Percent / 100m,
+                        Status = x.CurrentStep >= WorkflowStep.Departure ? CommissionStatus.Approved : CommissionStatus.Pending,
+                    });
+                }
+            }
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    private static string AirportOf(string country) => country switch
+    {
+        "Nhật Bản" => "Narita (NRT)",
+        "Hàn Quốc" => "Incheon (ICN)",
+        "Đài Loan" => "Đào Viên (TPE)",
+        "Đức" => "Frankfurt (FRA)",
+        _ => "—"
+    };
 
     private static JobOrder NewJobOrder(string country, string union, string company, string field, int qty, Guid createdBy)
     {

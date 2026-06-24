@@ -31,27 +31,49 @@
 
 - **Bản demo MVP chạy được**, đã smoke-test toàn bộ trang HTTP 200. App: `http://localhost:5177`, login `admin@polymind.local / Admin@123`.
 - Build sạch (`dotnet build Polymind.slnx` = 0 error, 1 warning cũ `BL0008` ở Login.razor — vô hại). Docker (Postgres/Redis/MinIO) cần `docker compose up -d`.
-- Đã xong: nền tảng + auth + Dashboard + Lead CRM + **Ứng viên CRUD** + **Đơn hàng CRUD** + **Tài chính (Thu/Chi)** + **Đại lý & Hoa hồng** + **Visa & Xuất cảnh (Visa + Vé máy bay CRUD)** + demo data.
+- Đã xong: nền tảng + auth + Dashboard + Lead CRM + **Ứng viên CRUD** + **Đơn hàng CRUD** + **Tài chính (Thu/Chi)** + **Đại lý & Hoa hồng** + **Visa & Xuất cảnh (Visa + Vé máy bay CRUD)** + **Báo cáo & Thống kê** + demo data. **Không còn placeholder nào** — tất cả menu đều có trang thật.
+- **Demo data đầy đủ (Session 9):** đã seed bù **Visa(4) + Vé máy bay(3) + Cấu hình hoa hồng(9) + Hoa hồng phát sinh(8)** → trang Báo cáo "Hoa hồng theo đại lý" và trang Visa đã có dữ liệu thật. Đã smoke-test 12 trang (admin 200, không exception) + RBAC 4 role (recruiter/accountant/visa.staff/agent) không lỗi. **Sẵn sàng demo đối tác.**
+- **Kế hoạch nâng cấp:** xem `C:\Users\khang\.claude\plans\t-nh-ng-c-i-b-n-lexical-hejlsberg.md` (lộ trình 5 đợt; chốt giữ kiến trúc Blazor Server + Cookie, MinIO wiring thật, Email/SMS/Zalo stub).
 - **RBAC thực thi đã có code nền:** seed 8 user mẫu/role permissions, permission claims khi login, policy động dạng `resource:action`, ẩn menu theo quyền và chặn các nút ghi dữ liệu chính.
 - **Đã sửa lỗi nút/dialog không bấm được:** chuyển sang **interactivity toàn cục** (render mode đặt ở `Routes`/`HeadOutlet` trong `App.razor`, Login dùng `[ExcludeFromInteractiveRouting]` để giữ SSR). Trước đó layout + MudBlazor providers bị render tĩnh nên dialog/snackbar/drawer chết.
 
 ## ⏭️ VIỆC TIẾP THEO (baton — làm cái này trước)
 
-**P1.7 Module Báo cáo (`/reports` đang là placeholder) — đây là placeholder CUỐI CÙNG:**
-1. Trang `Pages/Reports/Reports.razor` (đặt trong folder): tổng hợp số liệu từ các bảng đã có. Gợi ý các thẻ/biểu đồ: tổng lead theo nguồn/trạng thái, tỉ lệ chuyển đổi lead→ứng viên, số ứng viên theo bước workflow, doanh thu (Payments) vs chi phí (Expenses) theo tháng, hoa hồng theo đại lý. Gate `reports:read`.
-2. Có thể dùng MudChart (MudBlazor) cho biểu đồ cột/tròn; dữ liệu group bằng EF `GroupBy`. Tham khảo Dashboard `Home.razor` đã có sẵn vài KPI.
-3. **LƯU Ý khi tạo trang mới:** KHÔNG thêm `@rendermode`; **đặt page trong folder + đừng đặt tên class trùng entity** (bài học Visa: page `Visa` trùng entity `Visa` → phải đổi thành `Visas`).
-4. **Nợ kỹ thuật còn treo sau P1.7:** (a) smoke-test RBAC bằng từng tài khoản mẫu (`recruiter/accountant/visa.staff/agent` @ `Admin@123`); (b) CandidateDocument upload (cần wiring MinIO); (c) UI tạo AgentCommission/Config (demo chưa seed commission — mới hiển thị); (d) demo chưa seed Visa/Flight nên 2 bảng này trống tới khi nhập tay.
+**Đã xong ĐỢT 0 (chuẩn bị demo).** Tiếp theo theo kế hoạch là **ĐỢT 1 — Hoa hồng tự tính + Phê duyệt** (nghiệp vụ lõi §8.2/8.3 + §2.2):
+1. **UI cấu hình hoa hồng:** dialog tạo/sửa `AgentCommissionConfig` trong `Components/Pages/Agents/AgentDetail.razor` (mốc/%, áp dụng theo quốc gia/đơn hàng), gate `agents:update`.
+2. **Tự động tính hoa hồng:** tại logic chuyển bước ứng viên (`CandidateDetail.razor`), khi đạt mốc Deposit/Selected/Departure và ứng viên có `AgentId` → sinh `AgentCommission` từ config (idempotent, không trùng mốc). Cân nhắc tách thành service trong `Polymind.Application`.
+3. **Nút phê duyệt:** Giám đốc/Kế toán duyệt `Payment` + `AgentCommission` (set `ApprovedBy`, đổi trạng thái). **Trước tiên kiểm tra/补 permission `payments:approve` / `commissions:approve` trong `DbSeeder.cs`** (danh mục + map role Director/Accountant).
+
+(Các đợt sau: Đợt 2 Audit Log + công nợ theo ứng viên; Đợt 3 Upload hồ sơ + MinIO; Đợt 4 Báo cáo/Dashboard mở rộng + thông báo stub + export. Chi tiết trong plan file.)
+
+**Nợ nhỏ phát hiện ở Session 9:** role `agent` đang thấy `/candidates` và `/reports` hơi rộng so với spec §2.8 (Portal đại lý chỉ xem ứng viên mình giới thiệu + hoa hồng) → siết khi làm Portal đại lý.
+
+**LƯU Ý khi tạo trang mới (giữ nguyên):** KHÔNG thêm `@rendermode`; đặt page trong folder + đừng đặt tên class trùng entity. MudBlazor 9.5 — tránh `MudChart` (API đổi, cảnh báo `MUD0002`, attribute bị nuốt im lặng); dùng `MudProgressLinear` + `MudSimpleTable`. **Seed mở rộng:** `DemoDataSeeder.SeedExtrasAsync` chạy idempotent theo từng bảng kể cả khi DB đã có Lead (bù Visa/Flight/Commission mà không cần xóa DB).
 
 ## 🚧 BLOCKERS / NỢ KỸ THUẬT
 
 - (chưa có blocker)
 - Nợ wiring: MinIO, Hangfire, Redis, QuestPDF, ClosedXML — gắn khi tới phần dùng.
-- Module placeholder chờ làm thật: /finance, /agents, /visa, /reports.
+- ~~Module placeholder chờ làm thật~~ — ĐÃ XONG HẾT (finance/agents/visa/reports đều có trang thật).
 
 ---
 
 ## 📜 NHẬT KÝ SESSION (mới nhất ở trên)
+
+### [2026-06-24] Session 9 — Claude
+- **Bối cảnh:** đối chiếu toàn web với `POLYMIND APP.docx` → lập kế hoạch nâng cấp 5 đợt (plan file `t-nh-ng-c-i-b-n-lexical-hejlsberg.md`). Demo đối tác **ngày mai** → làm **ĐỢT 0** (rủi ro thấp, giá trị demo cao). Chốt: giữ Blazor Server + Cookie (không thêm REST/JWT trước demo), MinIO wiring thật/còn lại stub.
+- **Làm được (ĐỢT 0.1 — seed demo mở rộng):** thêm `DemoDataSeeder.SeedExtrasAsync` (idempotent theo từng bảng, chạy cả khi DB đã có Lead). Sinh **Visa** (ứng viên ≥ bước VisaSubmit), **Vé máy bay** (≥ BookFlight, set `ActualDepartureAt` nếu ≥ Departure), **AgentCommissionConfig** (mỗi đại lý 20%/30%/50% theo mốc Deposit/Selected/Departure), **AgentCommission** (ứng viên có `AgentId` đã đạt mốc, BaseAmount = `JobOrder.CostAmount`). Sửa guard `SeedAsync`: thay `if(AnyAsync) return` bằng nhánh gọi extras rồi return → core giữ nguyên indentation.
+- **File thay đổi chính:** `src/Polymind.Infrastructure/Persistence/DemoDataSeeder.cs`.
+- **Đã test:** build 0 error (1 warning cũ BL0008). Chạy app (Development) seed bù → DB: visas=4, flights=3, agent_commission_configs=9, agent_commissions=8. Đăng nhập admin: trang `/reports` "Hoa hồng theo đại lý" có dòng thật (Đại lý Miền Bắc 144tr, Hải Phòng 84tr), `/visa` có loại visa "Lao động".
+- **Làm được (ĐỢT 0.2 — smoke-test demo):** quét **12 trang** dưới quyền admin → tất cả HTTP 200, không exception. Test **RBAC 4 role** (`recruiter/accountant/visa.staff/agent` @ `Admin@123`) → đều OK/DENIED hợp lý, không lỗi 500, cookie nhận quyền đúng.
+- **Lưu ý/cảnh báo cho người sau:** (1) Login qua HTTP cần hidden `_handler=login` + `__RequestVerificationToken`. (2) Start-Process: path có dấu cách phải bọc `"..."` trong ArgumentList. (3) Role `agent` đang xem `/candidates` + `/reports` hơi rộng so với spec Portal đại lý — siết sau. (4) Tên hiển thị trong HTML bị HTML-entity-encode (vd `&#x110;...`) nên grep tiếng Việt có dấu trên HTML render dễ "miss"; check bằng class/`mud-table` hoặc số liệu ASCII.
+
+### [2026-06-24] Session 8 — Claude
+- **Làm được (P1.7 — placeholder CUỐI CÙNG):** Module **Báo cáo & Thống kê**. Trang `Pages/Reports/Reports.razor` (`/reports`, gate `reports:read`, thay placeholder `ComingSoon`): 6 thẻ KPI (tổng lead, tỉ lệ chuyển đổi, ứng viên đang xử lý, doanh thu đã thu, tổng chi, lợi nhuận gộp) + **Lead theo trạng thái** & **theo nguồn** (thanh `MudProgressLinear`) + **Doanh thu vs Chi phí 6 tháng gần nhất** (2 thanh thu/chi mỗi tháng, scale theo max) + **Ứng viên theo bước workflow** + **Hoa hồng theo đại lý** (`MudSimpleTable`: số mốc / đã chi / chờ-duyệt / tổng). Dữ liệu group bằng EF `GroupBy`; gom theo tháng làm trong bộ nhớ (tránh dịch DateOnly sang SQL). Doanh thu = Payments `Status==Paid` gom theo `PaidDate ?? CreatedAt`; chi phí theo `ExpenseDate`.
+- **⚠️ BẪY MudBlazor 9.5 (quan trọng, đã xử lý):** ban đầu định dùng `MudChart` (Bar/Donut). Build báo `MUD0002 Illegal Attribute 'XAxisLabels'/'InputData'/'InputLabels'`. Lý do: trong MudBlazor 9.5 `MudChart<T>` là **generic** và đã **bỏ** các param `XAxisLabels`/`InputData`/`InputLabels` (chỉ còn `ChartSeries`/`ChartType`/`LegendPalette`); vì MudComponentBase có `CaptureUnmatchedValues` nên các attribute lạ **bị nuốt im lặng** (không lỗi compile nhưng biểu đồ không bind). Cũng gặp `ChartSeries`→`ChartSeries<T>`, `ChartOptions` không còn `YAxisFormat`. → **Quyết định: bỏ MudChart, render bằng `MudProgressLinear` + `MudSimpleTable`** (đã có sẵn pattern ở `Home.razor`) — build sạch, chắc chắn render. Nếu sau cần biểu đồ thật phải học API MudBlazor 9 Charts mới.
+- **File thay đổi chính:** `Components/Pages/Reports/Reports.razor` (mới, trong folder). Xóa placeholder `Components/Pages/Reports.razor`.
+- **Đã test:** `dotnet build Polymind.slnx` = 0 error, chỉ còn 1 warning cũ `BL0008` (Login.razor). Chạy app + login admin qua HTTP: `/reports` 200, đã xác nhận render 4 section ("Báo cáo & Thống kê", "Doanh thu vs Chi phí", "Ứng viên theo bước", "Hoa hồng theo đại lý"), 16 KPI icon, không có error-boundary, không còn `ComingSoon`. (Bảng hoa hồng hiện rỗng vì demo chưa seed `AgentCommission` — hiện đúng empty-state.)
+- **Lưu ý/cảnh báo cho người sau:** (1) Login qua HTTP cần POST kèm hidden field `_handler=login` + `__RequestVerificationToken`, nếu thiếu sẽ 200 nhưng trả lại trang login. (2) Start-Process chạy app: path project có dấu cách → phải bọc `"..."` trong ArgumentList, nếu không dotnet cắt ở khoảng trắng (`...POLYMIND` rồi lỗi "file path does not exist"). (3) Để bảng Báo cáo có dữ liệu demo (hoa hồng/visa/flight) cần seed thêm — xem VIỆC TIẾP THEO (b).
 
 ### [2026-06-24] Session 7 — Claude
 - **Làm được (P1.6):** Module **Visa & Xuất cảnh**. Trang `Pages/Visas/Visas.razor` (`/visa`) 2 tab: **Hồ sơ Visa** + **Vé máy bay**, mỗi tab DataGrid + nút Thêm + nút Sửa. `VisaDialog.razor` (chọn cặp Ứng viên–Đơn hàng qua `CandidateJobOrder` để lấy CandidateId/JobOrderId/Country; loại/trạng thái `VisaStatus`/ngày nộp-phỏng vấn-kết quả/lý do từ chối), gate `visas:*`. `FlightDialog.razor` (hãng/mã vé/ngày-giờ bay/sân bay; `TimeOnly?`↔`TimeSpan?` cho MudTimePicker), gate `flights:*`. Thêm nhãn VN + `ColorOf(VisaStatus)`.

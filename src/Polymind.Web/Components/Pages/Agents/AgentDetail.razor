@@ -74,6 +74,44 @@ else
                 }
             </MudPaper>
 
+            <MudPaper Class="pa-4 mb-4" Elevation="1">
+                <div class="d-flex justify-space-between align-center mb-3">
+                    <MudText Typo="Typo.subtitle1"><b>Cấu hình hoa hồng (@_configs.Count)</b></MudText>
+                    @if (_canUpdate)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => OpenConfigDialog(null))">Thêm mốc</MudButton>
+                    }
+                </div>
+                @if (_configs.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true">Chưa cấu hình mốc hoa hồng. Mặc định không tự phát sinh hoa hồng khi chuyển bước.</MudAlert>
+                }
+                else
+                {
+                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                        <thead>
+                            <tr><th>Mốc</th><th>Áp dụng</th><th style="text-align:right">% / Cố định</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var cfg in _configs)
+                            {
+                                <tr>
+                                    <td>@Labels.Vi(cfg.Milestone)</td>
+                                    <td>@(cfg.Country ?? (cfg.JobOrderId is null ? "Mọi đơn / quốc gia" : "Đơn cụ thể"))</td>
+                                    <td style="text-align:right">@(cfg.Percentage.HasValue ? $"{cfg.Percentage.Value:0.#}%" : $"{cfg.FixedAmount:N0} đ")</td>
+                                    <td style="text-align:right">
+                                        @if (_canUpdate)
+                                        {
+                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenConfigDialog(cfg))" />
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+            </MudPaper>
+
             <MudPaper Class="pa-4" Elevation="1">
                 <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Hoa hồng (@_commissions.Count)</b></MudText>
                 @if (_commissions.Count == 0)
@@ -96,6 +134,21 @@ else
                                     <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(context.Item.Status)">@Labels.Vi(context.Item.Status)</MudChip>
                                 </CellTemplate>
                             </TemplateColumn>
+                            <TemplateColumn Title="" Sortable="false">
+                                <CellTemplate>
+                                    @if (_canApproveCommission)
+                                    {
+                                        @if (context.Item.Status == CommissionStatus.Pending)
+                                        {
+                                            <MudButton Size="Size.Small" Color="Color.Info" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Verified" OnClick="@(() => ApproveCommission(context.Item.Id))">Duyệt</MudButton>
+                                        }
+                                        else if (context.Item.Status == CommissionStatus.Approved)
+                                        {
+                                            <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Paid" OnClick="@(() => MarkCommissionPaid(context.Item.Id))">Đã chi</MudButton>
+                                        }
+                                    }
+                                </CellTemplate>
+                            </TemplateColumn>
                         </Columns>
                     </MudDataGrid>
                 }
@@ -108,18 +161,66 @@ else
     [Parameter] public Guid Id { get; set; }
 
     private record CandidateRow(Guid Id, string Code, string FullName, string? Phone);
-    private record CommissionRow(string CandidateName, CommissionMilestone Milestone, decimal Amount, CommissionStatus Status);
+    private record CommissionRow(Guid Id, string CandidateName, CommissionMilestone Milestone, decimal Amount, CommissionStatus Status);
 
     private Agent? _agent;
     private List<CandidateRow> _candidates = new();
     private List<CommissionRow> _commissions = new();
     private decimal _totalCommission;
     private bool _canUpdate;
+    private bool _canApproveCommission;
+    private List<AgentCommissionConfig> _configs = new();
 
     protected override async Task OnInitializedAsync()
     {
         _canUpdate = await HasPermission("agents:update");
+        _canApproveCommission = await HasPermission("commissions:approve");
         await Load();
+    }
+
+    private async Task ApproveCommission(Guid id)
+    {
+        if (!await HasPermission("commissions:approve")) { Snackbar.Add("Bạn không có quyền duyệt hoa hồng.", Severity.Warning); return; }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var c = await db.AgentCommissions.FirstOrDefaultAsync(x => x.Id == id);
+        if (c is null) return;
+        c.Status = CommissionStatus.Approved;
+        c.ApprovedBy = await db.Users.Select(u => u.Id).FirstOrDefaultAsync();
+        c.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+        Snackbar.Add("Đã duyệt hoa hồng", Severity.Success);
+        await Load();
+    }
+
+    private async Task MarkCommissionPaid(Guid id)
+    {
+        if (!await HasPermission("commissions:approve")) { Snackbar.Add("Bạn không có quyền chi hoa hồng.", Severity.Warning); return; }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var c = await db.AgentCommissions.FirstOrDefaultAsync(x => x.Id == id);
+        if (c is null) return;
+        c.Status = CommissionStatus.Paid;
+        c.PaidDate = DateOnly.FromDateTime(DateTime.UtcNow);
+        c.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+        Snackbar.Add("Đã đánh dấu hoa hồng đã chi", Severity.Success);
+        await Load();
+    }
+
+    private async Task OpenConfigDialog(AgentCommissionConfig? config)
+    {
+        if (!_canUpdate) { Snackbar.Add("Bạn không có quyền cấu hình hoa hồng.", Severity.Warning); return; }
+        var parameters = new DialogParameters<CommissionConfigDialog>
+        {
+            { x => x.AgentId, Id },
+            { x => x.ConfigId, config?.Id },
+        };
+        var dialog = await DialogService.ShowAsync<CommissionConfigDialog>(config is null ? "Thêm cấu hình hoa hồng" : "Sửa cấu hình hoa hồng", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            Snackbar.Add("Đã lưu cấu hình hoa hồng", Severity.Success);
+            await Load();
+        }
     }
 
     private async Task Load()
@@ -137,8 +238,11 @@ else
         var commissions = await db.AgentCommissions.Where(c => c.AgentId == Id)
             .OrderByDescending(c => c.CreatedAt).ToListAsync();
         _commissions = commissions.Select(c => new CommissionRow(
-            names.GetValueOrDefault(c.CandidateId, "—"), c.Milestone, c.CommissionAmount, c.Status)).ToList();
+            c.Id, names.GetValueOrDefault(c.CandidateId, "—"), c.Milestone, c.CommissionAmount, c.Status)).ToList();
         _totalCommission = commissions.Sum(c => c.CommissionAmount);
+
+        _configs = await db.AgentCommissionConfigs.Where(c => c.AgentId == Id)
+            .OrderBy(c => c.Milestone).ToListAsync();
     }
 
     private async Task OpenEdit()

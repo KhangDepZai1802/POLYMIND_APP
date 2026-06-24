@@ -1,0 +1,248 @@
+@page "/reports"
+@attribute [Authorize(Policy = "reports:read")]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<PageTitle>Báo cáo — POLYMIND</PageTitle>
+
+<div class="mb-4">
+    <MudText Typo="Typo.h5"><b>Báo cáo & Thống kê</b></MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">Tổng hợp số liệu marketing, tuyển dụng và tài chính</MudText>
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudGrid>
+        @Kpi("Tổng Lead", _totalLeads.ToString("N0"), Icons.Material.Filled.ContactPhone, Color.Info)
+        @Kpi("Tỷ lệ chuyển đổi", $"{_conversionRate:0.#}%", Icons.Material.Filled.TrendingUp, Color.Primary)
+        @Kpi("Ứng viên đang xử lý", _activeCandidates.ToString("N0"), Icons.Material.Filled.Groups, Color.Secondary)
+        @Kpi("Doanh thu (đã thu)", $"{_totalRevenue:N0} đ", Icons.Material.Filled.Payments, Color.Success)
+        @Kpi("Tổng chi phí", $"{_totalExpense:N0} đ", Icons.Material.Filled.MoneyOff, Color.Error)
+        @Kpi("Lợi nhuận gộp", $"{(_totalRevenue - _totalExpense):N0} đ", Icons.Material.Filled.AccountBalance, (_totalRevenue - _totalExpense) >= 0 ? Color.Success : Color.Error)
+    </MudGrid>
+
+    <MudGrid Class="mt-2">
+        <MudItem xs="12" md="7">
+            <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Lead theo trạng thái</b></MudText>
+                @foreach (var kv in _byStatus.OrderByDescending(x => x.Value))
+                {
+                    <div class="d-flex align-center mb-2">
+                        <div style="width:160px"><MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(kv.Key)">@Labels.Vi(kv.Key)</MudChip></div>
+                        <MudProgressLinear Color="Labels.ColorOf(kv.Key)" Value="@(_totalLeads == 0 ? 0 : kv.Value * 100.0 / _totalLeads)" Class="flex-grow-1 mx-3" Style="height:10px" Rounded="true" />
+                        <b>@kv.Value</b>
+                    </div>
+                }
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="5">
+            <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Lead theo nguồn</b></MudText>
+                @if (_bySource.Any())
+                {
+                    @foreach (var kv in _bySource)
+                    {
+                        <div class="d-flex align-center mb-2">
+                            <div style="width:120px">@Labels.Vi(kv.Key)</div>
+                            <MudProgressLinear Color="Color.Info" Value="@(_totalLeads == 0 ? 0 : kv.Value * 100.0 / _totalLeads)" Class="flex-grow-1 mx-3" Style="height:10px" Rounded="true" />
+                            <b>@kv.Value</b>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Chưa có dữ liệu lead.</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid Class="mt-2">
+        <MudItem xs="12" md="7">
+            <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Doanh thu vs Chi phí theo tháng</b></MudText>
+                @if (_months.Any(m => m.Revenue > 0 || m.Expense > 0))
+                {
+                    @foreach (var m in _months)
+                    {
+                        <div class="mb-3">
+                            <div class="d-flex justify-space-between mb-1">
+                                <b>@m.Label</b>
+                                <span class="mud-text-secondary">Lãi: <b>@($"{(m.Revenue - m.Expense):N0} đ")</b></span>
+                            </div>
+                            <div class="d-flex align-center mb-1">
+                                <div style="width:70px"><MudChip T="string" Size="Size.Small" Color="Color.Success">Thu</MudChip></div>
+                                <MudProgressLinear Color="Color.Success" Value="@(_maxMonthAmount == 0 ? 0 : (double)(m.Revenue * 100 / _maxMonthAmount))" Class="flex-grow-1 mx-3" Style="height:10px" Rounded="true" />
+                                <span style="width:130px;text-align:right">@($"{m.Revenue:N0} đ")</span>
+                            </div>
+                            <div class="d-flex align-center">
+                                <div style="width:70px"><MudChip T="string" Size="Size.Small" Color="Color.Error">Chi</MudChip></div>
+                                <MudProgressLinear Color="Color.Error" Value="@(_maxMonthAmount == 0 ? 0 : (double)(m.Expense * 100 / _maxMonthAmount))" Class="flex-grow-1 mx-3" Style="height:10px" Rounded="true" />
+                                <span style="width:130px;text-align:right">@($"{m.Expense:N0} đ")</span>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Chưa có dữ liệu thu/chi.</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="5">
+            <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Ứng viên theo bước workflow</b></MudText>
+                @if (_byStep.Any())
+                {
+                    @foreach (var kv in _byStep.OrderBy(x => x.Key))
+                    {
+                        <div class="d-flex justify-space-between align-center mb-2">
+                            <span>@Labels.Vi(kv.Key)</span>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@kv.Value</MudChip>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Chưa có ứng viên gắn đơn hàng.</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid Class="mt-2">
+        <MudItem xs="12">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Hoa hồng theo đại lý</b></MudText>
+                @if (_commissionByAgent.Any())
+                {
+                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                        <thead>
+                            <tr>
+                                <th>Đại lý</th>
+                                <th style="text-align:right">Số mốc</th>
+                                <th style="text-align:right">Đã chi</th>
+                                <th style="text-align:right">Chờ/đã duyệt</th>
+                                <th style="text-align:right">Tổng hoa hồng</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in _commissionByAgent.OrderByDescending(r => r.Total))
+                            {
+                                <tr>
+                                    <td>@row.AgentName</td>
+                                    <td style="text-align:right">@row.Count</td>
+                                    <td style="text-align:right">@($"{row.Paid:N0} đ")</td>
+                                    <td style="text-align:right">@($"{(row.Total - row.Paid):N0} đ")</td>
+                                    <td style="text-align:right"><b>@($"{row.Total:N0} đ")</b></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Chưa có dữ liệu hoa hồng.</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private bool _loading = true;
+
+    private int _totalLeads, _activeCandidates;
+    private double _conversionRate;
+    private decimal _totalRevenue, _totalExpense;
+
+    private Dictionary<LeadStatus, int> _byStatus = new();
+    private List<KeyValuePair<LeadSource, int>> _bySource = new();
+    private Dictionary<WorkflowStep, int> _byStep = new();
+
+    private record MonthBucket(string Label, decimal Revenue, decimal Expense);
+    private List<MonthBucket> _months = new();
+    private decimal _maxMonthAmount;
+
+    private record CommissionRow(string AgentName, int Count, decimal Paid, decimal Total);
+    private List<CommissionRow> _commissionByAgent = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        // --- Lead ---
+        _totalLeads = await db.Leads.CountAsync();
+        var converted = await db.Leads.CountAsync(l => l.Status == LeadStatus.Converted);
+        _conversionRate = _totalLeads == 0 ? 0 : converted * 100.0 / _totalLeads;
+
+        _byStatus = await db.Leads.GroupBy(l => l.Status)
+            .Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
+
+        var bySource = await db.Leads.GroupBy(l => l.Source)
+            .Select(g => new { g.Key, Count = g.Count() }).ToListAsync();
+        _bySource = bySource.OrderByDescending(x => x.Count)
+            .Select(x => new KeyValuePair<LeadSource, int>(x.Key, x.Count)).ToList();
+
+        // --- Ứng viên ---
+        _activeCandidates = await db.CandidateJobOrders.CountAsync(c => c.Status == CandidateJobOrderStatus.Active);
+        _byStep = await db.CandidateJobOrders
+            .GroupBy(c => c.CurrentStep)
+            .Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
+
+        // --- Tài chính theo tháng (6 tháng gần nhất) ---
+        var payments = await db.Payments.Where(p => p.Status == PaymentStatus.Paid)
+            .Select(p => new { p.Amount, p.PaidDate, p.CreatedAt }).ToListAsync();
+        var expenses = await db.Expenses.Select(e => new { e.Amount, e.ExpenseDate }).ToListAsync();
+
+        _totalRevenue = payments.Sum(p => p.Amount);
+        _totalExpense = expenses.Sum(e => e.Amount);
+
+        var today = DateTime.UtcNow.Date;
+        var firstOfThisMonth = new DateOnly(today.Year, today.Month, 1);
+        for (int i = 5; i >= 0; i--)
+        {
+            var m = firstOfThisMonth.AddMonths(-i);
+            var rev = payments
+                .Where(p => SameMonth(p.PaidDate ?? DateOnly.FromDateTime(p.CreatedAt.UtcDateTime), m))
+                .Sum(p => p.Amount);
+            var exp = expenses
+                .Where(e => SameMonth(e.ExpenseDate, m))
+                .Sum(e => e.Amount);
+            _months.Add(new MonthBucket(m.ToString("MM/yyyy"), rev, exp));
+        }
+        _maxMonthAmount = _months.Count == 0 ? 0 : _months.Max(m => Math.Max(m.Revenue, m.Expense));
+
+        // --- Hoa hồng theo đại lý ---
+        var agentNames = await db.Agents.ToDictionaryAsync(a => a.Id, a => a.Name);
+        var commissions = await db.AgentCommissions
+            .Select(c => new { c.AgentId, c.CommissionAmount, c.Status }).ToListAsync();
+        _commissionByAgent = commissions
+            .GroupBy(c => c.AgentId)
+            .Select(g => new CommissionRow(
+                agentNames.GetValueOrDefault(g.Key, "—"),
+                g.Count(),
+                g.Where(c => c.Status == CommissionStatus.Paid).Sum(c => c.CommissionAmount),
+                g.Sum(c => c.CommissionAmount)))
+            .ToList();
+
+        _loading = false;
+    }
+
+    private static bool SameMonth(DateOnly d, DateOnly month) => d.Year == month.Year && d.Month == month.Month;
+
+    private RenderFragment Kpi(string title, string value, string icon, Color color) =>@<MudItem xs="12" sm="6" md="4" lg="2">
+        <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+            <div class="d-flex justify-space-between align-start">
+                <div>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@title</MudText>
+                    <MudText Typo="Typo.h6"><b>@value</b></MudText>
+                </div>
+                <MudIcon Icon="@icon" Color="@color" Size="Size.Large" />
+            </div>
+        </MudPaper>
+    </MudItem>;
+}

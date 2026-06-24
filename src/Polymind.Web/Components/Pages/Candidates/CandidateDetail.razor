@@ -285,15 +285,73 @@ else
             cjo.CurrentStep = next;
             cjo.UpdatedAt = DateTimeOffset.UtcNow;
             if (next == WorkflowStep.Completed) cjo.Status = CandidateJobOrderStatus.Completed;
+
+            var newCommissions = await EnsureCommissionsAsync(db, cjo, _candidate?.AgentId);
             await db.SaveChangesAsync();
 
             Snackbar.Add($"Đã chuyển sang bước: {Labels.Vi(next)}", Severity.Success);
+            if (newCommissions > 0)
+                Snackbar.Add($"Đã phát sinh {newCommissions} mốc hoa hồng cho đại lý.", Severity.Info);
             await Load();
         }
         finally
         {
             _busy = false;
         }
+    }
+
+    // Mốc hoa hồng ↔ bước workflow tương ứng (mục 8.3).
+    private static readonly (CommissionMilestone Milestone, WorkflowStep Step)[] CommissionMilestones =
+    {
+        (CommissionMilestone.Deposit, WorkflowStep.Deposit),
+        (CommissionMilestone.Selected, WorkflowStep.Selected),
+        (CommissionMilestone.Departure, WorkflowStep.Departure),
+    };
+
+    /// <summary>Tự sinh hoa hồng cho các mốc đã đạt (nếu ứng viên có đại lý và có cấu hình). Idempotent.</summary>
+    private static async Task<int> EnsureCommissionsAsync(ApplicationDbContext db, CandidateJobOrder cjo, Guid? agentId)
+    {
+        if (agentId is null) return 0;
+        var jo = await db.JobOrders.FirstOrDefaultAsync(j => j.Id == cjo.JobOrderId);
+        if (jo is null) return 0;
+        var baseAmount = jo.CostAmount ?? 0m;
+        var configs = await db.AgentCommissionConfigs.Where(c => c.AgentId == agentId.Value).ToListAsync();
+
+        var created = 0;
+        foreach (var (milestone, step) in CommissionMilestones)
+        {
+            if ((int)cjo.CurrentStep < (int)step) continue;
+
+            var exists = await db.AgentCommissions.AnyAsync(c =>
+                c.AgentId == agentId.Value && c.CandidateId == cjo.CandidateId &&
+                c.JobOrderId == cjo.JobOrderId && c.Milestone == milestone);
+            if (exists) continue;
+
+            // Ưu tiên cấu hình theo đúng đơn hàng / quốc gia, rồi tới cấu hình chung.
+            var cfg = configs.Where(c => c.Milestone == milestone)
+                .OrderByDescending(c => c.JobOrderId == cjo.JobOrderId)
+                .ThenByDescending(c => c.Country == jo.Country)
+                .FirstOrDefault();
+            if (cfg is null) continue;
+
+            var amount = cfg.Percentage.HasValue
+                ? baseAmount * cfg.Percentage.Value / 100m
+                : (cfg.FixedAmount ?? 0m);
+
+            db.AgentCommissions.Add(new AgentCommission
+            {
+                AgentId = agentId.Value,
+                CandidateId = cjo.CandidateId,
+                JobOrderId = cjo.JobOrderId,
+                ConfigId = cfg.Id,
+                Milestone = milestone,
+                BaseAmount = baseAmount,
+                CommissionAmount = amount,
+                Status = CommissionStatus.Pending,
+            });
+            created++;
+        }
+        return created;
     }
 
     private async Task<bool> HasPermission(string permission)

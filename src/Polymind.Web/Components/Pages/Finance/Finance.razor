@@ -66,6 +66,10 @@
                     </TemplateColumn>
                     <TemplateColumn Title="" Sortable="false">
                         <CellTemplate>
+                            @if (_canApprovePayment && context.Item.Status != PaymentStatus.Paid && context.Item.Status != PaymentStatus.Refunded)
+                            {
+                                <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Check" OnClick="@(() => ApprovePayment(context.Item.Id))">Duyệt</MudButton>
+                            }
                             @if (_canUpdatePayment)
                             {
                                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditPayment(context.Item.Id))" />
@@ -121,12 +125,28 @@
     private List<PaymentRow> _payments = new();
     private List<Expense> _expenses = new();
     private decimal _totalPaid, _totalPending, _totalExpense;
-    private bool _canUpdatePayment, _canUpdateExpense;
+    private bool _canUpdatePayment, _canUpdateExpense, _canApprovePayment;
 
     protected override async Task OnInitializedAsync()
     {
         _canUpdatePayment = await HasPermission("payments:update");
         _canUpdateExpense = await HasPermission("expenses:update");
+        _canApprovePayment = await HasPermission("payments:approve");
+        await Load();
+    }
+
+    private async Task ApprovePayment(Guid id)
+    {
+        if (!await HasPermission("payments:approve")) { Snackbar.Add("Bạn không có quyền duyệt khoản thu.", Severity.Warning); return; }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var p = await db.Payments.FirstOrDefaultAsync(x => x.Id == id);
+        if (p is null) return;
+        p.ApprovedBy = await db.Users.Select(u => u.Id).FirstOrDefaultAsync();
+        p.Status = PaymentStatus.Paid;
+        p.PaidDate ??= DateOnly.FromDateTime(DateTime.UtcNow);
+        p.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+        Snackbar.Add("Đã duyệt & ghi nhận khoản thu", Severity.Success);
         await Load();
     }
 
