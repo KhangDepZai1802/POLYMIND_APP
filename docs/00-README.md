@@ -1,53 +1,133 @@
-# POLYMIND — Overseas Labor Management System
+# POLYMIND OLMS — Hướng Dẫn Dự Án
 
-## 🔑 Tài khoản demo theo vai trò
+POLYMIND là web quản lý xuất khẩu lao động: Lead CRM, ứng viên, đơn hàng, workflow 17 bước, tài chính, hoa hồng đại lý, visa/xuất cảnh, báo cáo, thông báo và quản trị phân quyền.
 
-> Tất cả tài khoản dùng chung mật khẩu: **`Admin@123`**. Đăng nhập tại `http://localhost:5177/login`.
-> (Nguồn: `src/Polymind.Infrastructure/Persistence/DbSeeder.cs` — tự seed khi khởi động.)
-
-| Vai trò (role) | Email | Quyền chính |
-|---|---|---|
-| **Super Admin** (`super_admin`) | `admin@polymind.local` | Toàn quyền mọi module |
-| **Giám đốc** (`director`) | `director@polymind.local` | Xem tất cả + duyệt thu/chi/hoa hồng + báo cáo |
-| **Trưởng phòng tuyển dụng** (`recruitment_manager`) | `recruitment.manager@polymind.local` | CRUD Lead, quản lý ứng viên, xem đơn hàng/đại lý/báo cáo |
-| **Nhân viên tuyển dụng** (`recruiter`) | `recruiter@polymind.local` | Tạo/sửa Lead & ứng viên, xem đơn hàng/đại lý |
-| **Bộ phận hồ sơ** (`document_staff`) | `document.staff@polymind.local` | Xem/sửa ứng viên, xem Lead/đơn hàng/visa |
-| **Bộ phận visa** (`visa_staff`) | `visa.staff@polymind.local` | Toàn quyền Visa & Vé máy bay, xem/sửa ứng viên |
-| **Kế toán** (`accountant`) | `accountant@polymind.local` | Toàn quyền Thu/Chi/Phiếu/Hoa hồng, xem ứng viên/đại lý/báo cáo |
-| **Đại lý / CTV** (`agent`) | `agent@polymind.local` | Portal đại lý: chỉ xem ứng viên mình giới thiệu + hoa hồng của mình |
-
-> **Lưu ý Portal đại lý:** tài khoản `agent@` được seed gắn vào đại lý **"Đại lý Miền Bắc" (AG-000001)**; khi đăng nhập chỉ thấy ứng viên/hoa hồng thuộc đại lý này (không thấy dashboard/báo cáo toàn công ty).
-
-## Tài Liệu Thiết Kế Hệ Thống
-
-| File | Nội dung |
-|---|---|
-| [01-business-analysis.md](01-business-analysis.md) | Phân tích nghiệp vụ, actor, module, phase triển khai |
-| [02-database-design.md](02-database-design.md) | Schema PostgreSQL đầy đủ, ERD, index strategy |
-| [03-workflow.md](03-workflow.md) | Workflow Lead → Ứng viên → Xuất cảnh, thông báo tự động, KPI |
-| [04-system-architecture.md](04-system-architecture.md) | Kiến trúc hệ thống, API design, tech stack chi tiết |
-
-## Tech Stack Đã Chọn
+## Tech Stack Thực Tế
 
 | Layer | Công nghệ |
 |---|---|
-| Frontend | Next.js 14 (App Router) + TypeScript + Tailwind CSS + shadcn/ui |
-| State | TanStack Query + Zustand |
-| Forms | React Hook Form + Zod |
-| Backend | NestJS (Node.js) + TypeScript |
-| ORM | Prisma |
-| Database | PostgreSQL 16 |
-| Cache/Queue | Redis + Bull |
-| File Storage | MinIO (S3-compatible) |
-| Auth | JWT (access + refresh token) |
-| PDF | Puppeteer |
-| Excel | ExcelJS |
-| Notifications | SMTP + eSMS + Zalo OA API |
-| Deploy | Docker Compose + Nginx |
+| Web | .NET 10, Blazor Web App Interactive Server |
+| UI | MudBlazor 9.5 |
+| Auth | ASP.NET Core Identity + Cookie + RBAC permission claims |
+| Database | PostgreSQL 16 + EF Core 10 |
+| File Storage | MinIO/S3-compatible |
+| Jobs | Hangfire + PostgreSQL storage |
+| PDF/Excel | QuestPDF + ClosedXML |
+| Logging | Serilog console + rolling file |
+| Deploy | Docker Compose + Nginx reverse proxy |
 
-## Phát Triển Theo Phase
+## Chạy Development
 
-- **Phase 1 (MVP):** Auth, Lead CRM, Ứng viên, Đơn hàng, Workflow, Dashboard cơ bản
-- **Phase 2:** Tài chính, Hoa hồng đại lý, Portal đại lý
-- **Phase 3:** Visa, Xuất cảnh, Báo cáo đầy đủ, Thông báo tự động
-- **Phase 4:** Tích hợp Facebook/TikTok/Zalo API, OCR, AI, Mobile App
+```powershell
+cd "C:\Users\khang\OneDrive\Documents\POLYMIND APP"
+docker compose up -d
+$env:ASPNETCORE_ENVIRONMENT='Development'
+dotnet run --project src/Polymind.Web --urls http://localhost:5177
+```
+
+Mở: `http://localhost:5177`
+
+Kiểm tra:
+
+```powershell
+dotnet build Polymind.slnx
+powershell -ExecutionPolicy Bypass -File scripts/smoke-test.ps1 -BaseUrl http://localhost:5177
+```
+
+## Tài Khoản Demo Theo Vai Trò
+
+Tất cả tài khoản dùng chung mật khẩu: `Admin@123`.
+
+| Vai trò | Email | Quyền chính |
+|---|---|---|
+| `super_admin` | `admin@polymind.local` | Toàn quyền mọi module |
+| `director` | `director@polymind.local` | Xem tất cả, duyệt thu/chi/hoa hồng, báo cáo |
+| `recruitment_manager` | `recruitment.manager@polymind.local` | CRUD Lead, ứng viên, xem đơn hàng/đại lý/báo cáo |
+| `recruiter` | `recruiter@polymind.local` | Tạo/sửa Lead và ứng viên, xem đơn hàng/đại lý |
+| `document_staff` | `document.staff@polymind.local` | Hồ sơ ứng viên, xem Lead/đơn hàng/visa |
+| `visa_staff` | `visa.staff@polymind.local` | Visa và vé máy bay, xem/sửa ứng viên |
+| `accountant` | `accountant@polymind.local` | Thu/chi/phiếu/hoa hồng, báo cáo tài chính |
+| `agent` | `agent@polymind.local` | Portal đại lý: chỉ ứng viên/hoa hồng của mình |
+
+Tài khoản `agent@` được seed gắn với đại lý `AG-000001`.
+
+## Cấu Hình Secret
+
+Không đặt secret production trong `appsettings.json`. Dùng biến môi trường theo dạng ASP.NET Core:
+
+```powershell
+$env:ConnectionStrings__Default='Host=...;Port=5432;Database=polymind;Username=...;Password=...'
+$env:Minio__Endpoint='...'
+$env:Minio__AccessKey='...'
+$env:Minio__SecretKey='...'
+$env:Notifications__Email__Enabled='true'
+$env:Notifications__Email__Host='smtp.example.com'
+```
+
+Development local dùng `src/Polymind.Web/appsettings.Development.json` với cấu hình Docker mặc định.
+
+## Production Deploy
+
+1. Tạo file env:
+
+```powershell
+Copy-Item .env.production.example .env.production
+notepad .env.production
+```
+
+2. Cấp TLS certificate cho Nginx:
+
+Đặt 2 file vào `deploy/nginx/certs/`:
+
+- `fullchain.pem`
+- `privkey.pem`
+
+3. Build và chạy:
+
+```powershell
+docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
+```
+
+4. Kiểm tra:
+
+```powershell
+docker compose --env-file .env.production -f docker-compose.production.yml ps
+curl -k https://localhost/health
+```
+
+Ứng dụng tự chạy migration khi startup. Demo data chỉ seed ở môi trường `Development`, không seed trong `Production`.
+
+## Backup Và Restore
+
+Backup PostgreSQL + MinIO:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/backup.ps1 -EnvFile .env.production
+```
+
+Restore từ một thư mục backup:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/restore.ps1 -BackupDir db-backups\YYYYMMDD-HHMMSS -EnvFile .env.production -ConfirmRestore
+```
+
+Restore là thao tác phá dữ liệu hiện tại, chỉ chạy khi đã xác nhận đúng backup.
+
+## Endpoint Vận Hành
+
+| Endpoint | Mục đích |
+|---|---|
+| `/health` | Health check DB + MinIO |
+| `/hangfire` | Dashboard job nền, chỉ `super_admin`/`director` |
+| `/admin` | Quản trị user/role/permission/audit |
+| `/notifications` | Thông báo và tùy chọn kênh nhận |
+
+## Tài Liệu Nền
+
+| File | Nội dung |
+|---|---|
+| [01-business-analysis.md](01-business-analysis.md) | Phân tích nghiệp vụ, actor, module |
+| [02-database-design.md](02-database-design.md) | Schema PostgreSQL, ERD, index |
+| [03-workflow.md](03-workflow.md) | Workflow 17 bước, thông báo, KPI |
+| [04-system-architecture.md](04-system-architecture.md) | Kiến trúc gốc, một số phần còn theo stack cũ |
+| [05-handoff-codex.md](05-handoff-codex.md) | Bàn giao kỹ thuật, bẫy, backlog |

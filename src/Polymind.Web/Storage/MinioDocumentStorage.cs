@@ -24,6 +24,7 @@ public sealed class MinioDocumentStorage(IOptions<MinioStorageOptions> options) 
         IBrowserFile file,
         CancellationToken cancellationToken = default)
     {
+        ValidateOptions();
         if (file.Size <= 0)
             throw new InvalidOperationException("File rỗng.");
         if (file.Size > _options.MaxUploadBytes)
@@ -59,6 +60,7 @@ public sealed class MinioDocumentStorage(IOptions<MinioStorageOptions> options) 
         string objectKey,
         CancellationToken cancellationToken = default)
     {
+        ValidateOptions();
         var client = BuildClient();
         await EnsureBucketAsync(client, cancellationToken);
 
@@ -76,6 +78,17 @@ public sealed class MinioDocumentStorage(IOptions<MinioStorageOptions> options) 
             .WithCredentials(_options.AccessKey, _options.SecretKey)
             .WithSSL(_options.UseSsl)
             .Build();
+
+    private void ValidateOptions()
+    {
+        if (string.IsNullOrWhiteSpace(_options.Endpoint)
+            || string.IsNullOrWhiteSpace(_options.AccessKey)
+            || string.IsNullOrWhiteSpace(_options.SecretKey)
+            || string.IsNullOrWhiteSpace(_options.Bucket))
+        {
+            throw new InvalidOperationException("Cấu hình MinIO chưa đầy đủ. Kiểm tra Minio__Endpoint/AccessKey/SecretKey/Bucket.");
+        }
+    }
 
     private async Task EnsureBucketAsync(IMinioClient client, CancellationToken cancellationToken)
     {

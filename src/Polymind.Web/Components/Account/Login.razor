@@ -63,9 +63,18 @@
             return;
         }
 
-        var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, isPersistent: true, lockoutOnFailure: false);
+        var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, isPersistent: true, lockoutOnFailure: true);
         if (result.Succeeded)
+        {
+            if (user is not null)
+            {
+                user.LastLoginAt = DateTimeOffset.UtcNow;
+                await UserManager.UpdateAsync(user);
+            }
             Nav.NavigateTo(ReturnUrl ?? "/", forceLoad: true);
+        }
+        else if (result.IsLockedOut)
+            _error = "Tài khoản tạm khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau.";
         else
             _error = "Email hoặc mật khẩu không đúng.";
     }

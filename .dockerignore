@@ -1,0 +1,14 @@
+.git/
+.vs/
+.idea/
+.claude/
+bin/
+obj/
+logs/
+db-backups/
+*.user
+*.env
+.env
+appsettings.*.Local.json
+deploy/nginx/certs/*
+!deploy/nginx/certs/.gitkeep
