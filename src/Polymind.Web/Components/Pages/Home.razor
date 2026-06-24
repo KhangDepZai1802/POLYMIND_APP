@@ -1,0 +1,95 @@
+@page "/"
+@attribute [Authorize(Policy = "dashboard:read")]
+@rendermode InteractiveServer
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<PageTitle>Tổng quan — POLYMIND</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-1"><b>Tổng quan</b></MudText>
+<MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">Bảng điều khiển hệ thống quản lý xuất khẩu lao động</MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudGrid>
+        @Card("Tổng Lead", _totalLeads.ToString(), Icons.Material.Filled.ContactPhone, Color.Info)
+        @Card("Lead mới hôm nay", _newLeadsToday.ToString(), Icons.Material.Filled.FiberNew, Color.Primary)
+        @Card("Ứng viên đang xử lý", _activeCandidates.ToString(), Icons.Material.Filled.Groups, Color.Secondary)
+        @Card("Đã xuất cảnh", _departed.ToString(), Icons.Material.Filled.FlightTakeoff, Color.Success)
+        @Card("Tỷ lệ chuyển đổi", $"{_conversionRate:0.#}%", Icons.Material.Filled.TrendingUp, Color.Warning)
+        @Card("Đơn hàng đang tuyển", _openJobOrders.ToString(), Icons.Material.Filled.WorkOutline, Color.Dark)
+    </MudGrid>
+
+    <MudGrid Class="mt-2">
+        <MudItem xs="12" md="7">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Lead theo trạng thái</b></MudText>
+                @foreach (var kv in _byStatus.OrderByDescending(x => x.Value))
+                {
+                    <div class="d-flex align-center mb-2">
+                        <div style="width:160px"><MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(kv.Key)">@Labels.Vi(kv.Key)</MudChip></div>
+                        <MudProgressLinear Color="Labels.ColorOf(kv.Key)" Value="@(_totalLeads == 0 ? 0 : kv.Value * 100.0 / _totalLeads)" Class="flex-grow-1 mx-3" Style="height:10px" Rounded="true" />
+                        <b>@kv.Value</b>
+                    </div>
+                }
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="5">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Lead theo nguồn</b></MudText>
+                @foreach (var kv in _bySource.OrderByDescending(x => x.Value).Take(6))
+                {
+                    <div class="d-flex justify-space-between align-center mb-2">
+                        <span>@Labels.Vi(kv.Key)</span>
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@kv.Value</MudChip>
+                    </div>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private bool _loading = true;
+    private int _totalLeads, _newLeadsToday, _activeCandidates, _departed, _openJobOrders;
+    private double _conversionRate;
+    private Dictionary<LeadStatus, int> _byStatus = new();
+    private Dictionary<LeadSource, int> _bySource = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var startOfDay = new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero);
+
+        _totalLeads = await db.Leads.CountAsync();
+        _newLeadsToday = await db.Leads.CountAsync(l => l.CreatedAt >= startOfDay);
+        var converted = await db.Leads.CountAsync(l => l.Status == LeadStatus.Converted);
+        _conversionRate = _totalLeads == 0 ? 0 : converted * 100.0 / _totalLeads;
+
+        _activeCandidates = await db.CandidateJobOrders.CountAsync(c => c.Status == CandidateJobOrderStatus.Active);
+        _departed = await db.CandidateJobOrders.CountAsync(c => c.CurrentStep >= WorkflowStep.Departure);
+        _openJobOrders = await db.JobOrders.CountAsync(j => j.Status == JobOrderStatus.Recruiting);
+
+        _byStatus = await db.Leads.GroupBy(l => l.Status)
+            .Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
+        _bySource = await db.Leads.GroupBy(l => l.Source)
+            .Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
+
+        _loading = false;
+    }
+
+    private RenderFragment Card(string title, string value, string icon, Color color) =>@<MudItem xs="12" sm="6" md="4" lg="2">
+        <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+            <div class="d-flex justify-space-between align-start">
+                <div>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@title</MudText>
+                    <MudText Typo="Typo.h5"><b>@value</b></MudText>
+                </div>
+                <MudIcon Icon="@icon" Color="@color" Size="Size.Large" />
+            </div>
+        </MudPaper>
+    </MudItem>;
+}

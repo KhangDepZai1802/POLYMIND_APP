@@ -1,0 +1,42 @@
+<MudNavMenu>
+    <AuthorizeView Policy="dashboard:read">
+        <Authorized>
+            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Tổng quan</MudNavLink>
+        </Authorized>
+    </AuthorizeView>
+    <AuthorizeView Policy="leads:read">
+        <Authorized>
+            <MudNavLink Href="/leads" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ContactPhone">Lead (CRM)</MudNavLink>
+        </Authorized>
+    </AuthorizeView>
+    <AuthorizeView Policy="candidates:read">
+        <Authorized>
+            <MudNavLink Href="/candidates" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Groups">Ứng viên</MudNavLink>
+        </Authorized>
+    </AuthorizeView>
+    <AuthorizeView Policy="job_orders:read">
+        <Authorized>
+            <MudNavLink Href="/job-orders" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.WorkOutline">Đơn hàng</MudNavLink>
+        </Authorized>
+    </AuthorizeView>
+    <AuthorizeView Policy="payments:read">
+        <Authorized>
+            <MudNavLink Href="/finance" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Payments">Tài chính</MudNavLink>
+        </Authorized>
+    </AuthorizeView>
+    <AuthorizeView Policy="agents:read">
+        <Authorized>
+            <MudNavLink Href="/agents" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Handshake">Đại lý &amp; Hoa hồng</MudNavLink>
+        </Authorized>
+    </AuthorizeView>
+    <AuthorizeView Policy="visas:read">
+        <Authorized>
+            <MudNavLink Href="/visa" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.FlightTakeoff">Visa &amp; Xuất cảnh</MudNavLink>
+        </Authorized>
+    </AuthorizeView>
+    <AuthorizeView Policy="reports:read">
+        <Authorized>
+            <MudNavLink Href="/reports" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment">Báo cáo</MudNavLink>
+        </Authorized>
+    </AuthorizeView>
+</MudNavMenu>

@@ -1,0 +1,85 @@
+@rendermode InteractiveServer
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_model.FullName" Label="Họ tên *" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_model.Phone" Label="Số điện thoại" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_model.Email" Label="Email" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_model.Province" Label="Tỉnh/Thành phố" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="LeadSource" @bind-Value="_model.Source" Label="Nguồn" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var s in Enum.GetValues<LeadSource>())
+                    {
+                        <MudSelectItem Value="@s">@Labels.Vi(s)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_model.TargetCountry" Label="Quốc gia mong muốn" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_model.Notes" Label="Ghi chú" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Hủy</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="_saving">Lưu</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private Lead _model = new() { FullName = "", Source = LeadSource.Hotline };
+    private bool _saving;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_model.FullName)) return;
+        if (!await HasPermission("leads:create"))
+        {
+            Snackbar.Add("Bạn không có quyền tạo lead.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _model.Code = $"LD-{DateTime.Now:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}";
+        _model.Status = LeadStatus.New;
+        db.Leads.Add(_model);
+        db.LeadActivities.Add(new LeadActivity
+        {
+            LeadId = _model.Id,
+            ActivityType = LeadActivityType.Note,
+            Content = "Tạo lead mới",
+            NewStatus = LeadStatus.New,
+        });
+        await db.SaveChangesAsync();
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private async Task<bool> HasPermission(string permission)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        return result.Succeeded;
+    }
+}

@@ -1,0 +1,252 @@
+@page "/leads/{Id:guid}"
+@attribute [Authorize(Policy = "leads:read")]
+@rendermode InteractiveServer
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Chi tiết Lead — POLYMIND</PageTitle>
+
+@if (_lead is null)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/leads"))" Class="mb-3">Quay lại</MudButton>
+
+    <MudGrid>
+        <MudItem xs="12" md="7">
+            <MudPaper Class="pa-4 mb-4" Elevation="1">
+                <div class="d-flex justify-space-between align-center mb-3">
+                    <div>
+                        <MudText Typo="Typo.h5"><b>@_lead.FullName</b></MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@_lead.Code</MudText>
+                    </div>
+                    <MudChip T="string" Color="Labels.ColorOf(_lead.Status)">@Labels.Vi(_lead.Status)</MudChip>
+                </div>
+                <MudDivider Class="mb-3" />
+                <MudGrid>
+                    @Field("Số điện thoại", _lead.Phone)
+                    @Field("Email", _lead.Email)
+                    @Field("Tỉnh/Thành", _lead.Province)
+                    @Field("Quốc gia mong muốn", _lead.TargetCountry)
+                    @Field("Nguồn", Labels.Vi(_lead.Source))
+                    @Field("Ngày tạo", _lead.CreatedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm"))
+                </MudGrid>
+                @if (!string.IsNullOrWhiteSpace(_lead.Notes))
+                {
+                    <MudText Typo="Typo.body2" Class="mt-3"><b>Ghi chú:</b> @_lead.Notes</MudText>
+                }
+            </MudPaper>
+
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Lịch sử chăm sóc</b></MudText>
+                <MudTimeline TimelinePosition="TimelinePosition.Start">
+                    @foreach (var a in _activities)
+                    {
+                        <MudTimelineItem Color="Color.Primary" Size="Size.Small">
+                            <MudText Typo="Typo.body2"><b>@ActivityLabel(a.ActivityType)</b></MudText>
+                            <MudText Typo="Typo.caption">@a.Content</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.CreatedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm")</MudText>
+                        </MudTimelineItem>
+                    }
+                </MudTimeline>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="5">
+            @if (_canUpdateLead)
+            {
+                <MudPaper Class="pa-4 mb-4" Elevation="1">
+                    <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Cập nhật trạng thái</b></MudText>
+                    <MudSelect T="LeadStatus" @bind-Value="_newStatus" Label="Trạng thái mới" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2">
+                        @foreach (var s in Enum.GetValues<LeadStatus>())
+                        {
+                            <MudSelectItem Value="@s">@Labels.Vi(s)</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudTextField @bind-Value="_statusNote" Label="Ghi chú" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" Class="mb-2" />
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="UpdateStatus" Disabled="_busy">Lưu trạng thái</MudButton>
+                </MudPaper>
+            }
+
+            @if (_lead.Status != LeadStatus.Converted)
+            {
+                @if (_canUpdateLead && _canCreateCandidate)
+                {
+                    <MudPaper Class="pa-4" Elevation="1">
+                        <MudText Typo="Typo.subtitle1" Class="mb-2"><b>Chuyển thành ứng viên</b></MudText>
+                        <MudText Typo="Typo.body2" Class="mb-3 mud-text-secondary">Tạo hồ sơ ứng viên từ lead này và bắt đầu quy trình 17 bước.</MudText>
+                        <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.PersonAdd" FullWidth="true" OnClick="Convert" Disabled="_busy">
+                            Chuyển thành ứng viên
+                        </MudButton>
+                    </MudPaper>
+                }
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Success">Lead này đã được chuyển thành ứng viên.</MudAlert>
+            }
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private Lead? _lead;
+    private List<LeadActivity> _activities = new();
+    private LeadStatus _newStatus;
+    private string _statusNote = "";
+    private bool _busy;
+    private bool _canUpdateLead;
+    private bool _canCreateCandidate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPermissions();
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _lead = await db.Leads.FirstOrDefaultAsync(l => l.Id == Id);
+        if (_lead is not null)
+        {
+            _newStatus = _lead.Status;
+            _activities = await db.LeadActivities.Where(a => a.LeadId == Id)
+                .OrderByDescending(a => a.CreatedAt).ToListAsync();
+        }
+    }
+
+    private async Task UpdateStatus()
+    {
+        if (_lead is null) return;
+        if (!await HasPermission("leads:update"))
+        {
+            Snackbar.Add("Bạn không có quyền cập nhật lead.", Severity.Warning);
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var lead = await db.Leads.FirstAsync(l => l.Id == Id);
+            var old = lead.Status;
+            lead.Status = _newStatus;
+            lead.UpdatedAt = DateTimeOffset.UtcNow;
+            db.LeadActivities.Add(new LeadActivity
+            {
+                LeadId = Id,
+                ActivityType = LeadActivityType.StatusChange,
+                Content = string.IsNullOrWhiteSpace(_statusNote) ? $"Đổi trạng thái: {Labels.Vi(old)} → {Labels.Vi(_newStatus)}" : _statusNote,
+                OldStatus = old,
+                NewStatus = _newStatus,
+            });
+            await db.SaveChangesAsync();
+            _statusNote = "";
+            Snackbar.Add("Đã cập nhật trạng thái", Severity.Success);
+            await Load();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task Convert()
+    {
+        if (_lead is null) return;
+        if (!await HasAllPermissions("leads:update", "candidates:create"))
+        {
+            Snackbar.Add("Bạn không có quyền chuyển lead thành ứng viên.", Severity.Warning);
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var lead = await db.Leads.FirstAsync(l => l.Id == Id);
+            var adminId = await db.Users.Select(u => u.Id).FirstOrDefaultAsync();
+
+            var candidate = new Candidate
+            {
+                Code = $"UV-{DateTime.Now:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}",
+                LeadId = lead.Id,
+                FullName = lead.FullName,
+                Phone = lead.Phone,
+                Province = lead.Province,
+                Gender = lead.Gender,
+                AgentId = lead.AgentId,
+                CreatedBy = adminId,
+            };
+            db.Candidates.Add(candidate);
+
+            lead.Status = LeadStatus.Converted;
+            lead.UpdatedAt = DateTimeOffset.UtcNow;
+            db.LeadActivities.Add(new LeadActivity
+            {
+                LeadId = Id,
+                ActivityType = LeadActivityType.StatusChange,
+                Content = "Chuyển thành ứng viên",
+                NewStatus = LeadStatus.Converted,
+            });
+            await db.SaveChangesAsync();
+
+            Snackbar.Add("Đã tạo hồ sơ ứng viên", Severity.Success);
+            Nav.NavigateTo($"/candidates/{candidate.Id}");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task LoadPermissions()
+    {
+        _canUpdateLead = await HasPermission("leads:update");
+        _canCreateCandidate = await HasPermission("candidates:create");
+    }
+
+    private async Task<bool> HasPermission(string permission)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        return result.Succeeded;
+    }
+
+    private async Task<bool> HasAllPermissions(params string[] permissions)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        foreach (var permission in permissions)
+        {
+            var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+            if (!result.Succeeded) return false;
+        }
+
+        return true;
+    }
+
+    private static string ActivityLabel(LeadActivityType t) => t switch
+    {
+        LeadActivityType.Call => "Cuộc gọi",
+        LeadActivityType.Note => "Ghi chú",
+        LeadActivityType.Email => "Email",
+        LeadActivityType.Sms => "SMS",
+        LeadActivityType.Zalo => "Zalo",
+        LeadActivityType.Appointment => "Hẹn tư vấn",
+        LeadActivityType.StatusChange => "Đổi trạng thái",
+        _ => t.ToString()
+    };
+
+    private RenderFragment Field(string label, string? value) =>@<MudItem xs="6">
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">@label</MudText>
+        <MudText Typo="Typo.body2">@(string.IsNullOrWhiteSpace(value) ? "—" : value)</MudText>
+    </MudItem>;
+}

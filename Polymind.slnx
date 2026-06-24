@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Polymind.Application/Polymind.Application.csproj" />
+    <Project Path="src/Polymind.Domain/Polymind.Domain.csproj" />
+    <Project Path="src/Polymind.Infrastructure/Polymind.Infrastructure.csproj" />
+    <Project Path="src/Polymind.Web/Polymind.Web.csproj" />
+  </Folder>
+</Solution>

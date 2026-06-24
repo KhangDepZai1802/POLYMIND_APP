@@ -1,0 +1,9 @@
+<div class="d-flex flex-column align-center justify-center" style="min-height:60vh">
+    <MudIcon Icon="@Icons.Material.Filled.Construction" Color="Color.Secondary" Style="font-size:5rem" />
+    <MudText Typo="Typo.h5" Class="mt-4"><b>@Title</b></MudText>
+    <MudText Typo="Typo.body1" Class="mud-text-secondary mt-1">Module này sẽ được triển khai ở giai đoạn tiếp theo.</MudText>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Đang phát triển";
+}

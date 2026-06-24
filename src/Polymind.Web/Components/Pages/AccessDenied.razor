@@ -1,0 +1,16 @@
+@page "/access-denied"
+@attribute [AllowAnonymous]
+@rendermode InteractiveServer
+
+<PageTitle>Không có quyền — POLYMIND</PageTitle>
+
+<MudPaper Class="pa-6 mx-auto" Elevation="1" Style="max-width:560px">
+    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Large" Class="mb-3" />
+    <MudText Typo="Typo.h5" Class="mb-2"><b>Không có quyền truy cập</b></MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+        Tài khoản hiện tại chưa được cấp quyền cho chức năng này.
+    </MudText>
+    <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Home">
+        Về tổng quan
+    </MudButton>
+</MudPaper>

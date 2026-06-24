@@ -1,0 +1,68 @@
+@page "/login"
+@layout EmptyLayout
+@attribute [AllowAnonymous]
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using Polymind.Infrastructure.Identity
+@inject SignInManager<ApplicationUser> SignInManager
+@inject NavigationManager Nav
+
+<PageTitle>Đăng nhập — POLYMIND</PageTitle>
+
+<div class="login-bg">
+    <div class="login-card">
+        <div class="login-brand">
+            <span class="login-logo">PM</span>
+            <div>
+                <h1>POLYMIND</h1>
+                <p>Hệ thống Quản lý Xuất khẩu Lao động</p>
+            </div>
+        </div>
+
+        <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login">
+            <DataAnnotationsValidator />
+
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <div class="login-error">@_error</div>
+            }
+
+            <label class="login-label">Email</label>
+            <InputText @bind-Value="Input.Email" class="login-input" placeholder="admin@polymind.local" autocomplete="username" />
+            <ValidationMessage For="() => Input.Email" />
+
+            <label class="login-label">Mật khẩu</label>
+            <InputText type="password" @bind-Value="Input.Password" class="login-input" placeholder="••••••••" autocomplete="current-password" />
+            <ValidationMessage For="() => Input.Password" />
+
+            <button type="submit" class="login-btn">Đăng nhập</button>
+        </EditForm>
+
+        <div class="login-hint">Demo: <b>admin@polymind.local</b> / <b>Admin@123</b></div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromForm] private LoginInput Input { get; set; } = new();
+    [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
+    private string? _error;
+
+    private async Task LoginUser()
+    {
+        var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, isPersistent: true, lockoutOnFailure: false);
+        if (result.Succeeded)
+            Nav.NavigateTo(ReturnUrl ?? "/", forceLoad: true);
+        else
+            _error = "Email hoặc mật khẩu không đúng.";
+    }
+
+    private sealed class LoginInput
+    {
+        [Required(ErrorMessage = "Vui lòng nhập email")]
+        [EmailAddress(ErrorMessage = "Email không hợp lệ")]
+        public string Email { get; set; } = "";
+
+        [Required(ErrorMessage = "Vui lòng nhập mật khẩu")]
+        public string Password { get; set; } = "";
+    }
+}

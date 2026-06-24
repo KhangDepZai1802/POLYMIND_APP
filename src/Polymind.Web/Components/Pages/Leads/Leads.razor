@@ -1,0 +1,119 @@
+@page "/leads"
+@attribute [Authorize(Policy = "leads:read")]
+@rendermode InteractiveServer
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Lead (CRM) — POLYMIND</PageTitle>
+
+<div class="d-flex justify-space-between align-center mb-4">
+    <div>
+        <MudText Typo="Typo.h5"><b>Quản lý Lead</b></MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">@_leads.Count khách hàng tiềm năng</MudText>
+    </div>
+    <AuthorizeView Policy="leads:create">
+        <Authorized>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">
+                Thêm Lead
+            </MudButton>
+        </Authorized>
+    </AuthorizeView>
+</div>
+
+<MudPaper Elevation="1" Class="pa-4">
+    <div class="d-flex flex-wrap gap-3 mb-3">
+        <MudTextField @bind-Value="_search" Placeholder="Tìm tên, SĐT, mã..." Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Class="flex-grow-1" Variant="Variant.Outlined" Margin="Margin.Dense" />
+        <MudSelect T="LeadStatus?" @bind-Value="_statusFilter" Placeholder="Trạng thái" Clearable="true"
+                   Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:180px">
+            @foreach (var s in Enum.GetValues<LeadStatus>())
+            {
+                <MudSelectItem T="LeadStatus?" Value="@s">@Labels.Vi(s)</MudSelectItem>
+            }
+        </MudSelect>
+        <MudSelect T="LeadSource?" @bind-Value="_sourceFilter" Placeholder="Nguồn" Clearable="true"
+                   Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:160px">
+            @foreach (var s in Enum.GetValues<LeadSource>())
+            {
+                <MudSelectItem T="LeadSource?" Value="@s">@Labels.Vi(s)</MudSelectItem>
+            }
+        </MudSelect>
+    </div>
+
+    <MudDataGrid T="Lead" Items="Filtered" Hover="true" Dense="true" Striped="true"
+                 RowClick="@(args => Nav.NavigateTo($"/leads/{args.Item.Id}"))" Class="cursor-pointer">
+        <Columns>
+            <PropertyColumn Property="x => x.Code" Title="Mã" />
+            <PropertyColumn Property="x => x.FullName" Title="Họ tên" />
+            <PropertyColumn Property="x => x.Phone" Title="SĐT" />
+            <PropertyColumn Property="x => x.Province" Title="Tỉnh/TP" />
+            <TemplateColumn Title="Nguồn">
+                <CellTemplate>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@Labels.Vi(context.Item.Source)</MudChip>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Trạng thái">
+                <CellTemplate>
+                    <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(context.Item.Status)">@Labels.Vi(context.Item.Status)</MudChip>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Ngày tạo">
+                <CellTemplate>@context.Item.CreatedAt.LocalDateTime.ToString("dd/MM/yyyy")</CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <PagerContent>
+            <MudDataGridPager T="Lead" />
+        </PagerContent>
+    </MudDataGrid>
+</MudPaper>
+
+@code {
+    private List<Lead> _leads = new();
+    private string _search = "";
+    private LeadStatus? _statusFilter;
+    private LeadSource? _sourceFilter;
+
+    private IEnumerable<Lead> Filtered => _leads.Where(l =>
+        (string.IsNullOrWhiteSpace(_search)
+            || l.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || (l.Phone?.Contains(_search) ?? false)
+            || l.Code.Contains(_search, StringComparison.OrdinalIgnoreCase))
+        && (_statusFilter is null || l.Status == _statusFilter)
+        && (_sourceFilter is null || l.Source == _sourceFilter));
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _leads = await db.Leads.OrderByDescending(l => l.CreatedAt).ToListAsync();
+    }
+
+    private async Task OpenCreate()
+    {
+        if (!await HasPermission("leads:create"))
+        {
+            Snackbar.Add("Bạn không có quyền tạo lead.", Severity.Warning);
+            return;
+        }
+
+        var dialog = await DialogService.ShowAsync<LeadDialog>("Thêm Lead mới");
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            Snackbar.Add("Đã thêm lead mới", Severity.Success);
+            await Load();
+        }
+    }
+
+    private async Task<bool> HasPermission(string permission)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        return result.Succeeded;
+    }
+}

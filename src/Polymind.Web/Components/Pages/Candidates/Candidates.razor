@@ -1,0 +1,74 @@
+@page "/candidates"
+@attribute [Authorize(Policy = "candidates:read")]
+@rendermode InteractiveServer
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+
+<PageTitle>Ứng viên — POLYMIND</PageTitle>
+
+<div class="mb-4">
+    <MudText Typo="Typo.h5"><b>Quản lý Ứng viên</b></MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">@_rows.Count ứng viên trong quy trình</MudText>
+</div>
+
+<MudPaper Elevation="1" Class="pa-4">
+    <MudTextField @bind-Value="_search" Placeholder="Tìm tên, mã, SĐT..." Adornment="Adornment.Start"
+                  AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+
+    <MudDataGrid T="Row" Items="Filtered" Hover="true" Dense="true" Striped="true"
+                 RowClick="@(args => Nav.NavigateTo($"/candidates/{args.Item.Id}"))" Class="cursor-pointer">
+        <Columns>
+            <PropertyColumn Property="x => x.Code" Title="Mã" />
+            <PropertyColumn Property="x => x.FullName" Title="Họ tên" />
+            <PropertyColumn Property="x => x.Phone" Title="SĐT" />
+            <PropertyColumn Property="x => x.Country" Title="Đơn hàng" />
+            <TemplateColumn Title="Bước hiện tại">
+                <CellTemplate>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">@(context.Item.Step is null ? "—" : Labels.Vi(context.Item.Step.Value))</MudChip>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Tiến độ">
+                <CellTemplate>
+                    <div class="d-flex align-center" style="min-width:120px">
+                        <MudProgressLinear Color="Color.Success" Value="@context.Item.Progress" Class="flex-grow-1 mr-2" Style="height:8px" Rounded="true" />
+                        <MudText Typo="Typo.caption">@($"{context.Item.Progress:0}%")</MudText>
+                    </div>
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <PagerContent><MudDataGridPager T="Row" /></PagerContent>
+    </MudDataGrid>
+</MudPaper>
+
+@code {
+    private record Row(Guid Id, string Code, string FullName, string? Phone, string? Country, WorkflowStep? Step, double Progress);
+
+    private List<Row> _rows = new();
+    private string _search = "";
+
+    private IEnumerable<Row> Filtered => _rows.Where(r =>
+        string.IsNullOrWhiteSpace(_search)
+        || r.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase)
+        || r.Code.Contains(_search, StringComparison.OrdinalIgnoreCase)
+        || (r.Phone?.Contains(_search) ?? false));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var data = await db.Candidates
+            .Select(c => new
+            {
+                c.Id, c.Code, c.FullName, c.Phone,
+                Cjo = c.JobOrders.OrderByDescending(j => j.CreatedAt).FirstOrDefault()
+            })
+            .ToListAsync();
+
+        var jobCountries = await db.JobOrders.ToDictionaryAsync(j => j.Id, j => j.Country);
+
+        _rows = data.Select(d => new Row(
+            d.Id, d.Code, d.FullName, d.Phone,
+            d.Cjo is null ? null : jobCountries.GetValueOrDefault(d.Cjo.JobOrderId),
+            d.Cjo?.CurrentStep,
+            d.Cjo is null ? 0 : (int)d.Cjo.CurrentStep * 100.0 / 17)).ToList();
+    }
+}

@@ -1,0 +1,166 @@
+@page "/candidates/{Id:guid}"
+@attribute [Authorize(Policy = "candidates:read")]
+@rendermode InteractiveServer
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Chi tiết Ứng viên — POLYMIND</PageTitle>
+
+@if (_candidate is null)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/candidates"))" Class="mb-3">Quay lại</MudButton>
+
+    <MudGrid>
+        <MudItem xs="12" md="5">
+            <MudPaper Class="pa-4 mb-4" Elevation="1">
+                <div class="d-flex align-center mb-3">
+                    <MudAvatar Color="Color.Primary" Size="Size.Large" Class="mr-3">@_candidate.FullName[..1]</MudAvatar>
+                    <div>
+                        <MudText Typo="Typo.h6"><b>@_candidate.FullName</b></MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@_candidate.Code</MudText>
+                    </div>
+                </div>
+                <MudDivider Class="mb-3" />
+                <MudGrid>
+                    @Field("Số điện thoại", _candidate.Phone)
+                    @Field("Tỉnh/Thành", _candidate.Province)
+                    @Field("CCCD", _candidate.CccdNumber)
+                    @Field("Đơn hàng", _country)
+                </MudGrid>
+            </MudPaper>
+
+            @if (_cjo is not null && _cjo.CurrentStep < WorkflowStep.Completed && _canUpdateCandidate)
+            {
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.subtitle1" Class="mb-1"><b>Bước hiện tại</b></MudText>
+                    <MudChip T="string" Color="Color.Primary" Class="mb-3">@Labels.Vi(_cjo.CurrentStep)</MudChip>
+                    <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true"
+                               StartIcon="@Icons.Material.Filled.ArrowForward" OnClick="AdvanceStep" Disabled="_busy">
+                        Hoàn thành & chuyển bước tiếp theo
+                    </MudButton>
+                </MudPaper>
+            }
+            else if (_cjo is not null)
+            {
+                <MudAlert Severity="Severity.Success">Ứng viên đã hoàn tất toàn bộ quy trình 🎉</MudAlert>
+            }
+        </MudItem>
+
+        <MudItem xs="12" md="7">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Quy trình 17 bước</b></MudText>
+                <MudTimeline TimelinePosition="TimelinePosition.Start" Class="workflow-timeline">
+                    @foreach (var step in Enum.GetValues<WorkflowStep>())
+                    {
+                        var state = StateOf(step);
+                        <MudTimelineItem Color="@state.Color" Size="Size.Small"
+                                         Icon="@(state.Done ? Icons.Material.Filled.Check : state.Current ? Icons.Material.Filled.RadioButtonChecked : Icons.Material.Filled.RadioButtonUnchecked)">
+                            <MudText Typo="Typo.body2" Style="@(state.Pending ? "color:#94a3b8" : "")">
+                                <b>@((int)step).</b> @Labels.Vi(step)
+                            </MudText>
+                            @if (state.Current)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="mt-1">Đang xử lý</MudChip>
+                            }
+                        </MudTimelineItem>
+                    }
+                </MudTimeline>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private Candidate? _candidate;
+    private CandidateJobOrder? _cjo;
+    private string? _country;
+    private bool _busy;
+    private bool _canUpdateCandidate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canUpdateCandidate = await HasPermission("candidates:update");
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _candidate = await db.Candidates.FirstOrDefaultAsync(c => c.Id == Id);
+        if (_candidate is null) return;
+        _cjo = await db.CandidateJobOrders.Where(j => j.CandidateId == Id)
+            .OrderByDescending(j => j.CreatedAt).FirstOrDefaultAsync();
+        if (_cjo is not null)
+            _country = await db.JobOrders.Where(j => j.Id == _cjo.JobOrderId).Select(j => j.Country).FirstOrDefaultAsync();
+    }
+
+    private (Color Color, bool Done, bool Current, bool Pending) StateOf(WorkflowStep step)
+    {
+        if (_cjo is null) return (Color.Default, false, false, true);
+        if (step < _cjo.CurrentStep) return (Color.Success, true, false, false);
+        if (step == _cjo.CurrentStep) return (Color.Primary, false, true, false);
+        return (Color.Default, false, false, true);
+    }
+
+    private async Task AdvanceStep()
+    {
+        if (_cjo is null || _cjo.CurrentStep >= WorkflowStep.Completed) return;
+        if (!await HasPermission("candidates:update"))
+        {
+            Snackbar.Add("Bạn không có quyền cập nhật quy trình ứng viên.", Severity.Warning);
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var cjo = await db.CandidateJobOrders.FirstAsync(j => j.Id == _cjo.Id);
+            var adminId = await db.Users.Select(u => u.Id).FirstOrDefaultAsync();
+            var completed = cjo.CurrentStep;
+            var next = (WorkflowStep)((int)cjo.CurrentStep + 1);
+
+            db.WorkflowStepRecords.Add(new WorkflowStepRecord
+            {
+                CandidateJobOrderId = cjo.Id,
+                Step = completed,
+                Status = WorkflowStepStatus.Completed,
+                AssignedTo = adminId,
+                CompletedAt = DateTimeOffset.UtcNow,
+                CreatedBy = adminId,
+            });
+            cjo.CurrentStep = next;
+            cjo.UpdatedAt = DateTimeOffset.UtcNow;
+            if (next == WorkflowStep.Completed) cjo.Status = CandidateJobOrderStatus.Completed;
+            await db.SaveChangesAsync();
+
+            Snackbar.Add($"Đã chuyển sang bước: {Labels.Vi(next)}", Severity.Success);
+            await Load();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task<bool> HasPermission(string permission)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        return result.Succeeded;
+    }
+
+    private RenderFragment Field(string label, string? value) =>@<MudItem xs="6">
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">@label</MudText>
+        <MudText Typo="Typo.body2">@(string.IsNullOrWhiteSpace(value) ? "—" : value)</MudText>
+    </MudItem>;
+}
