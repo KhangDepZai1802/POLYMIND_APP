@@ -9,26 +9,32 @@ public static class PolymindTheme
 {
     public static readonly MudTheme Default = new()
     {
+        // Bộ nhận diện thương hiệu POLYMIND × VIETGROUP: xanh dương + nền trắng, tươi sáng.
         PaletteLight = new PaletteLight
         {
-            Primary = "#1e3a8a",
-            Secondary = "#0ea5e9",
-            Tertiary = "#6366f1",
-            Info = "#0284c7",
+            Primary = "#1A5FA8",        // xanh thương hiệu chính
+            Secondary = "#0167D8",      // xanh sáng nhấn
+            Tertiary = "#0D3F78",       // navy đậm
+            Info = "#0167D8",
             Success = "#16a34a",
             Warning = "#f59e0b",
             Error = "#dc2626",
-            Dark = "#1f2937",
-            AppbarBackground = "#1e3a8a",
+            Dark = "#0D3F78",
+            AppbarBackground = "#0D3F78", // top bar navy đậm, chữ trắng
             AppbarText = "#ffffff",
-            Background = "#f4f6fb",
-            BackgroundGray = "#eef1f7",
+            Background = "#ffffff",       // nền trắng (yêu cầu user)
+            BackgroundGray = "#EFF5FC",   // tint xanh rất nhạt thay xám
             Surface = "#ffffff",
             DrawerBackground = "#ffffff",
-            DrawerText = "#1f2937",
-            DrawerIcon = "#475569",
-            TextPrimary = "#1f2937",
-            TextSecondary = "#6b7280",
+            DrawerText = "#0D3F78",
+            DrawerIcon = "#1A5FA8",
+            ActionDefault = "#1A5FA8",
+            PrimaryContrastText = "#ffffff",
+            TextPrimary = "#10243f",      // navy gần đen, đọc rõ trên trắng
+            TextSecondary = "#5b6b80",
+            LinesDefault = "#D1E4FA",     // viền nhạt tông thương hiệu
+            TableLines = "#E3EEFB",
+            HoverOpacity = 0.06,
         },
         PaletteDark = new PaletteDark
         {
@@ -55,7 +61,7 @@ public static class PolymindTheme
         },
         LayoutProperties = new LayoutProperties
         {
-            DefaultBorderRadius = "12px",
+            DefaultBorderRadius = "16px",
         },
     };
 }

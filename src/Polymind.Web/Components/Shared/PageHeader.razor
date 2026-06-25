@@ -1,10 +1,14 @@
-@* Tiêu đề trang dùng chung: tiêu đề + mô tả (ẩn trên điện thoại) + vùng hành động tự xuống dòng. *@
-<div class="d-flex justify-space-between align-center flex-wrap mb-4" style="gap:8px">
+@* Tiêu đề trang dùng chung: eyebrow + tiêu đề lớn + mô tả + vùng hành động tự xuống dòng. *@
+<div class="d-flex justify-space-between align-end flex-wrap mb-4" style="gap:8px">
     <div style="min-width:0">
-        <MudText Typo="Typo.h5" Class="page-title" Style="font-weight:700">@Title</MudText>
+        @if (!string.IsNullOrWhiteSpace(Eyebrow))
+        {
+            <span class="pm-eyebrow">@Eyebrow</span>
+        }
+        <div class="page-title">@Title</div>
         @if (!string.IsNullOrWhiteSpace(Subtitle))
         {
-            <MudText Typo="Typo.body2" Class="mud-text-secondary d-none d-sm-block">@Subtitle</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary d-none d-sm-block mt-1">@Subtitle</MudText>
         }
     </div>
     @if (Actions is not null)
@@ -17,6 +21,7 @@
 
 @code {
     [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Eyebrow { get; set; }
     [Parameter] public string? Subtitle { get; set; }
     [Parameter] public RenderFragment? Actions { get; set; }
 }

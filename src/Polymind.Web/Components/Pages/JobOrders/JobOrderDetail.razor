@@ -26,12 +26,15 @@ else
     <MudGrid>
         <MudItem xs="12" md="5">
             <MudPaper Class="pa-4" Elevation="1">
-                <div class="d-flex justify-space-between align-center mb-3">
-                    <div>
-                        <MudText Typo="Typo.h6"><b>@(string.IsNullOrWhiteSpace(_job.CompanyName) ? _job.Country : _job.CompanyName)</b></MudText>
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@_job.Code</MudText>
+                <div class="d-flex justify-space-between align-center mb-3" style="gap:8px">
+                    <div class="d-flex align-center" style="gap:10px;min-width:0">
+                        <span style="font-size:2.2rem;line-height:1">@_country.Flag</span>
+                        <div style="min-width:0">
+                            <MudText Typo="Typo.h6"><b>@(string.IsNullOrWhiteSpace(_job.CompanyName) ? _country.Name : _job.CompanyName)</b></MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@_job.Code</MudText>
+                        </div>
                     </div>
-                    <MudChip T="string" Color="Color.Primary">@Labels.Vi(_job.Status)</MudChip>
+                    <MudChip T="string" Color="Labels.ColorOf(_job.Status)">@Labels.Vi(_job.Status)</MudChip>
                 </div>
                 <MudDivider Class="mb-3" />
                 <MudGrid>
@@ -91,6 +94,7 @@ else
     private record CandidateRow(Guid CandidateId, string Code, string FullName, WorkflowStep Step, CandidateJobOrderStatus Status);
 
     private JobOrder? _job;
+    private CountryDisplay.CountryStyle _country;
     private List<CandidateRow> _candidates = new();
     private bool _canUpdate;
 
@@ -105,6 +109,7 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         _job = await db.JobOrders.FirstOrDefaultAsync(j => j.Id == Id);
         if (_job is null) return;
+        _country = CountryDisplay.Of(_job.Country);
         _candidates = await db.CandidateJobOrders
             .Where(cjo => cjo.JobOrderId == Id)
             .OrderByDescending(cjo => cjo.CreatedAt)

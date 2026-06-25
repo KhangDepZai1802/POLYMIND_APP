@@ -77,6 +77,26 @@ else
                     </MudGrid>
                 }
 
+                @if (HasGuardianInfo)
+                {
+                    <MudDivider Class="my-3" />
+                    <div class="d-flex align-center mb-2" style="gap:6px">
+                        <MudIcon Icon="@Icons.Material.Filled.FamilyRestroom" Size="Size.Small" Color="Color.Primary" />
+                        <MudText Typo="Typo.subtitle2"><b>Cha/Mẹ/Người bảo hộ</b></MudText>
+                    </div>
+                    <MudGrid>
+                        @Field("Họ tên", _candidate.GuardianName)
+                        @Field("Quan hệ", _candidate.GuardianRelation)
+                        @Field("SĐT", _candidate.GuardianPhone)
+                        @Field("CCCD", _candidate.GuardianCccd)
+                        @Field("Nghề nghiệp", _candidate.GuardianOccupation)
+                    </MudGrid>
+                    @if (!string.IsNullOrWhiteSpace(_candidate.GuardianAddress))
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-2"><b>Địa chỉ:</b> @_candidate.GuardianAddress</MudText>
+                    }
+                }
+
                 @if (HasBankInfo)
                 {
                     <MudDivider Class="my-3" />
@@ -411,6 +431,8 @@ else
         || !string.IsNullOrWhiteSpace(_candidate?.EmergencyContactPhone);
     private bool HasBankInfo => !string.IsNullOrWhiteSpace(_candidate?.BankAccountNumber)
         || !string.IsNullOrWhiteSpace(_candidate?.BankName);
+    private bool HasGuardianInfo => !string.IsNullOrWhiteSpace(_candidate?.GuardianName)
+        || !string.IsNullOrWhiteSpace(_candidate?.GuardianPhone);
 
     protected override async Task OnInitializedAsync()
     {

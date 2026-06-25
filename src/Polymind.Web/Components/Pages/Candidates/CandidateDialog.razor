@@ -81,6 +81,29 @@
                 </MudGrid>
             </MudTabPanel>
 
+            <MudTabPanel Text="Cha/Mẹ/Người bảo hộ">
+                <MudGrid>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_m.GuardianName" Label="Họ tên" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_m.GuardianRelation" Label="Quan hệ (cha/mẹ/người bảo hộ…)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_m.GuardianPhone" Label="Số điện thoại" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_m.GuardianCccd" Label="Số CCCD" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_m.GuardianOccupation" Label="Nghề nghiệp" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_m.GuardianAddress" Label="Địa chỉ" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                </MudGrid>
+            </MudTabPanel>
+
             <MudTabPanel Text="Ngân hàng">
                 <MudGrid>
                     <MudItem xs="12" sm="6">
@@ -234,6 +257,12 @@
         c.EmergencyContactName,
         c.EmergencyContactPhone,
         c.EmergencyContactRelation,
+        c.GuardianName,
+        c.GuardianRelation,
+        c.GuardianPhone,
+        c.GuardianCccd,
+        c.GuardianAddress,
+        c.GuardianOccupation,
         c.BankAccountNumber,
         c.BankName,
         c.BankAccountName,
@@ -264,6 +293,12 @@
         public string? EmergencyContactName { get; set; }
         public string? EmergencyContactPhone { get; set; }
         public string? EmergencyContactRelation { get; set; }
+        public string? GuardianName { get; set; }
+        public string? GuardianRelation { get; set; }
+        public string? GuardianPhone { get; set; }
+        public string? GuardianCccd { get; set; }
+        public string? GuardianAddress { get; set; }
+        public string? GuardianOccupation { get; set; }
         public string? BankAccountNumber { get; set; }
         public string? BankName { get; set; }
         public string? BankAccountName { get; set; }
@@ -290,6 +325,12 @@
             EmergencyContactName = c.EmergencyContactName;
             EmergencyContactPhone = c.EmergencyContactPhone;
             EmergencyContactRelation = c.EmergencyContactRelation;
+            GuardianName = c.GuardianName;
+            GuardianRelation = c.GuardianRelation;
+            GuardianPhone = c.GuardianPhone;
+            GuardianCccd = c.GuardianCccd;
+            GuardianAddress = c.GuardianAddress;
+            GuardianOccupation = c.GuardianOccupation;
             BankAccountNumber = c.BankAccountNumber;
             BankName = c.BankName;
             BankAccountName = c.BankAccountName;
@@ -317,6 +358,12 @@
             c.EmergencyContactName = EmergencyContactName;
             c.EmergencyContactPhone = EmergencyContactPhone;
             c.EmergencyContactRelation = EmergencyContactRelation;
+            c.GuardianName = GuardianName;
+            c.GuardianRelation = GuardianRelation;
+            c.GuardianPhone = GuardianPhone;
+            c.GuardianCccd = GuardianCccd;
+            c.GuardianAddress = GuardianAddress;
+            c.GuardianOccupation = GuardianOccupation;
             c.BankAccountNumber = BankAccountNumber;
             c.BankName = BankName;
             c.BankAccountName = BankAccountName;

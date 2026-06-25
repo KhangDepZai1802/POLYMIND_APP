@@ -78,6 +78,20 @@ public static class Labels
         _ => s.ToString()
     };
 
+    public static Color ColorOf(JobOrderStatus s) => s switch
+    {
+        JobOrderStatus.Recruiting => Color.Success,
+        JobOrderStatus.FullProfiles => Color.Info,
+        JobOrderStatus.Interviewing => Color.Warning,
+        JobOrderStatus.Closed => Color.Default,
+        JobOrderStatus.Cancelled => Color.Error,
+        _ => Color.Default
+    };
+
+    /// <summary>Đơn "đang tuyển (mở)" = còn nhận hồ sơ → cần nổi bật trong danh sách.</summary>
+    public static bool IsOpen(JobOrderStatus s) =>
+        s is JobOrderStatus.Recruiting or JobOrderStatus.FullProfiles or JobOrderStatus.Interviewing;
+
     public static string Vi(WorkflowStepStatus s) => s switch
     {
         WorkflowStepStatus.Pending => "Chờ xử lý",

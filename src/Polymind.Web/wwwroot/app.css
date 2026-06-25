@@ -114,3 +114,146 @@ html, body {
 .mobile-card + .mobile-card {
     margin-top: 8px;
 }
+/* Thẻ đơn hàng (trang /job-orders): hover nâng nhẹ; đơn đang tuyển nổi bật hơn */
+.job-card {
+    transition: transform .12s ease, box-shadow .12s ease;
+}
+.job-card:hover {
+    transform: translateY(-3px);
+}
+.job-card--open {
+    background: linear-gradient(0deg, var(--mud-palette-background), var(--mud-palette-background)) padding-box;
+}
+
+/* ============================================================
+   NHẬN DIỆN THƯƠNG HIỆU POLYMIND — design language hiện đại
+   (lấy cảm hứng bố cục: eyebrow + tiêu đề lớn + thẻ bo tròn mềm)
+   ============================================================ */
+
+/* Eyebrow: nhãn nhỏ IN HOA, giãn chữ, màu nhấn — đặt trên tiêu đề lớn */
+.pm-eyebrow {
+    display: inline-block;
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--mud-palette-secondary);
+    margin-bottom: .25rem;
+}
+
+/* Tiêu đề trang: lớn, đậm, sát; co theo thiết bị */
+.page-title {
+    font-weight: 800 !important;
+    letter-spacing: -.01em;
+    line-height: 1.1;
+    color: var(--mud-palette-text-primary);
+    font-size: clamp(1.5rem, 5vw, 2.1rem) !important;
+}
+
+/* Pill chip tông thương hiệu (tag/nhãn nhẹ) */
+.pm-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .3rem .8rem;
+    border-radius: 999px;
+    background: var(--mud-palette-primary-hover, #D1E4FA);
+    color: var(--mud-palette-primary);
+    font-size: .8rem;
+    font-weight: 600;
+}
+
+/* Thẻ mềm: bo tròn lớn, viền nhẹ, bóng dịu, hover nâng */
+.pm-card {
+    border-radius: 20px;
+    border: 1px solid var(--mud-palette-lines-default);
+    background: var(--mud-palette-surface);
+    box-shadow: 0 6px 20px rgba(13, 63, 120, .06);
+    transition: transform .14s ease, box-shadow .14s ease;
+}
+.pm-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 28px rgba(13, 63, 120, .12);
+}
+
+/* Ô icon bo tròn tông nhấn (đứng cạnh tiêu đề thẻ) */
+.pm-icon-tile {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #1A5FA8, #0167D8);
+    color: #fff;
+    flex: none;
+}
+
+/* MudPaper/MudCard chung: bóng dịu + bo tròn lớn cho cảm giác hiện đại */
+.mud-paper { box-shadow: 0 4px 16px rgba(13, 63, 120, .05); }
+
+/* Nút: tròn pill + chữ không IN HOA cứng, đậm vừa */
+.mud-button-root { border-radius: 12px; text-transform: none; font-weight: 600; }
+
+/* StatCard nâng cấp: bo tròn, viền nhẹ, hover */
+.stat-card {
+    border-radius: 18px !important;
+    border: 1px solid var(--mud-palette-lines-default);
+    transition: transform .12s ease, box-shadow .12s ease;
+}
+.stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(13,63,120,.10); }
+
+/* ===== Footer bản quyền (mọi trang) ===== */
+.app-footer {
+    margin-top: 2.5rem;
+    padding: 1.25rem 1rem 1.5rem;
+    text-align: center;
+    border-top: 1px solid var(--mud-palette-lines-default);
+}
+.app-footer .af-copy {
+    font-size: .82rem;
+    font-weight: 700;
+    color: var(--mud-palette-text-primary);
+    margin: 0;
+}
+.app-footer .af-slogan {
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--mud-palette-secondary);
+    letter-spacing: .01em;
+    margin: .15rem 0 0;
+}
+@media (max-width: 599.98px) {
+    .app-footer { margin-top: 1.75rem; padding: 1rem .75rem 1.25rem; }
+    .app-footer .af-copy { font-size: .72rem; }
+    .app-footer .af-slogan { font-size: .7rem; }
+}
+
+/* Logo POLYMIND ở app bar (nền trắng để logo xanh nổi trên thanh navy) */
+.appbar-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,.18);
+    flex: none;
+    padding: 4px;
+}
+.appbar-logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+/* Logo đồng thương hiệu ở footer */
+.af-logos {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .55rem;
+    margin-bottom: .55rem;
+}
+.af-logos img { height: 32px; width: auto; object-fit: contain; display: block; }
+.af-x { color: var(--mud-palette-text-secondary); font-weight: 700; font-size: 1rem; }
+@media (max-width: 599.98px) {
+    .af-logos img { height: 26px; }
+}

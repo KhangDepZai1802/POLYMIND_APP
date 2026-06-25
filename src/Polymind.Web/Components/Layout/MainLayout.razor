@@ -14,8 +14,9 @@
     <MudAppBar Elevation="1" Color="Color.Primary">
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
                        OnClick="@(() => _drawerOpen = !_drawerOpen)" />
-        <MudText Typo="Typo.h6" Class="ml-2">POLYMIND</MudText>
-        <MudText Typo="Typo.caption" Class="ml-2 d-none d-sm-flex">Quản lý Xuất khẩu Lao động</MudText>
+        <span class="appbar-logo ml-1"><img src="img/logo-polymind.png" alt="POLYMIND" /></span>
+        <MudText Typo="Typo.h6" Class="ml-2 d-none d-sm-flex" Style="font-weight:800;letter-spacing:.02em">POLYMIND OLMS</MudText>
+        <MudText Typo="Typo.caption" Class="ml-2 d-none d-lg-flex" Style="opacity:.85">Quản lý Xuất khẩu Lao động</MudText>
         <MudSpacer />
         <MudTooltip Text="@(_isDarkMode ? "Chế độ sáng" : "Chế độ tối")">
             <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
@@ -47,6 +48,7 @@
     <MudMainContent Class="pt-16">
         <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="px-2 px-sm-4 py-4">
             @Body
+            <AppFooter />
         </MudContainer>
     </MudMainContent>
 </MudLayout>
@@ -68,11 +70,9 @@
     {
         if (!firstRender) return;
 
-        // Khôi phục lựa chọn sáng/tối; nếu chưa có thì theo hệ điều hành.
+        // Mặc định SÁNG (tươi sáng theo nhận diện thương hiệu); chỉ tối khi user tự chọn.
         var saved = await JS.InvokeAsync<string?>("localStorage.getItem", "polymind-theme");
-        _isDarkMode = saved is "dark" or "light"
-            ? saved == "dark"
-            : await _themeProvider.GetSystemDarkModeAsync();
+        _isDarkMode = saved == "dark";
 
         // Mobile mở app: drawer đóng (overlay); laptop: mở sẵn.
         var bp = await Viewport.GetCurrentBreakpointAsync();

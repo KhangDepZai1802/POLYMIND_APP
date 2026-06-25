@@ -29,6 +29,13 @@ public class Candidate : BaseEntity
     public string? EmergencyContactName { get; set; }
     public string? EmergencyContactPhone { get; set; }
     public string? EmergencyContactRelation { get; set; }
+    // Cha/Mẹ/Người bảo hộ — nền cho cổng phụ huynh sau này (NHÓM 1.3). Tách khỏi "liên hệ khẩn cấp".
+    public string? GuardianName { get; set; }
+    public string? GuardianRelation { get; set; }
+    public string? GuardianPhone { get; set; }
+    public string? GuardianCccd { get; set; }
+    public string? GuardianAddress { get; set; }
+    public string? GuardianOccupation { get; set; }
     public string? BankAccountNumber { get; set; }
     public string? BankName { get; set; }
     public string? BankAccountName { get; set; }

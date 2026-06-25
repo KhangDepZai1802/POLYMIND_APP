@@ -1,0 +1,77 @@
+@page "/guide"
+@attribute [Authorize]
+
+<PageTitle>Hướng dẫn sử dụng — POLYMIND</PageTitle>
+
+<PageHeader Eyebrow="TRỢ GIÚP" Title="Hướng dẫn sử dụng" Subtitle="Tài liệu hướng dẫn thao tác trên hệ thống POLYMIND OLMS." />
+
+<MudAlert Severity="Severity.Info" Class="mb-4">
+    Đây là khung tài liệu. Nội dung chi tiết từng mục sẽ được bổ sung dần theo góp ý của đội ngũ và đối tác.
+</MudAlert>
+
+<MudExpansionPanels MultiExpansion="true" Elevation="1">
+    @foreach (var sec in Sections)
+    {
+        <MudExpansionPanel>
+            <TitleContent>
+                <div class="d-flex align-center" style="gap:10px">
+                    <MudIcon Icon="@sec.Icon" Color="Color.Primary" />
+                    <MudText Typo="Typo.subtitle1"><b>@sec.Title</b></MudText>
+                </div>
+            </TitleContent>
+            <ChildContent>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@sec.Summary</MudText>
+                <ul class="guide-steps">
+                    @foreach (var step in sec.Steps)
+                    {
+                        <li><MudText Typo="Typo.body2">@step</MudText></li>
+                    }
+                </ul>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    <em>(Nội dung chi tiết sẽ được bổ sung.)</em>
+                </MudText>
+            </ChildContent>
+        </MudExpansionPanel>
+    }
+</MudExpansionPanels>
+
+<style>
+    .guide-steps { margin: 0 0 8px 0; padding-left: 20px; }
+    .guide-steps li { margin-bottom: 4px; }
+</style>
+
+@code {
+    private record GuideSection(string Title, string Icon, string Summary, string[] Steps);
+
+    // Khung mục lục theo các module chính của hệ thống — điền nội dung sau.
+    private static readonly GuideSection[] Sections =
+    {
+        new("Bắt đầu & Đăng nhập", Icons.Material.Filled.Login,
+            "Đăng nhập, đổi mật khẩu, tổng quan giao diện và menu điều hướng.",
+            new[] { "Đăng nhập bằng tài khoản được cấp.", "Làm quen menu trái và thanh trên.", "Đổi mật khẩu lần đầu." }),
+        new("Quản lý Lead (CRM)", Icons.Material.Filled.ContactPhone,
+            "Tiếp nhận, chăm sóc và chuyển Lead thành ứng viên.",
+            new[] { "Thêm Lead mới.", "Cập nhật trạng thái & lịch hẹn.", "Chuyển Lead thành ứng viên." }),
+        new("Quản lý Ứng viên", Icons.Material.Filled.Groups,
+            "Hồ sơ ứng viên, giấy tờ, quy trình 17 bước.",
+            new[] { "Tạo & cập nhật hồ sơ ứng viên.", "Tải lên hồ sơ giấy tờ.", "Gắn vào đơn hàng và chuyển bước." }),
+        new("Đơn hàng tuyển dụng", Icons.Material.Filled.WorkOutline,
+            "Quản lý đơn hàng theo quốc gia, trạng thái tuyển dụng.",
+            new[] { "Thêm đơn hàng.", "Theo dõi đơn đang tuyển (mở).", "Gắn ứng viên vào đơn hàng." }),
+        new("Tài chính", Icons.Material.Filled.Payments,
+            "Khoản thu, khoản chi, phiếu thu/chi và công nợ.",
+            new[] { "Ghi nhận khoản thu/chi.", "In phiếu thu/chi.", "Theo dõi công nợ ứng viên." }),
+        new("Đại lý & Hoa hồng", Icons.Material.Filled.Handshake,
+            "Quản lý đại lý, cấu hình và chi trả hoa hồng.",
+            new[] { "Thêm đại lý.", "Cấu hình mốc hoa hồng.", "Duyệt & đánh dấu đã chi." }),
+        new("Visa & Xuất cảnh", Icons.Material.Filled.FlightTakeoff,
+            "Theo dõi hồ sơ visa và lịch xuất cảnh.",
+            new[] { "Cập nhật trạng thái visa.", "Đặt vé máy bay.", "Theo dõi lịch xuất cảnh." }),
+        new("Báo cáo & Thống kê", Icons.Material.Filled.Assessment,
+            "Các báo cáo doanh thu, phễu tuyển dụng và xuất file.",
+            new[] { "Xem báo cáo tổng hợp.", "Xuất Excel/PDF/CSV." }),
+        new("Quản trị hệ thống", Icons.Material.Filled.AdminPanelSettings,
+            "Quản lý người dùng, phân quyền và nhật ký.",
+            new[] { "Thêm/khóa người dùng.", "Phân quyền theo vai trò.", "Xem nhật ký thao tác." }),
+    };
+}
