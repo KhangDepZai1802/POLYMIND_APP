@@ -6,7 +6,8 @@
 
 <MudThemeProvider @ref="_themeProvider" Theme="Polymind.Web.Theme.PolymindTheme.Default" @bind-IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
-<MudDialogProvider />
+@* Mặc định dialog: full-width + có nút đóng (X) cho dễ thao tác trên điện thoại *@
+<MudDialogProvider FullWidth="true" MaxWidth="MaxWidth.Medium" CloseButton="true" CloseOnEscapeKey="true" />
 <MudSnackbarProvider />
 
 <MudLayout>

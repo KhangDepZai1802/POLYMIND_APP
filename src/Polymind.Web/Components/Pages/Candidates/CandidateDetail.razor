@@ -161,29 +161,31 @@ else
                     }
                     else
                     {
-                        <MudSimpleTable Dense="true" Hover="true" Striped="true">
-                            <thead>
-                                <tr>
-                                    <th>Mã</th>
-                                    <th>Loại</th>
-                                    <th style="text-align:right">Số tiền</th>
-                                    <th>Trạng thái</th>
-                                    <th>Hạn thu</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var payment in _payments)
-                                {
+                        <div class="table-scroll-x">
+                            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                <thead>
                                     <tr>
-                                        <td>@payment.Code</td>
-                                        <td>@Labels.Vi(payment.Type)</td>
-                                        <td style="text-align:right">@($"{payment.Amount:N0} đ")</td>
-                                        <td><MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(payment.Status)">@Labels.Vi(payment.Status)</MudChip></td>
-                                        <td>@(payment.DueDate?.ToString("dd/MM/yyyy") ?? "—")</td>
+                                        <th>Mã</th>
+                                        <th>Loại</th>
+                                        <th style="text-align:right">Số tiền</th>
+                                        <th>Trạng thái</th>
+                                        <th>Hạn thu</th>
                                     </tr>
-                                }
-                            </tbody>
-                        </MudSimpleTable>
+                                </thead>
+                                <tbody>
+                                    @foreach (var payment in _payments)
+                                    {
+                                        <tr>
+                                            <td>@payment.Code</td>
+                                            <td>@Labels.Vi(payment.Type)</td>
+                                            <td style="text-align:right">@($"{payment.Amount:N0} đ")</td>
+                                            <td><MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(payment.Status)">@Labels.Vi(payment.Status)</MudChip></td>
+                                            <td>@(payment.DueDate?.ToString("dd/MM/yyyy") ?? "—")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        </div>
                     }
                 </MudPaper>
             }
@@ -265,6 +267,7 @@ else
                 }
                 else
                 {
+                    <div class="table-scroll-x">
                     <MudSimpleTable Dense="true" Hover="true" Striped="true">
                         <thead>
                             <tr>
@@ -338,6 +341,7 @@ else
                             }
                         </tbody>
                     </MudSimpleTable>
+                    </div>
                 }
             </MudPaper>
         </MudItem>
