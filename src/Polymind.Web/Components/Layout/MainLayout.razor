@@ -1,6 +1,10 @@
 @inherits LayoutComponentBase
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject IBrowserViewportService Viewport
+@implements IDisposable
 
-<MudThemeProvider Theme="_theme" />
+<MudThemeProvider @ref="_themeProvider" Theme="Polymind.Web.Theme.PolymindTheme.Default" @bind-IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
@@ -12,6 +16,10 @@
         <MudText Typo="Typo.h6" Class="ml-2">POLYMIND</MudText>
         <MudText Typo="Typo.caption" Class="ml-2 d-none d-sm-flex">Quản lý Xuất khẩu Lao động</MudText>
         <MudSpacer />
+        <MudTooltip Text="@(_isDarkMode ? "Chế độ sáng" : "Chế độ tối")">
+            <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                           Color="Color.Inherit" OnClick="ToggleDarkModeAsync" />
+        </MudTooltip>
         <AuthorizeView>
             <NotificationBell />
             <MudMenu Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight">
@@ -30,12 +38,13 @@
         </AuthorizeView>
     </MudAppBar>
 
-    <MudDrawer @bind-Open="_drawerOpen" Elevation="2" ClipMode="DrawerClipMode.Always" Variant="DrawerVariant.Mini" OpenMiniOnHover="true">
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="2" ClipMode="DrawerClipMode.Always"
+               Variant="DrawerVariant.Responsive" Breakpoint="Breakpoint.Md">
         <NavMenu />
     </MudDrawer>
 
-    <MudMainContent Class="pt-16 px-4">
-        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="my-4">
+    <MudMainContent Class="pt-16">
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="px-2 px-sm-4 py-4">
             @Body
         </MudContainer>
     </MudMainContent>
@@ -49,16 +58,46 @@
 
 @code {
     private bool _drawerOpen = true;
+    private bool _isDarkMode;
+    private MudThemeProvider _themeProvider = default!;
 
-    private readonly MudTheme _theme = new()
+    protected override void OnInitialized() => Nav.LocationChanged += OnLocationChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        PaletteLight = new PaletteLight
+        if (!firstRender) return;
+
+        // Khôi phục lựa chọn sáng/tối; nếu chưa có thì theo hệ điều hành.
+        var saved = await JS.InvokeAsync<string?>("localStorage.getItem", "polymind-theme");
+        _isDarkMode = saved is "dark" or "light"
+            ? saved == "dark"
+            : await _themeProvider.GetSystemDarkModeAsync();
+
+        // Mobile mở app: drawer đóng (overlay); laptop: mở sẵn.
+        var bp = await Viewport.GetCurrentBreakpointAsync();
+        _drawerOpen = bp >= Breakpoint.Md;
+
+        StateHasChanged();
+    }
+
+    // Trên mobile (drawer là overlay), tự đóng menu sau khi điều hướng.
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        var bp = await Viewport.GetCurrentBreakpointAsync();
+        if (bp < Breakpoint.Md && _drawerOpen)
         {
-            Primary = "#1e3a8a",
-            Secondary = "#0ea5e9",
-            AppbarBackground = "#1e3a8a",
+            _drawerOpen = false;
+            await InvokeAsync(StateHasChanged);
         }
-    };
+    }
+
+    private async Task ToggleDarkModeAsync()
+    {
+        _isDarkMode = !_isDarkMode;
+        await JS.InvokeVoidAsync("localStorage.setItem", "polymind-theme", _isDarkMode ? "dark" : "light");
+    }
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
 
     private static string RoleLabel(AuthenticationState ctx)
         => ctx.User.IsInRole("super_admin") ? "Super Admin" : "Người dùng";

@@ -285,6 +285,21 @@ public class NotificationService(
                 recipients));
         }
 
+        // Nhắc thanh toán hoa hồng (§13): hoa hồng đã duyệt nhưng chưa chi → nhắc kế toán/giám đốc.
+        var agentNames = await db.Agents.ToDictionaryAsync(a => a.Id, a => a.Name);
+        var payableCommissions = await db.AgentCommissions
+            .Where(c => c.Status == CommissionStatus.Approved)
+            .Select(c => new { c.Id, c.AgentId, c.CommissionAmount })
+            .ToListAsync();
+        foreach (var c in payableCommissions)
+        {
+            events.Add(new ReminderEvent(
+                NotificationType.CommissionPayment, c.Id, "commission",
+                $"Hoa hồng chờ chi: {agentNames.GetValueOrDefault(c.AgentId, "Đại lý")}",
+                $"{c.CommissionAmount:N0} đ đã được duyệt, chờ thanh toán cho đại lý.",
+                RoleUsers(roleRecipients, RoleNames.Accountant, RoleNames.Director)));
+        }
+
         return events;
     }
 

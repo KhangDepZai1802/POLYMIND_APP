@@ -9,19 +9,17 @@
 
 <PageTitle>Lead (CRM) — POLYMIND</PageTitle>
 
-<div class="d-flex justify-space-between align-center mb-4">
-    <div>
-        <MudText Typo="Typo.h5"><b>Quản lý Lead</b></MudText>
-        <MudText Typo="Typo.body2" Class="mud-text-secondary">@_leads.Count khách hàng tiềm năng</MudText>
-    </div>
-    <AuthorizeView Policy="leads:create">
-        <Authorized>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">
-                Thêm Lead
-            </MudButton>
-        </Authorized>
-    </AuthorizeView>
-</div>
+<PageHeader Title="Quản lý Lead" Subtitle="@($"{_leads.Count} khách hàng tiềm năng")">
+    <Actions>
+        <AuthorizeView Policy="leads:create">
+            <Authorized>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">
+                    Thêm Lead
+                </MudButton>
+            </Authorized>
+        </AuthorizeView>
+    </Actions>
+</PageHeader>
 
 <MudPaper Elevation="1" Class="pa-4">
     <div class="d-flex flex-wrap gap-3 mb-3">
@@ -43,31 +41,61 @@
         </MudSelect>
     </div>
 
-    <MudDataGrid T="Lead" Items="Filtered" Hover="true" Dense="true" Striped="true"
-                 RowClick="@(args => Nav.NavigateTo($"/leads/{args.Item.Id}"))" Class="cursor-pointer">
-        <Columns>
-            <PropertyColumn Property="x => x.Code" Title="Mã" />
-            <PropertyColumn Property="x => x.FullName" Title="Họ tên" />
-            <PropertyColumn Property="x => x.Phone" Title="SĐT" />
-            <PropertyColumn Property="x => x.Province" Title="Tỉnh/TP" />
-            <TemplateColumn Title="Nguồn">
-                <CellTemplate>
-                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@Labels.Vi(context.Item.Source)</MudChip>
-                </CellTemplate>
-            </TemplateColumn>
-            <TemplateColumn Title="Trạng thái">
-                <CellTemplate>
-                    <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(context.Item.Status)">@Labels.Vi(context.Item.Status)</MudChip>
-                </CellTemplate>
-            </TemplateColumn>
-            <TemplateColumn Title="Ngày tạo">
-                <CellTemplate>@context.Item.CreatedAt.LocalDateTime.ToString("dd/MM/yyyy")</CellTemplate>
-            </TemplateColumn>
-        </Columns>
-        <PagerContent>
-            <MudDataGridPager T="Lead" />
-        </PagerContent>
-    </MudDataGrid>
+    @* Desktop: bảng đầy đủ *@
+    <MudHidden Breakpoint="Breakpoint.SmAndDown">
+        <MudDataGrid T="Lead" Items="Filtered" Hover="true" Dense="true" Striped="true"
+                     RowClick="@(args => Nav.NavigateTo($"/leads/{args.Item.Id}"))" Class="cursor-pointer">
+            <Columns>
+                <PropertyColumn Property="x => x.Code" Title="Mã" />
+                <PropertyColumn Property="x => x.FullName" Title="Họ tên" />
+                <PropertyColumn Property="x => x.Phone" Title="SĐT" />
+                <PropertyColumn Property="x => x.Province" Title="Tỉnh/TP" />
+                <TemplateColumn Title="Nguồn">
+                    <CellTemplate>
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@Labels.Vi(context.Item.Source)</MudChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Trạng thái">
+                    <CellTemplate>
+                        <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(context.Item.Status)">@Labels.Vi(context.Item.Status)</MudChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Ngày tạo">
+                    <CellTemplate>@context.Item.CreatedAt.LocalDateTime.ToString("dd/MM/yyyy")</CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <PagerContent>
+                <MudDataGridPager T="Lead" />
+            </PagerContent>
+        </MudDataGrid>
+    </MudHidden>
+
+    @* Mobile: mỗi lead là 1 thẻ bấm được *@
+    <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+        @if (!Filtered.Any())
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Không có lead phù hợp.</MudText>
+        }
+        else
+        {
+            @foreach (var l in Filtered)
+            {
+                <MudPaper Class="mobile-card pa-3" Elevation="0" Style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/leads/{l.Id}"))">
+                    <div class="d-flex justify-space-between align-center" style="gap:8px">
+                        <div style="min-width:0">
+                            <MudText Typo="Typo.subtitle2" Style="font-weight:600">@l.FullName</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@l.Code • @(string.IsNullOrWhiteSpace(l.Phone) ? "—" : l.Phone)</MudText>
+                        </div>
+                        <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(l.Status)">@Labels.Vi(l.Status)</MudChip>
+                    </div>
+                    <div class="d-flex justify-space-between align-center mt-2" style="gap:8px">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(l.Province) ? "—" : l.Province)</MudText>
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@Labels.Vi(l.Source)</MudChip>
+                    </div>
+                </MudPaper>
+            }
+        }
+    </MudHidden>
 </MudPaper>
 
 @code {

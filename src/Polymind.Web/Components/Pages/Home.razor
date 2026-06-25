@@ -6,8 +6,7 @@
 
 <PageTitle>Tổng quan — POLYMIND</PageTitle>
 
-<MudText Typo="Typo.h5" Class="mb-1"><b>Tổng quan</b></MudText>
-<MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">Bảng điều khiển hệ thống quản lý xuất khẩu lao động</MudText>
+<PageHeader Title="Tổng quan" Subtitle="Bảng điều khiển hệ thống quản lý xuất khẩu lao động" />
 
 @if (_loading)
 {
@@ -15,21 +14,21 @@
 }
 else
 {
-    <MudGrid>
-        @Card("Tổng Lead", _totalLeads.ToString(), Icons.Material.Filled.ContactPhone, Color.Info)
-        @Card("Lead mới hôm nay", _newLeadsToday.ToString(), Icons.Material.Filled.FiberNew, Color.Primary)
-        @Card("Ứng viên đang xử lý", _activeCandidates.ToString(), Icons.Material.Filled.Groups, Color.Secondary)
-        @Card("Đã xuất cảnh", _departed.ToString(), Icons.Material.Filled.FlightTakeoff, Color.Success)
-        @Card("Tỷ lệ chuyển đổi", $"{_conversionRate:0.#}%", Icons.Material.Filled.TrendingUp, Color.Warning)
-        @Card("Đơn hàng đang tuyển", _openJobOrders.ToString(), Icons.Material.Filled.WorkOutline, Color.Dark)
-        @Card("Công nợ phải thu", $"{_receivables:N0} đ", Icons.Material.Filled.RequestQuote, Color.Warning)
-        @Card("Khoản thu quá hạn", _overdueCount.ToString(), Icons.Material.Filled.RunningWithErrors, _overdueCount > 0 ? Color.Error : Color.Success)
-        @Card("Sắp xuất cảnh (30 ngày)", _upcomingDepartures.ToString(), Icons.Material.Filled.FlightTakeoff, Color.Secondary)
-        @Card("Doanh thu tháng này", $"{_monthRevenue:N0} đ", Icons.Material.Filled.Payments, Color.Success)
-        @Card("Quốc gia doanh thu cao", _topRevenueCountry, Icons.Material.Filled.Public, Color.Info)
-        @Card("Tỷ lệ trúng tuyển", $"{_selectedRate:0.#}%", Icons.Material.Filled.HowToReg, Color.Primary)
-        @Card("Tỷ lệ đậu visa", $"{_visaApprovedRate:0.#}%", Icons.Material.Filled.AssignmentTurnedIn, Color.Success)
-        @Card("Tỷ lệ xuất cảnh", $"{_departureRate:0.#}%", Icons.Material.Filled.FlightTakeoff, Color.Secondary)
+    <MudGrid Spacing="2">
+        <StatCard Title="Tổng Lead" Value="@_totalLeads.ToString()" Icon="@Icons.Material.Filled.ContactPhone" Color="Color.Info" />
+        <StatCard Title="Lead mới hôm nay" Value="@_newLeadsToday.ToString()" Icon="@Icons.Material.Filled.FiberNew" Color="Color.Primary" />
+        <StatCard Title="Ứng viên đang xử lý" Value="@_activeCandidates.ToString()" Icon="@Icons.Material.Filled.Groups" Color="Color.Secondary" />
+        <StatCard Title="Đã xuất cảnh" Value="@_departed.ToString()" Icon="@Icons.Material.Filled.FlightTakeoff" Color="Color.Success" />
+        <StatCard Title="Tỷ lệ chuyển đổi" Value="@($"{_conversionRate:0.#}%")" Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Warning" />
+        <StatCard Title="Đơn hàng đang tuyển" Value="@_openJobOrders.ToString()" Icon="@Icons.Material.Filled.WorkOutline" Color="Color.Dark" />
+        <StatCard Title="Công nợ phải thu" Value="@($"{_receivables:N0} đ")" Icon="@Icons.Material.Filled.RequestQuote" Color="Color.Warning" />
+        <StatCard Title="Khoản thu quá hạn" Value="@_overdueCount.ToString()" Icon="@Icons.Material.Filled.RunningWithErrors" Color="@(_overdueCount > 0 ? Color.Error : Color.Success)" />
+        <StatCard Title="Sắp xuất cảnh (30 ngày)" Value="@_upcomingDepartures.ToString()" Icon="@Icons.Material.Filled.FlightTakeoff" Color="Color.Secondary" />
+        <StatCard Title="Doanh thu tháng này" Value="@($"{_monthRevenue:N0} đ")" Icon="@Icons.Material.Filled.Payments" Color="Color.Success" />
+        <StatCard Title="Quốc gia doanh thu cao" Value="@_topRevenueCountry" Icon="@Icons.Material.Filled.Public" Color="Color.Info" />
+        <StatCard Title="Tỷ lệ trúng tuyển" Value="@($"{_selectedRate:0.#}%")" Icon="@Icons.Material.Filled.HowToReg" Color="Color.Primary" />
+        <StatCard Title="Tỷ lệ đậu visa" Value="@($"{_visaApprovedRate:0.#}%")" Icon="@Icons.Material.Filled.AssignmentTurnedIn" Color="Color.Success" />
+        <StatCard Title="Tỷ lệ xuất cảnh" Value="@($"{_departureRate:0.#}%")" Icon="@Icons.Material.Filled.FlightTakeoff" Color="Color.Secondary" />
     </MudGrid>
 
     <MudGrid Class="mt-2">
@@ -229,16 +228,4 @@ else
 
     private static bool SameMonth(DateOnly d, DateOnly month) => d.Year == month.Year && d.Month == month.Month;
     private static double Rate(int count, int total) => total == 0 ? 0 : count * 100.0 / total;
-
-    private RenderFragment Card(string title, string value, string icon, Color color) =>@<MudItem xs="12" sm="6" md="4" lg="2">
-        <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
-            <div class="d-flex justify-space-between align-start">
-                <div>
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@title</MudText>
-                    <MudText Typo="Typo.h5"><b>@value</b></MudText>
-                </div>
-                <MudIcon Icon="@icon" Color="@color" Size="Size.Large" />
-            </div>
-        </MudPaper>
-    </MudItem>;
 }

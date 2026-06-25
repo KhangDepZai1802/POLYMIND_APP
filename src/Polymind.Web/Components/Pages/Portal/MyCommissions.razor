@@ -5,10 +5,7 @@
 
 <PageTitle>Hoa hồng của tôi — POLYMIND</PageTitle>
 
-<div class="mb-4">
-    <MudText Typo="Typo.h5"><b>Hoa hồng của tôi</b></MudText>
-    <MudText Typo="Typo.body2" Class="mud-text-secondary">Theo dõi hoa hồng và ứng viên bạn đã giới thiệu</MudText>
-</div>
+<PageHeader Title="Hoa hồng của tôi" Subtitle="Theo dõi hoa hồng và ứng viên bạn đã giới thiệu" />
 
 @if (_loading)
 {
@@ -20,7 +17,7 @@ else if (_agentId is null)
 }
 else
 {
-    <MudGrid>
+    <MudGrid Spacing="2">
         @Kpi("Ứng viên giới thiệu", _candidateCount.ToString("N0"), Icons.Material.Filled.Groups, Color.Info)
         @Kpi("Tổng hoa hồng", $"{_total:N0} đ", Icons.Material.Filled.Handshake, Color.Primary)
         @Kpi("Đã chi", $"{_paid:N0} đ", Icons.Material.Filled.Paid, Color.Success)
@@ -35,29 +32,31 @@ else
         }
         else
         {
-            <MudSimpleTable Dense="true" Hover="true" Striped="true">
-                <thead>
-                    <tr>
-                        <th>Ứng viên</th>
-                        <th>Mốc</th>
-                        <th style="text-align:right">Hoa hồng</th>
-                        <th>Trạng thái</th>
-                        <th>Ngày chi</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var r in _rows)
-                    {
+            <div class="table-scroll-x">
+                <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                    <thead>
                         <tr>
-                            <td>@r.CandidateName</td>
-                            <td>@Labels.Vi(r.Milestone)</td>
-                            <td style="text-align:right">@($"{r.Amount:N0} đ")</td>
-                            <td><MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(r.Status)">@Labels.Vi(r.Status)</MudChip></td>
-                            <td>@(r.PaidDate?.ToString("dd/MM/yyyy") ?? "—")</td>
+                            <th>Ứng viên</th>
+                            <th>Mốc</th>
+                            <th style="text-align:right">Hoa hồng</th>
+                            <th>Trạng thái</th>
+                            <th>Ngày chi</th>
                         </tr>
-                    }
-                </tbody>
-            </MudSimpleTable>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in _rows)
+                        {
+                            <tr>
+                                <td>@r.CandidateName</td>
+                                <td>@Labels.Vi(r.Milestone)</td>
+                                <td style="text-align:right">@($"{r.Amount:N0} đ")</td>
+                                <td><MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(r.Status)">@Labels.Vi(r.Status)</MudChip></td>
+                                <td>@(r.PaidDate?.ToString("dd/MM/yyyy") ?? "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </div>
         }
     </MudPaper>
 }
@@ -91,7 +90,7 @@ else
         _loading = false;
     }
 
-    private RenderFragment Kpi(string title, string value, string icon, Color color) =>@<MudItem xs="12" sm="6" md="3">
+    private RenderFragment Kpi(string title, string value, string icon, Color color) =>@<MudItem xs="6" sm="6" md="3">
         <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
             <div class="d-flex justify-space-between align-start">
                 <div>

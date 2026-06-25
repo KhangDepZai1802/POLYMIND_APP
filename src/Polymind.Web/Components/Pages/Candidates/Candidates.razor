@@ -10,47 +10,75 @@
 
 <PageTitle>Ứng viên — POLYMIND</PageTitle>
 
-<div class="d-flex justify-space-between align-center mb-4">
-    <div>
-        <MudText Typo="Typo.h5"><b>Quản lý Ứng viên</b></MudText>
-        <MudText Typo="Typo.body2" Class="mud-text-secondary">@_rows.Count ứng viên trong quy trình</MudText>
-    </div>
-    <AuthorizeView Policy="candidates:create">
-        <Authorized>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="OpenCreate">
-                Thêm ứng viên
-            </MudButton>
-        </Authorized>
-    </AuthorizeView>
-</div>
+<PageHeader Title="Quản lý Ứng viên" Subtitle="@($"{_rows.Count} ứng viên trong quy trình")">
+    <Actions>
+        <AuthorizeView Policy="candidates:create">
+            <Authorized>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="OpenCreate">
+                    Thêm ứng viên
+                </MudButton>
+            </Authorized>
+        </AuthorizeView>
+    </Actions>
+</PageHeader>
 
 <MudPaper Elevation="1" Class="pa-4">
     <MudTextField @bind-Value="_search" Placeholder="Tìm tên, mã, SĐT..." Adornment="Adornment.Start"
                   AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
 
-    <MudDataGrid T="Row" Items="Filtered" Hover="true" Dense="true" Striped="true"
-                 RowClick="@(args => Nav.NavigateTo($"/candidates/{args.Item.Id}"))" Class="cursor-pointer">
-        <Columns>
-            <PropertyColumn Property="x => x.Code" Title="Mã" />
-            <PropertyColumn Property="x => x.FullName" Title="Họ tên" />
-            <PropertyColumn Property="x => x.Phone" Title="SĐT" />
-            <PropertyColumn Property="x => x.Country" Title="Đơn hàng" />
-            <TemplateColumn Title="Bước hiện tại">
-                <CellTemplate>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">@(context.Item.Step is null ? "—" : Labels.Vi(context.Item.Step.Value))</MudChip>
-                </CellTemplate>
-            </TemplateColumn>
-            <TemplateColumn Title="Tiến độ">
-                <CellTemplate>
-                    <div class="d-flex align-center" style="min-width:120px">
-                        <MudProgressLinear Color="Color.Success" Value="@context.Item.Progress" Class="flex-grow-1 mr-2" Style="height:8px" Rounded="true" />
-                        <MudText Typo="Typo.caption">@($"{context.Item.Progress:0}%")</MudText>
+    @* Desktop: bảng đầy đủ *@
+    <MudHidden Breakpoint="Breakpoint.SmAndDown">
+        <MudDataGrid T="Row" Items="Filtered" Hover="true" Dense="true" Striped="true"
+                     RowClick="@(args => Nav.NavigateTo($"/candidates/{args.Item.Id}"))" Class="cursor-pointer">
+            <Columns>
+                <PropertyColumn Property="x => x.Code" Title="Mã" />
+                <PropertyColumn Property="x => x.FullName" Title="Họ tên" />
+                <PropertyColumn Property="x => x.Phone" Title="SĐT" />
+                <PropertyColumn Property="x => x.Country" Title="Đơn hàng" />
+                <TemplateColumn Title="Bước hiện tại">
+                    <CellTemplate>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">@(context.Item.Step is null ? "—" : Labels.Vi(context.Item.Step.Value))</MudChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Tiến độ">
+                    <CellTemplate>
+                        <div class="d-flex align-center" style="min-width:120px">
+                            <MudProgressLinear Color="Color.Success" Value="@context.Item.Progress" Class="flex-grow-1 mr-2" Style="height:8px" Rounded="true" />
+                            <MudText Typo="Typo.caption">@($"{context.Item.Progress:0}%")</MudText>
+                        </div>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <PagerContent><MudDataGridPager T="Row" /></PagerContent>
+        </MudDataGrid>
+    </MudHidden>
+
+    @* Mobile: mỗi ứng viên là 1 thẻ bấm được *@
+    <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+        @if (!Filtered.Any())
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Không có ứng viên phù hợp.</MudText>
+        }
+        else
+        {
+            @foreach (var r in Filtered)
+            {
+                <MudPaper Class="mobile-card pa-3" Elevation="0" Style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/candidates/{r.Id}"))">
+                    <div class="d-flex justify-space-between align-center" style="gap:8px">
+                        <div style="min-width:0">
+                            <MudText Typo="Typo.subtitle2" Style="font-weight:600">@r.FullName</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@r.Code • @(string.IsNullOrWhiteSpace(r.Phone) ? "—" : r.Phone) • @(string.IsNullOrWhiteSpace(r.Country) ? "—" : r.Country)</MudText>
+                        </div>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">@(r.Step is null ? "—" : Labels.Vi(r.Step.Value))</MudChip>
                     </div>
-                </CellTemplate>
-            </TemplateColumn>
-        </Columns>
-        <PagerContent><MudDataGridPager T="Row" /></PagerContent>
-    </MudDataGrid>
+                    <div class="d-flex align-center mt-2" style="gap:8px">
+                        <MudProgressLinear Color="Color.Success" Value="@r.Progress" Class="flex-grow-1" Style="height:8px" Rounded="true" />
+                        <MudText Typo="Typo.caption">@($"{r.Progress:0}%")</MudText>
+                    </div>
+                </MudPaper>
+            }
+        }
+    </MudHidden>
 </MudPaper>
 
 @code {

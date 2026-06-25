@@ -9,41 +9,67 @@
 
 <PageTitle>Đại lý — POLYMIND</PageTitle>
 
-<div class="d-flex justify-space-between align-center mb-4">
-    <div>
-        <MudText Typo="Typo.h5"><b>Đại lý & Cộng tác viên</b></MudText>
-        <MudText Typo="Typo.body2" Class="mud-text-secondary">@_rows.Count đại lý</MudText>
-    </div>
-    <AuthorizeView Policy="agents:create">
-        <Authorized>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">
-                Thêm đại lý
-            </MudButton>
-        </Authorized>
-    </AuthorizeView>
-</div>
+<PageHeader Title="Đại lý & Cộng tác viên" Subtitle="@($"{_rows.Count} đại lý")">
+    <Actions>
+        <AuthorizeView Policy="agents:create">
+            <Authorized>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">
+                    Thêm đại lý
+                </MudButton>
+            </Authorized>
+        </AuthorizeView>
+    </Actions>
+</PageHeader>
 
 <MudPaper Elevation="1" Class="pa-4">
     <MudTextField @bind-Value="_search" Placeholder="Tìm tên, mã, SĐT..." Adornment="Adornment.Start"
                   AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
 
-    <MudDataGrid T="Agent" Items="Filtered" Hover="true" Dense="true" Striped="true"
-                 RowClick="@(args => Nav.NavigateTo($"/agents/{args.Item.Id}"))" Class="cursor-pointer">
-        <Columns>
-            <PropertyColumn Property="x => x.Code" Title="Mã" />
-            <PropertyColumn Property="x => x.Name" Title="Tên đại lý" />
-            <PropertyColumn Property="x => x.RepresentativeName" Title="Người đại diện" />
-            <PropertyColumn Property="x => x.Phone" Title="SĐT" />
-            <TemplateColumn Title="Trạng thái">
-                <CellTemplate>
-                    <MudChip T="string" Size="Size.Small" Color="@(context.Item.IsActive ? Color.Success : Color.Default)">
-                        @(context.Item.IsActive ? "Đang hợp tác" : "Ngừng")
-                    </MudChip>
-                </CellTemplate>
-            </TemplateColumn>
-        </Columns>
-        <PagerContent><MudDataGridPager T="Agent" /></PagerContent>
-    </MudDataGrid>
+    <MudHidden Breakpoint="Breakpoint.SmAndDown">
+        <MudDataGrid T="Agent" Items="Filtered" Hover="true" Dense="true" Striped="true"
+                     RowClick="@(args => Nav.NavigateTo($"/agents/{args.Item.Id}"))" Class="cursor-pointer">
+            <Columns>
+                <PropertyColumn Property="x => x.Code" Title="Mã" />
+                <PropertyColumn Property="x => x.Name" Title="Tên đại lý" />
+                <PropertyColumn Property="x => x.RepresentativeName" Title="Người đại diện" />
+                <PropertyColumn Property="x => x.Phone" Title="SĐT" />
+                <TemplateColumn Title="Trạng thái">
+                    <CellTemplate>
+                        <MudChip T="string" Size="Size.Small" Color="@(context.Item.IsActive ? Color.Success : Color.Default)">
+                            @(context.Item.IsActive ? "Đang hợp tác" : "Ngừng")
+                        </MudChip>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <PagerContent><MudDataGridPager T="Agent" /></PagerContent>
+        </MudDataGrid>
+    </MudHidden>
+
+    <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+        @if (!Filtered.Any())
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Không có đại lý phù hợp.</MudText>
+        }
+        else
+        {
+            @foreach (var a in Filtered)
+            {
+                <MudPaper Class="mobile-card pa-3" Elevation="0" Style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/agents/{a.Id}"))">
+                    <div class="d-flex justify-space-between align-center" style="gap:8px">
+                        <div style="min-width:0">
+                            <MudText Typo="Typo.subtitle2" Style="font-weight:600">@a.Name</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.Code • @(string.IsNullOrWhiteSpace(a.Phone) ? "—" : a.Phone)</MudText>
+                        </div>
+                        <MudChip T="string" Size="Size.Small" Color="@(a.IsActive ? Color.Success : Color.Default)">@(a.IsActive ? "Đang hợp tác" : "Ngừng")</MudChip>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(a.RepresentativeName))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">Đại diện: @a.RepresentativeName</MudText>
+                    }
+                </MudPaper>
+            }
+        }
+    </MudHidden>
 </MudPaper>
 
 @code {

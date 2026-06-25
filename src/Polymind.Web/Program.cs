@@ -1,16 +1,23 @@
+using System.Security.Claims;
+using System.Text;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using Hangfire;
 using Hangfire.PostgreSql;
 using MudBlazor.Services;
 using Polymind.Infrastructure;
 using Polymind.Infrastructure.Identity;
 using Polymind.Infrastructure.Persistence;
+using Polymind.Web.Api;
 using Polymind.Web.Authorization;
 using Polymind.Web.Components;
 using Polymind.Web.Health;
@@ -100,6 +107,72 @@ builder.Services.ConfigureApplicationCookie(options =>
         : CookieSecurePolicy.Always;
 });
 
+// ----- REST API (Phase H): JWT Bearer song song Cookie + Swagger/OpenAPI -----
+// Giải quyết khóa ký JWT 1 lần để dùng chung cho cả sinh token và xác thực token.
+var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>() ?? new JwtOptions();
+if (string.IsNullOrWhiteSpace(jwtOptions.Key))
+{
+    if (builder.Environment.IsDevelopment())
+        jwtOptions.Key = "dev-only-polymind-jwt-signing-key-change-in-production-1234567890";
+    else
+        throw new InvalidOperationException("Thiếu Jwt:Key — cấu hình biến môi trường Jwt__Key cho production.");
+}
+builder.Services.Configure<JwtOptions>(o =>
+{
+    o.Issuer = jwtOptions.Issuer;
+    o.Audience = jwtOptions.Audience;
+    o.Key = jwtOptions.Key;
+    o.ExpiryMinutes = jwtOptions.ExpiryMinutes;
+});
+builder.Services.AddScoped<JwtTokenService>();
+
+builder.Services.AddAuthentication().AddJwtBearer(options =>
+{
+    options.MapInboundClaims = false; // giữ nguyên claim "permission"/role như khi sinh token
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidIssuer = jwtOptions.Issuer,
+        ValidateAudience = true,
+        ValidAudience = jwtOptions.Audience,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key)),
+        RoleClaimType = ClaimTypes.Role,
+        NameClaimType = ClaimTypes.Name,
+        ClockSkew = TimeSpan.FromMinutes(1),
+    };
+});
+
+// JSON cho API: enum hiển thị dạng chuỗi (vd "Facebook", "New").
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+// Swagger/OpenAPI + nút Authorize JWT.
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "POLYMIND API",
+        Version = "v1",
+        Description = "REST API (JWT) cho tích hợp ngoài: mobile, đối tác, lead intake. Lấy token tại POST /api/auth/login."
+    });
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Dán JWT lấy từ /api/auth/login (không cần gõ tiền tố 'Bearer ')."
+    });
+    options.AddSecurityRequirement(doc => new OpenApiSecurityRequirement
+    {
+        [new OpenApiSecuritySchemeReference("Bearer", doc, null)] = new List<string>()
+    });
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -167,6 +240,18 @@ app.MapPost("/Account/Logout", async (SignInManager<ApplicationUser> signInManag
 
 // Xuất báo cáo CSV (gated reports:read).
 app.MapCsvExportEndpoints();
+
+// REST API (Phase H) + tài liệu Swagger.
+app.UseSwagger();
+app.UseSwaggerUI(options =>
+{
+    options.SwaggerEndpoint("/swagger/v1/swagger.json", "POLYMIND API v1");
+    options.DocumentTitle = "POLYMIND API";
+});
+app.MapAuthApi();
+app.MapLeadsApi();
+app.MapCandidatesApi();
+app.MapJobOrdersApi();
 
 RecurringJob.AddOrUpdate<NotificationJob>(
     "polymind-notification-reminders",

@@ -31,7 +31,10 @@
 
 - **Bản demo MVP chạy được**, đã smoke-test toàn bộ trang HTTP 200. App: `http://localhost:5177`, login `admin@polymind.local / Admin@123`.
 - Build sạch (`dotnet build Polymind.slnx` = 0 error, 0 warning). Docker (Postgres/Redis/MinIO) cần `docker compose up -d`.
+- **ĐẠI TU GIAO DIỆN — Phase 1+2+3 đã xong (Session 23, Claude):** responsive/mobile-first theo plan `v-y-b-y-gi-t-m-ticklish-castle.md`. **Phase 1** (đã có sẵn từ trước, uncommitted): drawer overlay responsive + dark mode + `Theme/PolymindTheme.cs` + app.css. **Phase 2:** component dùng chung `StatCard`/`PageHeader` được nối vào các trang; lưới KPI đổi sang 2 thẻ/hàng trên mobile (`xs=6`). **Phase 3:** bảng → thẻ trên mobile (`MudHidden` swap) cho Leads/Candidates/Visas/Finance/Admin; các `MudSimpleTable` rộng cho cuộn ngang (`.table-scroll-x`) ở Reports/Admin/Notifications/AgentDetail/MyCommissions. Build 0 warning/0 error. **CHƯA chạy QA đa thiết bị (Phase 5) — còn Phase 4 (tinh chỉnh tabs/form/detail) + Phase 5 (QA 390/820/1440px).**
 - **Session 20:** Docker services đã bật; Codex chưa start được web app do lệnh chạy nền/DLL bị hệ thống approval chặn. Chạy thủ công bằng lệnh trong nhật ký Session 20 nếu cần mở demo ngay.
+- **Session 21 (Claude):** Theo yêu cầu user — **audit lại toàn bộ phần Codex làm** (Đợt 1-3 + Phase C/D/E/F/G) đối chiếu `POLYMIND APP.docx`. Kết luận: phần lớn ĐÚNG spec. **Phát hiện + đã FIX 1 lỗ hổng:** §13 "Nhắc thanh toán hoa hồng" có enum `CommissionPayment` + nhãn nhưng `NotificationService` không hề sinh → đã thêm khối sinh nhắc cho hoa hồng `Approved` chưa chi (recipient kế toán/giám đốc). **Cải thiện UX theo yêu cầu:** module Phân quyền (`/admin`) viết lại thành **ma trận tiếng Việt** (module × hành động) + hướng dẫn + chú thích + nút "Chọn/Bỏ cả dòng" + khóa chỉnh super_admin, cho super admin không rành kỹ thuật vẫn dùng được. Build xanh, `/admin` `/notifications` = 200.
+- **PHASE H phần 1 đã xong (Session 22, Claude):** **REST API + JWT + Swagger** (§14 — "REST API / JWT Authentication / API Documentation"). Thêm package `Microsoft.AspNetCore.Authentication.JwtBearer` 10.0.9 + `Swashbuckle.AspNetCore` 10.2.3. JWT Bearer chạy **song song Cookie** (Blazor giữ Cookie; API ép scheme Bearer). Token mang claim `permission` + role → **tái dùng nguyên policy `resource:action`** hiện có. Endpoint: `POST /api/auth/login`, `GET /api/auth/me`, `/api/leads` (CRUD đủ), `/api/candidates` + `/api/job-orders` (read, phân trang/tìm kiếm). Swagger UI tại `/swagger`. Smoke-test thật: login admin (80 quyền) → CRUD lead tiếng Việt OK, RBAC 401 (no token) / 403 (agent vào leads) / 200 (agent vào candidates), Blazor cookie vẫn 200. Build 0 warning/0 error.
 - Đã xong: nền tảng + auth + Dashboard + Lead CRM + **Ứng viên CRUD** + **Đơn hàng CRUD** + **Tài chính (Thu/Chi)** + **Đại lý & Hoa hồng** + **Visa & Xuất cảnh (Visa + Vé máy bay CRUD)** + **Báo cáo & Thống kê** + demo data. **Không còn placeholder nào** — tất cả menu đều có trang thật.
 - **Demo data đầy đủ (Session 9):** đã seed bù **Visa(4) + Vé máy bay(3) + Cấu hình hoa hồng(9) + Hoa hồng phát sinh(8)** → trang Báo cáo "Hoa hồng theo đại lý" và trang Visa đã có dữ liệu thật. Đã smoke-test 12 trang (admin 200, không exception) + RBAC 4 role (recruiter/accountant/visa.staff/agent) không lỗi. **Sẵn sàng demo đối tác.**
 - **ĐỢT 1 đã xong (Session 10):** UI cấu hình hoa hồng theo đại lý, tự sinh `AgentCommission` khi ứng viên đạt mốc Deposit/Selected/Departure, duyệt khoản thu và duyệt/đánh dấu đã chi hoa hồng. Build xanh, smoke-test `/finance`, `/agents/{id}`, `/candidates/{id}` HTTP 200.
@@ -50,8 +53,26 @@
 
 ## ⏭️ VIỆC TIẾP THEO (baton — làm cái này trước)
 
-**Đang chạy theo plan production end-to-end** (`C:\Users\khang\.claude\plans\v-y-hi-n-gi-web-fizzy-parasol.md`, 8 phase A→H). **Đã xong Phase A + B + C + D + E + F + G.** Tiếp theo là **PHASE H / giai đoạn mở rộng sau production**:
-1. Chốt scope Phase H trước khi code: REST API/JWT cho tích hợp ngoài, Facebook/TikTok/Google Lead API, Zalo OA/SMS provider thật, OCR CCCD/Passport, chữ ký số, mobile app, BI/AI là các hạng mục phụ thuộc provider/thiết kế riêng.
+**ĐẠI TU GIAO DIỆN: Phase 1+2+3 xong (Session 23). Việc tiếp theo = Phase 4 + Phase 5** (plan `C:\Users\khang\.claude\plans\v-y-b-y-gi-t-m-ticklish-castle.md`):
+- **Phase 4 — tinh chỉnh từng trang:** `MudTabs` (Visas/Finance/Notifications/Admin) đặt `ScrollButtons`/rút gọn nhãn cho mobile; trang chi tiết (CandidateDetail timeline 17 bước, LeadDetail) xếp dọc gọn; form dialog nút dính đáy; AppBar gọn.
+- **Phase 5 — QA đa thiết bị:** chạy `:5177`, DevTools mô phỏng **390 / 820 / 1440px**, checklist từng trang (không tràn ngang, KPI 2 cột, bảng→card, drawer overlay tự đóng sau điều hướng, dark mode lưu được, không `blazor-error-boundary`). Smoke-test HTTP admin + 1 role hẹp.
+- **Lưu ý kỹ thuật Phase 2+3 (cho người sau):**
+  - Component dùng chung ở `Components/Shared/`: `StatCard.razor` (param `Title/Value/Icon/Color/Caption`, tự render `MudItem xs=6 sm=4 md=3 lg=2`), `PageHeader.razor` (param `Title/Subtitle` + slot `Actions`). Đã import sẵn trong `_Imports.razor` (`Polymind.Web.Components.Shared`).
+  - Pattern bảng→thẻ: `<MudHidden Breakpoint="Breakpoint.SmAndDown">` bọc DataGrid (chỉ ≥md), `<MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">` bọc danh sách thẻ (chỉ ≤sm). Mỗi trang tự render thẻ riêng (cột mỗi entity khác nhau).
+  - CSS mới trong `wwwroot/app.css`: `.stat-value` (cỡ chữ KPI co theo breakpoint), `.mobile-card` (viền+bo góc thẻ mobile), `.table-scroll-x` (đã có sẵn — cuộn ngang bảng rộng).
+  - **Phase 1+2+3 đều CHƯA commit** — cùng với Phase H (REST API) ở các phiên trước. Cân nhắc commit trước khi sang Phase 4/5.
+
+**Việc khác (chưa ưu tiên — sau khi xong đại tu giao diện):** deploy production (xem memory deploy-plan). Backlog Phase H cũ:
+1. **Mở rộng REST API** theo mẫu đã có (`src/Polymind.Web/Api/`): thêm CRUD/read cho payments, expenses, agents, visas, flights, reports... Mẫu: dùng `ApiAuth.Bearer("<resource>:<action>")` cho từng endpoint, DTO trong `ApiContracts.cs`, map trong `Program.cs`. (Đã có sẵn: auth, leads CRUD, candidates/job-orders read.)
+2. **Hạng mục Phase H còn lại** (phụ thuộc provider/thiết kế riêng — chốt scope trước khi code): OCR CCCD/Passport, chữ ký số, Facebook/TikTok/Google/Zalo lead intake (giờ đã có nền REST + webhook), AI chatbot/dự đoán (cần Claude API key), mobile app, BI/Data Warehouse.
+3. **Xác minh nốt nhắc hoa hồng (từ Session 21):** demo data 8 hoa hồng đều `Pending` nên nhắc `CommissionPayment` chưa hiện. Để thấy: vào `/agents/{id}` duyệt 1 hoa hồng (Approved) rồi "Quét nhắc việc" ở `/notifications`. Logic đã verify qua build + đối xứng code.
+
+**Lưu ý REST API (Phase H) cho người sau:**
+- Code API ở `src/Polymind.Web/Api/`: `JwtTokenService` (sinh JWT + claim `permission`/role), `ApiContracts` (DTO + helper `ApiAuth.Bearer`), `AuthEndpoints`, `LeadsEndpoints`, `ResourceEndpoints`. Map ở cuối `Program.cs`.
+- **Khóa JWT:** dev đặt trong `appsettings.Development.json` (`Jwt:Key`); **production BẮT BUỘC** env `JWT_KEY` (đã thêm vào `docker-compose.production.yml` + `.env.production.example`) — Program.cs throw nếu thiếu key ở production.
+- JWT chạy song song Cookie: endpoint API phải `.RequireAuthorization(ApiAuth.Bearer("res:action"))` để ép scheme Bearer (trả 401, không redirect cookie). Đừng đổi default scheme (Blazor cần Cookie).
+- Swashbuckle 10.2.3 dùng **Microsoft.OpenApi 2.x**: types ở namespace `Microsoft.OpenApi` (KHÔNG phải `.Models`); security requirement dùng `OpenApiSecuritySchemeReference(id, doc, null)` qua overload `AddSecurityRequirement(doc => ...)`; value của requirement là `List<string>` (không phải mảng).
+- JSON API set `JsonStringEnumConverter` toàn cục (enum đọc/ghi dạng chuỗi). PowerShell 5.1 test API tiếng Việt: phải gửi body bằng `[Text.Encoding]::UTF8.GetBytes(...)` + `charset=utf-8`, nếu không bị 400/mojibake.
 2. Nếu chưa chốt Phase H, việc thực tế nên làm ngay là **deploy rehearsal**: tạo `.env.production`, đặt chứng chỉ thật vào `deploy/nginx/certs/`, chạy `docker compose --env-file .env.production -f docker-compose.production.yml up -d --build`, test `/health`, chạy `scripts/smoke-test.ps1` qua domain thật.
 3. Commit/push các thay đổi Phase F→G lên GitHub nếu muốn đồng bộ remote trước khi triển khai.
 4. Nếu chỉ cần chạy demo local: `docker compose up -d`, rồi trong terminal chạy DLL build sẵn từ `src/Polymind.Web`: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet bin\Debug\net10.0\Polymind.Web.dll --urls http://localhost:5177`.
@@ -81,6 +102,46 @@
 ---
 
 ## 📜 NHẬT KÝ SESSION (mới nhất ở trên)
+
+### [2026-06-25] Session 23 — Claude
+- **Bối cảnh:** user yêu cầu "tiếp tục phase 2+3, mỗi 2 phase báo vào worklog 1 lần" — đại tu giao diện responsive theo plan `v-y-b-y-gi-t-m-ticklish-castle.md`. Phase 1 (layout/theme/dark mode) đã làm xong từ phiên trước (uncommitted: `MainLayout.razor`, `Theme/PolymindTheme.cs`, `app.css`); 2 component Phase 2 (`StatCard`/`PageHeader`) đã được tạo file nhưng **chưa nối vào trang nào**.
+- **Làm được (Phase 2 — component dùng chung):**
+  - Thêm CSS `.stat-value` (cỡ chữ KPI co theo breakpoint, ellipsis) + `.mobile-card` vào `wwwroot/app.css`.
+  - Nối `StatCard` thay `RenderFragment Card/Kpi` lặp ở `Home.razor` (14 KPI) và `Reports.razor` (13 KPI); lưới đổi sang `xs=6` (2 thẻ/hàng mobile). Xóa 2 method `Card`/`Kpi` cũ.
+  - Nối `PageHeader` (tiêu đề + mô tả + slot `Actions`, có `flex-wrap`) vào: Home, Reports, Leads, Candidates, Visas, Finance, Agents, Admin, Notifications, MyCommissions.
+- **Làm được (Phase 3 — bảng → thẻ trên mobile):**
+  - Pattern `MudHidden` swap (DataGrid ≥md / danh sách thẻ ≤sm) cho **Leads, Candidates, Visas (2 tab), Finance (3 tab thu/chi/phiếu), Admin (tài khoản)**. Thẻ mobile giữ đủ hành động (duyệt/phiếu/sửa, lưu role/khóa/reset).
+  - `MudSimpleTable` rộng cho cuộn ngang `.table-scroll-x`: Reports (7 bảng), Admin (ma trận phân quyền + audit log), Notifications (kênh nhận), AgentDetail (cấu hình hoa hồng), MyCommissions (chi tiết hoa hồng).
+- **File chính:** `wwwroot/app.css`; `Components/Pages/Home.razor`, `Reports/Reports.razor`, `Leads/Leads.razor`, `Candidates/Candidates.razor`, `Visas/Visas.razor`, `Finance/Finance.razor`, `Agents/Agents.razor`, `Agents/AgentDetail.razor`, `Admin/Admin.razor`, `Notifications/Notifications.razor`, `Portal/MyCommissions.razor`. (Component `Shared/StatCard.razor`+`PageHeader.razor` + `Theme/PolymindTheme.cs` đã có từ Phase 1.)
+- **Đã test:** `dotnet build Polymind.slnx` = **0 warning, 0 error**. CHƯA chạy web + QA đa thiết bị (Phase 5) — mới verify build.
+- **Lưu ý/cảnh báo cho người sau:** (1) Phase 1+2+3 + Phase H đều **chưa commit**. (2) `MudHidden` render cả 2 nhánh trong markup (chấp nhận — chỉ HTML, không query DB 2 lần). (3) Còn **Phase 4** (tinh chỉnh tabs/form/detail) + **Phase 5** (QA 390/820/1440px, dark mode lưu được, drawer overlay tự đóng) — xem VIỆC TIẾP THEO. (4) Khi build nhớ `Stop-Process -Name Polymind.Web` nếu web đang chạy giữ lock DLL.
+
+### [2026-06-25] Session 22 — Claude
+- **Bối cảnh:** sau khi audit (Session 21), user chốt làm tiếp **Phase H = REST API + JWT + Swagger** rồi "tiếp tục".
+- **Làm được:** REST API hoàn chỉnh phần 1 cho tích hợp ngoài (mobile/đối tác), đáp ứng §14 (REST API + JWT Authentication + API Documentation).
+  - Thêm package `Microsoft.AspNetCore.Authentication.JwtBearer` 10.0.9 + `Swashbuckle.AspNetCore` 10.2.3 (restore phải tắt sandbox vì host nuget bị chặn trong sandbox — xem lưu ý).
+  - `Api/JwtTokenService.cs`: sinh JWT HS256 mang claim `permission` (giống `PermissionClaimsPrincipalFactory`) + role ở `ClaimTypes.Role` → dùng lại nguyên policy `resource:action`.
+  - `Api/ApiContracts.cs`: DTO (login/token/user, paged, lead/candidate/job-order) + helper `ApiAuth.Bearer(policy)` ép scheme Bearer.
+  - `Api/AuthEndpoints.cs`: `POST /api/auth/login` (SignInManager.CheckPasswordSignInAsync giữ lockout + chặn IsActive=false) trả token + quyền; `GET /api/auth/me`.
+  - `Api/LeadsEndpoints.cs`: CRUD `/api/leads` (list phân trang+tìm kiếm+lọc trạng thái, get, post, put, delete) gated `leads:read/create/update/delete`, có audit. `Api/ResourceEndpoints.cs`: `/api/candidates` + `/api/job-orders` read.
+  - `Program.cs`: bind `JwtOptions`, `AddJwtBearer` (MapInboundClaims=false, RoleClaimType/NameClaimType chuẩn), `ConfigureHttpJsonOptions` enum-as-string, `AddSwaggerGen` + nút Authorize, `UseSwagger`/`UseSwaggerUI` (`/swagger`), map 4 nhóm endpoint. Khóa JWT: dev trong appsettings.Development.json, prod env `JWT_KEY` (throw nếu thiếu).
+- **File chính:** `Polymind.Web.csproj`, `Program.cs`, `Api/*.cs` (4 file mới), `appsettings.json` + `appsettings.Development.json` (section `Jwt`), `docker-compose.production.yml` + `.env.production.example` (`JWT_KEY`).
+- **Đã test:** `dotnet build Polymind.slnx` = 0 warning, 0 error. Chạy web `:5177`, smoke-test REST thật: `POST /api/auth/login` admin → token (80 quyền); `GET /api/auth/me` OK; `GET /api/leads?page=1&pageSize=3` total=40; CRUD lead tiếng Việt (create→update→delete 204) OK; **RBAC**: no token→401, agent→`/api/leads` 403, agent→`/api/candidates` 200; `swagger/v1/swagger.json`=200. Blazor cookie vẫn OK (`/`,`/admin`,`/leads`=200). Đã dọn lead test.
+- **Lưu ý/cảnh báo cho người sau:** (1) Web app đang chạy `:5177` (log `C:\tmp\polymind-api.*.log`) — dừng process trước khi build. (2) **Restore package mới:** sandbox chặn DNS `api.nuget.org` (lệnh `dotnet add package`/restore nền fail "No such host"); phải restore với sandbox tắt (đã làm). Package giờ đã trong cache nên build thường chạy được. (3) Swashbuckle 10 + Microsoft.OpenApi 2.x đổi namespace/API — xem mục "Lưu ý REST API" ở VIỆC TIẾP THEO. (4) API mới phủ leads (CRUD) + candidates/job-orders (read); các resource khác mở rộng theo cùng mẫu.
+
+### [2026-06-25] Session 21 — Claude
+- **Bối cảnh:** user yêu cầu (1) chạy web + kịch bản demo, (2) **kiểm tra lại toàn bộ phần Codex đã làm** đối chiếu `POLYMIND APP.docx` vì chưa tin tưởng, được phép sửa nếu sai, (3) làm module Phân quyền của super admin dễ hiểu hơn cho người không rành kỹ thuật.
+- **Audit Codex (Đợt 1-3 + Phase C/D/E/F/G) vs spec:**
+  - **Đợt 2 (audit log + công nợ §7.3/§14):** ĐÚNG — `AuditLogHelpers` ổn, audit gắn ở 10 file/27 chỗ, section Công nợ + cảnh báo quá hạn có.
+  - **Đợt 3 (MinIO §4.2/§4.3):** ĐÚNG — validate ext/size, presigned URL, versioning + `restore_version` + `CurrentVersionId`.
+  - **Phase C (§11/§12):** ĐÚNG, chất lượng tốt — phủ doanh thu theo tháng/quốc gia/đơn hàng, lead theo nguồn/tỉnh/nhân viên, funnel trúng tuyển/visa/xuất cảnh, top đại lý; xử lý ngày trong bộ nhớ (tránh bẫy DateTimeOffset).
+  - **Phase D (§13):** ⚠️ **LỖ HỔNG** — thiếu "Nhắc thanh toán hoa hồng": enum `CommissionPayment` + nhãn/icon/màu đã có nhưng `BuildReminderEventsAsync` không sinh. **ĐÃ FIX** (thêm khối sinh nhắc cho `AgentCommission` Status=Approved, recipient role kế toán/giám đốc). Các nhắc khác + kênh InApp/Email/SMS/Zalo + idempotent đều ĐÚNG.
+  - **Phase E (§2.1):** ĐÚNG — tạo user/gán role/khóa/reset, phân quyền reconcile (add+remove an toàn), audit viewer; `DbSeeder` reconcile giữ super_admin full, không xóa nhầm.
+  - **Phase F+G (§14):** ĐÚNG — secrets tách khỏi `appsettings.json`, password policy + lockout (5 lần/15') có hiệu lực ở login, `IsActive` chặn login, `/health`, Serilog; đủ Dockerfile/compose.production/nginx/scripts. (§14 REST API/JWT/API docs = Phase H, chưa làm — đúng kế hoạch.)
+- **Cải thiện UX Phân quyền:** thêm `Web/Display/PermissionLabels.cs` (tên module + hành động tiếng Việt + mô tả). Viết lại tab "Phân quyền" trong `Admin.razor` thành **ma trận** (hàng = mục dữ liệu tiếng Việt, cột = Xem/Thêm/Sửa/Xóa/Phê duyệt) + alert hướng dẫn + panel chú thích + nút "Chọn/Bỏ cả dòng" + đếm số quyền + **khóa chỉnh super_admin** (disable + guard ở `SaveRolePermissionsAsync`).
+- **File chính:** `Notifications/NotificationService.cs` (fix nhắc hoa hồng), `Display/PermissionLabels.cs` (mới), `Components/Pages/Admin/Admin.razor` (ma trận phân quyền).
+- **Đã test:** `dotnet build Polymind.slnx` = 0 error, 0 warning. Chạy web `:5177` (Development), login admin: `/admin` + `/notifications` = 200, không `blazor-error-boundary`. DB: hoa hồng hiện 8 `Pending` → nhắc `CommissionPayment` chưa hiện cho tới khi có khoản Approved (xem VIỆC TIẾP THEO #2). Lệnh UPDATE thử nghiệm 1 hoa hồng→Approved bị approval chặn nên không mutate demo data.
+- **Lưu ý/cảnh báo cho người sau:** (1) Web app đang chạy `:5177` (log `C:\tmp\polymind-audit.*.log`) — `Stop-Process -Name Polymind.Web` trước khi build lại. (2) Tab phân quyền giờ ẩn việc chỉnh super_admin; muốn đổi quyền mặc định vĩnh viễn vẫn phải sửa `RolePermissionMap` trong `DbSeeder` (reconcile sẽ ghi đè runtime khi restart — giới hạn cũ, chưa đổi). (3) User đã chốt **Phase H = REST API + JWT + Swagger** làm tiếp.
 
 ### [2026-06-24] Session 20 — Codex
 - **Làm được:** Đọc lại `WORKLOG.md`, bật Docker services bằng `docker compose up -d` (Postgres/Redis/MinIO đều Running), kiểm tra cổng `5177` ban đầu chưa có listener.

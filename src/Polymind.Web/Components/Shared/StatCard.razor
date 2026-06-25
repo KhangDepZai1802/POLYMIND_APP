@@ -1,0 +1,24 @@
+@* Thẻ KPI gọn, responsive: điện thoại 2 thẻ/hàng, icon ẩn để nhường chỗ; desktop đầy đủ. *@
+<MudItem xs="6" sm="4" md="3" lg="2">
+    <MudPaper Class="pa-3 pa-sm-4 stat-card" Elevation="1" Style="height:100%">
+        <div class="d-flex justify-space-between align-start" style="gap:8px">
+            <div style="min-width:0">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="line-height:1.25">@Title</MudText>
+                <div class="stat-value">@Value</div>
+                @if (!string.IsNullOrWhiteSpace(Caption))
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Caption</MudText>
+                }
+            </div>
+            <MudIcon Icon="@Icon" Color="@Color" Class="d-none d-sm-flex flex-none" />
+        </div>
+    </MudPaper>
+</MudItem>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public string Value { get; set; } = "";
+    [Parameter] public string Icon { get; set; } = Icons.Material.Filled.Insights;
+    [Parameter] public Color Color { get; set; } = Color.Primary;
+    [Parameter] public string? Caption { get; set; }
+}

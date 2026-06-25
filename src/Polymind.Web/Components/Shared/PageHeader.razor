@@ -1,0 +1,22 @@
+@* Tiêu đề trang dùng chung: tiêu đề + mô tả (ẩn trên điện thoại) + vùng hành động tự xuống dòng. *@
+<div class="d-flex justify-space-between align-center flex-wrap mb-4" style="gap:8px">
+    <div style="min-width:0">
+        <MudText Typo="Typo.h5" Class="page-title" Style="font-weight:700">@Title</MudText>
+        @if (!string.IsNullOrWhiteSpace(Subtitle))
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary d-none d-sm-block">@Subtitle</MudText>
+        }
+    </div>
+    @if (Actions is not null)
+    {
+        <div class="d-flex align-center flex-wrap" style="gap:8px">
+            @Actions
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public RenderFragment? Actions { get; set; }
+}

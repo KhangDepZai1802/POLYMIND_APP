@@ -88,27 +88,29 @@ else
                 }
                 else
                 {
-                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
-                        <thead>
-                            <tr><th>Mốc</th><th>Áp dụng</th><th style="text-align:right">% / Cố định</th><th></th></tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var cfg in _configs)
-                            {
-                                <tr>
-                                    <td>@Labels.Vi(cfg.Milestone)</td>
-                                    <td>@(cfg.Country ?? (cfg.JobOrderId is null ? "Mọi đơn / quốc gia" : "Đơn cụ thể"))</td>
-                                    <td style="text-align:right">@(cfg.Percentage.HasValue ? $"{cfg.Percentage.Value:0.#}%" : $"{cfg.FixedAmount:N0} đ")</td>
-                                    <td style="text-align:right">
-                                        @if (_canUpdate)
-                                        {
-                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenConfigDialog(cfg))" />
-                                        }
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </MudSimpleTable>
+                    <div class="table-scroll-x">
+                        <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                            <thead>
+                                <tr><th>Mốc</th><th>Áp dụng</th><th style="text-align:right">% / Cố định</th><th></th></tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var cfg in _configs)
+                                {
+                                    <tr>
+                                        <td>@Labels.Vi(cfg.Milestone)</td>
+                                        <td>@(cfg.Country ?? (cfg.JobOrderId is null ? "Mọi đơn / quốc gia" : "Đơn cụ thể"))</td>
+                                        <td style="text-align:right">@(cfg.Percentage.HasValue ? $"{cfg.Percentage.Value:0.#}%" : $"{cfg.FixedAmount:N0} đ")</td>
+                                        <td style="text-align:right">
+                                            @if (_canUpdate)
+                                            {
+                                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenConfigDialog(cfg))" />
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    </div>
                 }
             </MudPaper>
 

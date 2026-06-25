@@ -6,18 +6,25 @@
 
 <PageTitle>Thông báo — POLYMIND</PageTitle>
 
-<div class="d-flex justify-space-between align-center mb-4">
-    <div>
-        <MudText Typo="Typo.h5"><b>Thông báo</b></MudText>
-        <MudText Typo="Typo.body2" Class="mud-text-secondary">Nhắc việc tự động: khoản thu, visa, xuất cảnh, hồ sơ và tùy chọn kênh nhận</MudText>
-    </div>
-    <div class="d-flex gap-2">
-        <MudButton StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" OnClick="RefreshAsync">Quét nhắc việc</MudButton>
-        <MudButton StartIcon="@Icons.Material.Filled.Send" Variant="Variant.Outlined" OnClick="DispatchAsync">Gửi kênh chờ</MudButton>
-        <MudButton StartIcon="@Icons.Material.Filled.DoneAll" Variant="Variant.Filled" Color="Color.Primary"
-                   Disabled="@(_unread == 0)" OnClick="MarkAllAsync">Đánh dấu đã đọc</MudButton>
-    </div>
-</div>
+<PageHeader Title="Thông báo" Subtitle="Nhắc việc tự động: khoản thu, visa, xuất cảnh, hồ sơ và tùy chọn kênh nhận">
+    <Actions>
+        @* Desktop: nút có nhãn; mobile: gom hành động vào menu ⋮ cho gọn *@
+        <MudHidden Breakpoint="Breakpoint.SmAndDown">
+            <MudButton StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" OnClick="RefreshAsync">Quét nhắc việc</MudButton>
+            <MudButton StartIcon="@Icons.Material.Filled.Send" Variant="Variant.Outlined" OnClick="DispatchAsync">Gửi kênh chờ</MudButton>
+            <MudButton StartIcon="@Icons.Material.Filled.DoneAll" Variant="Variant.Filled" Color="Color.Primary"
+                       Disabled="@(_unread == 0)" OnClick="MarkAllAsync">Đánh dấu đã đọc</MudButton>
+        </MudHidden>
+        <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+            <MudIconButton Icon="@Icons.Material.Filled.DoneAll" Color="Color.Primary" Variant="Variant.Filled"
+                           Disabled="@(_unread == 0)" OnClick="MarkAllAsync" />
+            <MudMenu Icon="@Icons.Material.Filled.MoreVert" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="RefreshAsync">Quét nhắc việc</MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Filled.Send" OnClick="DispatchAsync">Gửi kênh chờ</MudMenuItem>
+            </MudMenu>
+        </MudHidden>
+    </Actions>
+</PageHeader>
 
 @if (_loading)
 {
@@ -65,29 +72,31 @@ else
             <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
                 Mặc định hệ thống bật thông báo trong app. Email dùng SMTP khi đã cấu hình; SMS/Zalo hiện là adapter log/queue chờ provider thật.
             </MudText>
-            <MudSimpleTable Dense="true" Hover="true" Striped="true">
-                <thead>
-                    <tr>
-                        <th>Loại</th>
-                        <th>In-app</th>
-                        <th>Email</th>
-                        <th>SMS</th>
-                        <th>Zalo</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var p in _preferences)
-                    {
+            <div class="table-scroll-x">
+                <MudSimpleTable Dense="true" Hover="true" Striped="true" Style="min-width:480px">
+                    <thead>
                         <tr>
-                            <td>@Labels.Vi(p.Type)</td>
-                            <td><MudCheckBox T="bool" @bind-Value="p.InAppEnabled" Dense="true" /></td>
-                            <td><MudCheckBox T="bool" @bind-Value="p.EmailEnabled" Dense="true" /></td>
-                            <td><MudCheckBox T="bool" @bind-Value="p.SmsEnabled" Dense="true" /></td>
-                            <td><MudCheckBox T="bool" @bind-Value="p.ZaloEnabled" Dense="true" /></td>
+                            <th>Loại</th>
+                            <th>In-app</th>
+                            <th>Email</th>
+                            <th>SMS</th>
+                            <th>Zalo</th>
                         </tr>
-                    }
-                </tbody>
-            </MudSimpleTable>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in _preferences)
+                        {
+                            <tr>
+                                <td>@Labels.Vi(p.Type)</td>
+                                <td><MudCheckBox T="bool" @bind-Value="p.InAppEnabled" Dense="true" /></td>
+                                <td><MudCheckBox T="bool" @bind-Value="p.EmailEnabled" Dense="true" /></td>
+                                <td><MudCheckBox T="bool" @bind-Value="p.SmsEnabled" Dense="true" /></td>
+                                <td><MudCheckBox T="bool" @bind-Value="p.ZaloEnabled" Dense="true" /></td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </div>
             <MudButton Class="mt-3" StartIcon="@Icons.Material.Filled.Save" Variant="Variant.Filled" Color="Color.Primary" OnClick="SavePreferencesAsync">
                 Lưu tùy chọn
             </MudButton>

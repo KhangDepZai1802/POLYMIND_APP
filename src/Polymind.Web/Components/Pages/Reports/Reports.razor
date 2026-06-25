@@ -6,12 +6,8 @@
 
 <PageTitle>Báo cáo — POLYMIND</PageTitle>
 
-<div class="d-flex justify-space-between align-center flex-wrap mb-4" style="gap:8px">
-    <div>
-        <MudText Typo="Typo.h5"><b>Báo cáo & Thống kê</b></MudText>
-        <MudText Typo="Typo.body2" Class="mud-text-secondary">Tổng hợp số liệu marketing, tuyển dụng và tài chính</MudText>
-    </div>
-    <div class="d-flex flex-wrap" style="gap:8px">
+<PageHeader Title="Báo cáo & Thống kê" Subtitle="Tổng hợp số liệu marketing, tuyển dụng và tài chính">
+    <Actions>
         <MudMenu Label="Excel" StartIcon="@Icons.Material.Filled.GridOn" Variant="Variant.Outlined" Color="Color.Success">
             <MudMenuItem Href="/export/finance-monthly.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.CalendarMonth">Thu/chi theo tháng</MudMenuItem>
             <MudMenuItem Href="/export/commissions.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.Handshake">Hoa hồng theo đại lý</MudMenuItem>
@@ -42,8 +38,8 @@
             <MudMenuItem Href="/export/recruitment-funnel.csv" ForceLoad="true" Icon="@Icons.Material.Filled.FilterAlt">Phễu tuyển dụng</MudMenuItem>
             <MudMenuItem Href="/export/top-agents.csv" ForceLoad="true" Icon="@Icons.Material.Filled.EmojiEvents">Top đại lý</MudMenuItem>
         </MudMenu>
-    </div>
-</div>
+    </Actions>
+</PageHeader>
 
 @if (_loading)
 {
@@ -51,20 +47,20 @@
 }
 else
 {
-    <MudGrid>
-        @Kpi("Tổng Lead", _totalLeads.ToString("N0"), Icons.Material.Filled.ContactPhone, Color.Info)
-        @Kpi("Tỷ lệ chuyển đổi", $"{_conversionRate:0.#}%", Icons.Material.Filled.TrendingUp, Color.Primary)
-        @Kpi("Ứng viên đang xử lý", _activeCandidates.ToString("N0"), Icons.Material.Filled.Groups, Color.Secondary)
-        @Kpi("Doanh thu (đã thu)", $"{_totalRevenue:N0} đ", Icons.Material.Filled.Payments, Color.Success)
-        @Kpi("Tổng chi phí", $"{_totalExpense:N0} đ", Icons.Material.Filled.MoneyOff, Color.Error)
-        @Kpi("Lợi nhuận gộp", $"{(_totalRevenue - _totalExpense):N0} đ", Icons.Material.Filled.AccountBalance, (_totalRevenue - _totalExpense) >= 0 ? Color.Success : Color.Error)
-        @Kpi("Công nợ phải thu", $"{_receivables:N0} đ", Icons.Material.Filled.RequestQuote, Color.Warning)
-        @Kpi("Khoản thu quá hạn", _overduePayments.Count.ToString("N0"), Icons.Material.Filled.RunningWithErrors, _overduePayments.Count > 0 ? Color.Error : Color.Success)
-        @Kpi("Hồ sơ đã tải lên", _documentsUploaded.ToString("N0"), Icons.Material.Filled.FolderShared, Color.Info)
-        @Kpi("Sắp xuất cảnh (30 ngày)", _upcomingFlights.Count.ToString("N0"), Icons.Material.Filled.FlightTakeoff, Color.Secondary)
-        @Kpi("Tỷ lệ trúng tuyển", $"{_selectedRate:0.#}%", Icons.Material.Filled.HowToReg, Color.Primary)
-        @Kpi("Tỷ lệ đậu visa", $"{_visaApprovedRate:0.#}%", Icons.Material.Filled.AssignmentTurnedIn, Color.Success)
-        @Kpi("Tỷ lệ xuất cảnh", $"{_departureRate:0.#}%", Icons.Material.Filled.FlightTakeoff, Color.Secondary)
+    <MudGrid Spacing="2">
+        <StatCard Title="Tổng Lead" Value="@_totalLeads.ToString("N0")" Icon="@Icons.Material.Filled.ContactPhone" Color="Color.Info" />
+        <StatCard Title="Tỷ lệ chuyển đổi" Value="@($"{_conversionRate:0.#}%")" Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Primary" />
+        <StatCard Title="Ứng viên đang xử lý" Value="@_activeCandidates.ToString("N0")" Icon="@Icons.Material.Filled.Groups" Color="Color.Secondary" />
+        <StatCard Title="Doanh thu (đã thu)" Value="@($"{_totalRevenue:N0} đ")" Icon="@Icons.Material.Filled.Payments" Color="Color.Success" />
+        <StatCard Title="Tổng chi phí" Value="@($"{_totalExpense:N0} đ")" Icon="@Icons.Material.Filled.MoneyOff" Color="Color.Error" />
+        <StatCard Title="Lợi nhuận gộp" Value="@($"{(_totalRevenue - _totalExpense):N0} đ")" Icon="@Icons.Material.Filled.AccountBalance" Color="@((_totalRevenue - _totalExpense) >= 0 ? Color.Success : Color.Error)" />
+        <StatCard Title="Công nợ phải thu" Value="@($"{_receivables:N0} đ")" Icon="@Icons.Material.Filled.RequestQuote" Color="Color.Warning" />
+        <StatCard Title="Khoản thu quá hạn" Value="@_overduePayments.Count.ToString("N0")" Icon="@Icons.Material.Filled.RunningWithErrors" Color="@(_overduePayments.Count > 0 ? Color.Error : Color.Success)" />
+        <StatCard Title="Hồ sơ đã tải lên" Value="@_documentsUploaded.ToString("N0")" Icon="@Icons.Material.Filled.FolderShared" Color="Color.Info" />
+        <StatCard Title="Sắp xuất cảnh (30 ngày)" Value="@_upcomingFlights.Count.ToString("N0")" Icon="@Icons.Material.Filled.FlightTakeoff" Color="Color.Secondary" />
+        <StatCard Title="Tỷ lệ trúng tuyển" Value="@($"{_selectedRate:0.#}%")" Icon="@Icons.Material.Filled.HowToReg" Color="Color.Primary" />
+        <StatCard Title="Tỷ lệ đậu visa" Value="@($"{_visaApprovedRate:0.#}%")" Icon="@Icons.Material.Filled.AssignmentTurnedIn" Color="Color.Success" />
+        <StatCard Title="Tỷ lệ xuất cảnh" Value="@($"{_departureRate:0.#}%")" Icon="@Icons.Material.Filled.FlightTakeoff" Color="Color.Secondary" />
     </MudGrid>
 
     <MudGrid Class="mt-2">
@@ -232,7 +228,7 @@ else
                 <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Doanh thu theo đơn hàng</b></MudText>
                 @if (_revenueByJobOrder.Any())
                 {
-                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                    <div class="table-scroll-x"><MudSimpleTable Dense="true" Hover="true" Striped="true">
                         <thead>
                             <tr>
                                 <th>Đơn hàng</th>
@@ -252,7 +248,7 @@ else
                                 </tr>
                             }
                         </tbody>
-                    </MudSimpleTable>
+                    </MudSimpleTable></div>
                 }
                 else
                 {
@@ -288,7 +284,7 @@ else
                 <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Khoản thu quá hạn</b></MudText>
                 @if (_overduePayments.Any())
                 {
-                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                    <div class="table-scroll-x"><MudSimpleTable Dense="true" Hover="true" Striped="true">
                         <thead>
                             <tr>
                                 <th>Ứng viên</th>
@@ -310,7 +306,7 @@ else
                                 </tr>
                             }
                         </tbody>
-                    </MudSimpleTable>
+                    </MudSimpleTable></div>
                 }
                 else
                 {
@@ -326,7 +322,7 @@ else
                 <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Lịch visa sắp tới (30 ngày)</b></MudText>
                 @if (_upcomingVisas.Any())
                 {
-                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                    <div class="table-scroll-x"><MudSimpleTable Dense="true" Hover="true" Striped="true">
                         <thead>
                             <tr><th>Ứng viên</th><th>Quốc gia</th><th>Trạng thái</th><th>Mốc</th></tr>
                         </thead>
@@ -341,7 +337,7 @@ else
                                 </tr>
                             }
                         </tbody>
-                    </MudSimpleTable>
+                    </MudSimpleTable></div>
                 }
                 else
                 {
@@ -354,7 +350,7 @@ else
                 <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Lịch xuất cảnh sắp tới (30 ngày)</b></MudText>
                 @if (_upcomingFlights.Any())
                 {
-                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                    <div class="table-scroll-x"><MudSimpleTable Dense="true" Hover="true" Striped="true">
                         <thead>
                             <tr><th>Ứng viên</th><th>Hãng</th><th>Điểm đến</th><th>Ngày bay</th></tr>
                         </thead>
@@ -369,7 +365,7 @@ else
                                 </tr>
                             }
                         </tbody>
-                    </MudSimpleTable>
+                    </MudSimpleTable></div>
                 }
                 else
                 {
@@ -385,7 +381,7 @@ else
                 <MudText Typo="Typo.subtitle1" Class="mb-3"><b>KPI nhân viên tuyển dụng</b></MudText>
                 @if (_staffKpi.Any())
                 {
-                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                    <div class="table-scroll-x"><MudSimpleTable Dense="true" Hover="true" Striped="true">
                         <thead>
                             <tr>
                                 <th>Nhân viên</th>
@@ -405,7 +401,7 @@ else
                                 </tr>
                             }
                         </tbody>
-                    </MudSimpleTable>
+                    </MudSimpleTable></div>
                 }
                 else
                 {
@@ -421,7 +417,7 @@ else
                 <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Top đại lý</b></MudText>
                 @if (_topAgents.Any())
                 {
-                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                    <div class="table-scroll-x"><MudSimpleTable Dense="true" Hover="true" Striped="true">
                         <thead>
                             <tr>
                                 <th>Đại lý</th>
@@ -445,7 +441,7 @@ else
                                 </tr>
                             }
                         </tbody>
-                    </MudSimpleTable>
+                    </MudSimpleTable></div>
                 }
                 else
                 {
@@ -461,7 +457,7 @@ else
                 <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Hoa hồng theo đại lý</b></MudText>
                 @if (_commissionByAgent.Any())
                 {
-                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                    <div class="table-scroll-x"><MudSimpleTable Dense="true" Hover="true" Striped="true">
                         <thead>
                             <tr>
                                 <th>Đại lý</th>
@@ -483,7 +479,7 @@ else
                                 </tr>
                             }
                         </tbody>
-                    </MudSimpleTable>
+                    </MudSimpleTable></div>
                 }
                 else
                 {
@@ -793,16 +789,4 @@ else
 
     private static bool SameMonth(DateOnly d, DateOnly month) => d.Year == month.Year && d.Month == month.Month;
     private static double Rate(int count, int total) => total == 0 ? 0 : count * 100.0 / total;
-
-    private RenderFragment Kpi(string title, string value, string icon, Color color) =>@<MudItem xs="12" sm="6" md="4" lg="2">
-        <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
-            <div class="d-flex justify-space-between align-start">
-                <div>
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@title</MudText>
-                    <MudText Typo="Typo.h6"><b>@value</b></MudText>
-                </div>
-                <MudIcon Icon="@icon" Color="@color" Size="Size.Large" />
-            </div>
-        </MudPaper>
-    </MudItem>;
 }

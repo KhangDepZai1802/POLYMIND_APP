@@ -9,10 +9,7 @@
 
 <PageTitle>Tài chính — POLYMIND</PageTitle>
 
-<div class="mb-4">
-    <MudText Typo="Typo.h5"><b>Tài chính & Công nợ</b></MudText>
-    <MudText Typo="Typo.body2" Class="mud-text-secondary">Quản lý khoản thu từ ứng viên và khoản chi vận hành</MudText>
-</div>
+<PageHeader Title="Tài chính & Công nợ" Subtitle="Quản lý khoản thu từ ứng viên và khoản chi vận hành" />
 
 <MudGrid Class="mb-2">
     <MudItem xs="12" sm="4">
@@ -47,50 +44,98 @@
                     </Authorized>
                 </AuthorizeView>
             </div>
-            <MudDataGrid T="PaymentRow" Items="_payments" Hover="true" Dense="true" Striped="true">
-                <Columns>
-                    <PropertyColumn Property="x => x.Code" Title="Mã" />
-                    <PropertyColumn Property="x => x.CandidateName" Title="Ứng viên" />
-                    <TemplateColumn Title="Loại">
-                        <CellTemplate>@Labels.Vi(context.Item.Type)</CellTemplate>
-                    </TemplateColumn>
-                    <TemplateColumn Title="Số tiền">
-                        <CellTemplate>@($"{context.Item.Amount:N0} đ")</CellTemplate>
-                    </TemplateColumn>
-                    <TemplateColumn Title="Trạng thái">
-                        <CellTemplate>
-                            <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(context.Item.Status)">@Labels.Vi(context.Item.Status)</MudChip>
-                        </CellTemplate>
-                    </TemplateColumn>
-                    <TemplateColumn Title="Hạn thu">
-                        <CellTemplate>@(context.Item.DueDate?.ToString("dd/MM/yyyy") ?? "—")</CellTemplate>
-                    </TemplateColumn>
-                    <TemplateColumn Title="" Sortable="false">
-                        <CellTemplate>
-                            @if (_canApprovePayment && context.Item.Status != PaymentStatus.Paid && context.Item.Status != PaymentStatus.Refunded)
-                            {
-                                <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Check" OnClick="@(() => ApprovePayment(context.Item.Id))">Duyệt</MudButton>
-                            }
-                            @if (_canCreateReceipt && context.Item.Status == PaymentStatus.Paid)
-                            {
-                                @if (_receiptPaymentIds.Contains(context.Item.Id))
+            <MudHidden Breakpoint="Breakpoint.SmAndDown">
+                <MudDataGrid T="PaymentRow" Items="_payments" Hover="true" Dense="true" Striped="true">
+                    <Columns>
+                        <PropertyColumn Property="x => x.Code" Title="Mã" />
+                        <PropertyColumn Property="x => x.CandidateName" Title="Ứng viên" />
+                        <TemplateColumn Title="Loại">
+                            <CellTemplate>@Labels.Vi(context.Item.Type)</CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Số tiền">
+                            <CellTemplate>@($"{context.Item.Amount:N0} đ")</CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Trạng thái">
+                            <CellTemplate>
+                                <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(context.Item.Status)">@Labels.Vi(context.Item.Status)</MudChip>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Hạn thu">
+                            <CellTemplate>@(context.Item.DueDate?.ToString("dd/MM/yyyy") ?? "—")</CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="" Sortable="false">
+                            <CellTemplate>
+                                @if (_canApprovePayment && context.Item.Status != PaymentStatus.Paid && context.Item.Status != PaymentStatus.Refunded)
                                 {
-                                    <MudTooltip Text="Đã có phiếu thu"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Success" Size="Size.Small" Class="mx-1" /></MudTooltip>
+                                    <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Check" OnClick="@(() => ApprovePayment(context.Item.Id))">Duyệt</MudButton>
                                 }
-                                else
+                                @if (_canCreateReceipt && context.Item.Status == PaymentStatus.Paid)
                                 {
-                                    <MudButton Size="Size.Small" Color="Color.Info" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ReceiptLong" OnClick="@(() => CreateReceiptForPayment(context.Item))">Phiếu thu</MudButton>
+                                    @if (_receiptPaymentIds.Contains(context.Item.Id))
+                                    {
+                                        <MudTooltip Text="Đã có phiếu thu"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Success" Size="Size.Small" Class="mx-1" /></MudTooltip>
+                                    }
+                                    else
+                                    {
+                                        <MudButton Size="Size.Small" Color="Color.Info" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ReceiptLong" OnClick="@(() => CreateReceiptForPayment(context.Item))">Phiếu thu</MudButton>
+                                    }
                                 }
-                            }
-                            @if (_canUpdatePayment)
-                            {
-                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditPayment(context.Item.Id))" />
-                            }
-                        </CellTemplate>
-                    </TemplateColumn>
-                </Columns>
-                <PagerContent><MudDataGridPager T="PaymentRow" /></PagerContent>
-            </MudDataGrid>
+                                @if (_canUpdatePayment)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditPayment(context.Item.Id))" />
+                                }
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                    <PagerContent><MudDataGridPager T="PaymentRow" /></PagerContent>
+                </MudDataGrid>
+            </MudHidden>
+            <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+                @if (_payments.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Chưa có khoản thu.</MudText>
+                }
+                else
+                {
+                    @foreach (var p in _payments)
+                    {
+                        <MudPaper Class="mobile-card pa-3" Elevation="0">
+                            <div class="d-flex justify-space-between align-center" style="gap:8px">
+                                <div style="min-width:0">
+                                    <MudText Typo="Typo.subtitle2" Style="font-weight:600">@p.CandidateName</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@p.Code • @Labels.Vi(p.Type)</MudText>
+                                </div>
+                                <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(p.Status)">@Labels.Vi(p.Status)</MudChip>
+                            </div>
+                            <div class="d-flex justify-space-between align-center mt-2" style="gap:8px">
+                                <MudText Typo="Typo.subtitle2" Style="font-weight:600">@($"{p.Amount:N0} đ")</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Hạn: @(p.DueDate?.ToString("dd/MM/yyyy") ?? "—")</MudText>
+                            </div>
+                            <div class="d-flex flex-wrap justify-end mt-1" style="gap:4px">
+                                @if (_canApprovePayment && p.Status != PaymentStatus.Paid && p.Status != PaymentStatus.Refunded)
+                                {
+                                    <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Check" OnClick="@(() => ApprovePayment(p.Id))">Duyệt</MudButton>
+                                }
+                                @if (_canCreateReceipt && p.Status == PaymentStatus.Paid)
+                                {
+                                    @if (_receiptPaymentIds.Contains(p.Id))
+                                    {
+                                        <MudTooltip Text="Đã có phiếu thu"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Success" Size="Size.Small" Class="mx-1" /></MudTooltip>
+                                    }
+                                    else
+                                    {
+                                        <MudButton Size="Size.Small" Color="Color.Info" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ReceiptLong" OnClick="@(() => CreateReceiptForPayment(p))">Phiếu thu</MudButton>
+                                    }
+                                }
+                                @if (_canUpdatePayment)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditPayment(p.Id))" />
+                                }
+                            </div>
+                        </MudPaper>
+                    }
+                }
+            </MudHidden>
         </MudTabPanel>
 
         <MudTabPanel Text="@($"Khoản chi ({_expenses.Count})")">
@@ -103,72 +148,149 @@
                     </Authorized>
                 </AuthorizeView>
             </div>
-            <MudDataGrid T="Expense" Items="_expenses" Hover="true" Dense="true" Striped="true">
-                <Columns>
-                    <PropertyColumn Property="x => x.Code" Title="Mã" />
-                    <TemplateColumn Title="Loại">
-                        <CellTemplate>@Labels.Vi(context.Item.Category)</CellTemplate>
-                    </TemplateColumn>
-                    <PropertyColumn Property="x => x.Description" Title="Mô tả" />
-                    <TemplateColumn Title="Số tiền">
-                        <CellTemplate>@($"{context.Item.Amount:N0} đ")</CellTemplate>
-                    </TemplateColumn>
-                    <TemplateColumn Title="Ngày chi">
-                        <CellTemplate>@context.Item.ExpenseDate.ToString("dd/MM/yyyy")</CellTemplate>
-                    </TemplateColumn>
-                    <TemplateColumn Title="" Sortable="false">
-                        <CellTemplate>
-                            @if (_canCreateReceipt)
-                            {
-                                @if (_receiptExpenseIds.Contains(context.Item.Id))
+            <MudHidden Breakpoint="Breakpoint.SmAndDown">
+                <MudDataGrid T="Expense" Items="_expenses" Hover="true" Dense="true" Striped="true">
+                    <Columns>
+                        <PropertyColumn Property="x => x.Code" Title="Mã" />
+                        <TemplateColumn Title="Loại">
+                            <CellTemplate>@Labels.Vi(context.Item.Category)</CellTemplate>
+                        </TemplateColumn>
+                        <PropertyColumn Property="x => x.Description" Title="Mô tả" />
+                        <TemplateColumn Title="Số tiền">
+                            <CellTemplate>@($"{context.Item.Amount:N0} đ")</CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Ngày chi">
+                            <CellTemplate>@context.Item.ExpenseDate.ToString("dd/MM/yyyy")</CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="" Sortable="false">
+                            <CellTemplate>
+                                @if (_canCreateReceipt)
                                 {
-                                    <MudTooltip Text="Đã có phiếu chi"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Success" Size="Size.Small" Class="mx-1" /></MudTooltip>
+                                    @if (_receiptExpenseIds.Contains(context.Item.Id))
+                                    {
+                                        <MudTooltip Text="Đã có phiếu chi"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Success" Size="Size.Small" Class="mx-1" /></MudTooltip>
+                                    }
+                                    else
+                                    {
+                                        <MudButton Size="Size.Small" Color="Color.Info" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ReceiptLong" OnClick="@(() => CreateReceiptForExpense(context.Item))">Phiếu chi</MudButton>
+                                    }
                                 }
-                                else
+                                @if (_canUpdateExpense)
                                 {
-                                    <MudButton Size="Size.Small" Color="Color.Info" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ReceiptLong" OnClick="@(() => CreateReceiptForExpense(context.Item))">Phiếu chi</MudButton>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditExpense(context.Item.Id))" />
                                 }
-                            }
-                            @if (_canUpdateExpense)
-                            {
-                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditExpense(context.Item.Id))" />
-                            }
-                        </CellTemplate>
-                    </TemplateColumn>
-                </Columns>
-                <PagerContent><MudDataGridPager T="Expense" /></PagerContent>
-            </MudDataGrid>
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                    <PagerContent><MudDataGridPager T="Expense" /></PagerContent>
+                </MudDataGrid>
+            </MudHidden>
+            <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+                @if (_expenses.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Chưa có khoản chi.</MudText>
+                }
+                else
+                {
+                    @foreach (var e in _expenses)
+                    {
+                        <MudPaper Class="mobile-card pa-3" Elevation="0">
+                            <div class="d-flex justify-space-between align-center" style="gap:8px">
+                                <div style="min-width:0">
+                                    <MudText Typo="Typo.subtitle2" Style="font-weight:600">@Labels.Vi(e.Category)</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@e.Code • @e.ExpenseDate.ToString("dd/MM/yyyy")</MudText>
+                                    @if (!string.IsNullOrWhiteSpace(e.Description))
+                                    {
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@e.Description</MudText>
+                                    }
+                                </div>
+                                <MudText Typo="Typo.subtitle2" Style="font-weight:600">@($"{e.Amount:N0} đ")</MudText>
+                            </div>
+                            <div class="d-flex flex-wrap justify-end mt-1" style="gap:4px">
+                                @if (_canCreateReceipt)
+                                {
+                                    @if (_receiptExpenseIds.Contains(e.Id))
+                                    {
+                                        <MudTooltip Text="Đã có phiếu chi"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Success" Size="Size.Small" Class="mx-1" /></MudTooltip>
+                                    }
+                                    else
+                                    {
+                                        <MudButton Size="Size.Small" Color="Color.Info" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ReceiptLong" OnClick="@(() => CreateReceiptForExpense(e))">Phiếu chi</MudButton>
+                                    }
+                                }
+                                @if (_canUpdateExpense)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditExpense(e.Id))" />
+                                }
+                            </div>
+                        </MudPaper>
+                    }
+                }
+            </MudHidden>
         </MudTabPanel>
 
         @if (_canReadReceipt)
         {
             <MudTabPanel Text="@($"Phiếu thu/chi ({_receipts.Count})")">
-                <MudDataGrid T="ReceiptRow" Items="_receipts" Hover="true" Dense="true" Striped="true">
-                    <Columns>
-                        <PropertyColumn Property="x => x.Code" Title="Mã phiếu" />
-                        <TemplateColumn Title="Loại">
-                            <CellTemplate>
-                                <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(context.Item.Type)">@Labels.Vi(context.Item.Type)</MudChip>
-                            </CellTemplate>
-                        </TemplateColumn>
-                        <PropertyColumn Property="x => x.PartyName" Title="Đối tượng" />
-                        <TemplateColumn Title="Số tiền">
-                            <CellTemplate>@($"{context.Item.Amount:N0} đ")</CellTemplate>
-                        </TemplateColumn>
-                        <TemplateColumn Title="Ngày">
-                            <CellTemplate>@context.Item.Date.ToString("dd/MM/yyyy")</CellTemplate>
-                        </TemplateColumn>
-                        <PropertyColumn Property="x => x.Description" Title="Diễn giải" />
-                        <TemplateColumn Title="" Sortable="false">
-                            <CellTemplate>
-                                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
-                                           StartIcon="@Icons.Material.Filled.PictureAsPdf"
-                                           OnClick="@(() => Nav.NavigateTo($"/receipts/{context.Item.Id}.pdf", forceLoad: true))">In PDF</MudButton>
-                            </CellTemplate>
-                        </TemplateColumn>
-                    </Columns>
-                    <PagerContent><MudDataGridPager T="ReceiptRow" /></PagerContent>
-                </MudDataGrid>
+                <MudHidden Breakpoint="Breakpoint.SmAndDown">
+                    <MudDataGrid T="ReceiptRow" Items="_receipts" Hover="true" Dense="true" Striped="true">
+                        <Columns>
+                            <PropertyColumn Property="x => x.Code" Title="Mã phiếu" />
+                            <TemplateColumn Title="Loại">
+                                <CellTemplate>
+                                    <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(context.Item.Type)">@Labels.Vi(context.Item.Type)</MudChip>
+                                </CellTemplate>
+                            </TemplateColumn>
+                            <PropertyColumn Property="x => x.PartyName" Title="Đối tượng" />
+                            <TemplateColumn Title="Số tiền">
+                                <CellTemplate>@($"{context.Item.Amount:N0} đ")</CellTemplate>
+                            </TemplateColumn>
+                            <TemplateColumn Title="Ngày">
+                                <CellTemplate>@context.Item.Date.ToString("dd/MM/yyyy")</CellTemplate>
+                            </TemplateColumn>
+                            <PropertyColumn Property="x => x.Description" Title="Diễn giải" />
+                            <TemplateColumn Title="" Sortable="false">
+                                <CellTemplate>
+                                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
+                                               StartIcon="@Icons.Material.Filled.PictureAsPdf"
+                                               OnClick="@(() => Nav.NavigateTo($"/receipts/{context.Item.Id}.pdf", forceLoad: true))">In PDF</MudButton>
+                                </CellTemplate>
+                            </TemplateColumn>
+                        </Columns>
+                        <PagerContent><MudDataGridPager T="ReceiptRow" /></PagerContent>
+                    </MudDataGrid>
+                </MudHidden>
+                <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+                    @if (_receipts.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Chưa có phiếu thu/chi.</MudText>
+                    }
+                    else
+                    {
+                        @foreach (var r in _receipts)
+                        {
+                            <MudPaper Class="mobile-card pa-3" Elevation="0">
+                                <div class="d-flex justify-space-between align-center" style="gap:8px">
+                                    <div style="min-width:0">
+                                        <MudText Typo="Typo.subtitle2" Style="font-weight:600">@r.Code</MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@r.PartyName • @r.Date.ToString("dd/MM/yyyy")</MudText>
+                                    </div>
+                                    <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(r.Type)">@Labels.Vi(r.Type)</MudChip>
+                                </div>
+                                <div class="d-flex justify-space-between align-center mt-2" style="gap:8px">
+                                    <MudText Typo="Typo.subtitle2" Style="font-weight:600">@($"{r.Amount:N0} đ")</MudText>
+                                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
+                                               StartIcon="@Icons.Material.Filled.PictureAsPdf"
+                                               OnClick="@(() => Nav.NavigateTo($"/receipts/{r.Id}.pdf", forceLoad: true))">In PDF</MudButton>
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(r.Description))
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">@r.Description</MudText>
+                                }
+                            </MudPaper>
+                        }
+                    }
+                </MudHidden>
             </MudTabPanel>
         }
     </MudTabs>

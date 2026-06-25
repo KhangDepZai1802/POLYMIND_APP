@@ -9,10 +9,7 @@
 
 <PageTitle>Visa & Xuất cảnh — POLYMIND</PageTitle>
 
-<div class="mb-4">
-    <MudText Typo="Typo.h5"><b>Visa & Xuất cảnh</b></MudText>
-    <MudText Typo="Typo.body2" Class="mud-text-secondary">Theo dõi hồ sơ visa và lịch bay của ứng viên</MudText>
-</div>
+<PageHeader Title="Visa & Xuất cảnh" Subtitle="Theo dõi hồ sơ visa và lịch bay của ứng viên" />
 
 <MudPaper Elevation="1" Class="pa-2">
     <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" Class="pa-2">
@@ -26,30 +23,60 @@
                     </Authorized>
                 </AuthorizeView>
             </div>
-            <MudDataGrid T="VisaRow" Items="_visas" Hover="true" Dense="true" Striped="true">
-                <Columns>
-                    <PropertyColumn Property="x => x.CandidateName" Title="Ứng viên" />
-                    <PropertyColumn Property="x => x.Country" Title="Quốc gia" />
-                    <PropertyColumn Property="x => x.VisaType" Title="Loại visa" />
-                    <TemplateColumn Title="Trạng thái">
-                        <CellTemplate>
-                            <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(context.Item.Status)">@Labels.Vi(context.Item.Status)</MudChip>
-                        </CellTemplate>
-                    </TemplateColumn>
-                    <TemplateColumn Title="Ngày nộp">
-                        <CellTemplate>@(context.Item.SubmittedDate?.ToString("dd/MM/yyyy") ?? "—")</CellTemplate>
-                    </TemplateColumn>
-                    <TemplateColumn Title="" Sortable="false">
-                        <CellTemplate>
-                            @if (_canUpdateVisa)
-                            {
-                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditVisa(context.Item.Id))" />
-                            }
-                        </CellTemplate>
-                    </TemplateColumn>
-                </Columns>
-                <PagerContent><MudDataGridPager T="VisaRow" /></PagerContent>
-            </MudDataGrid>
+            <MudHidden Breakpoint="Breakpoint.SmAndDown">
+                <MudDataGrid T="VisaRow" Items="_visas" Hover="true" Dense="true" Striped="true">
+                    <Columns>
+                        <PropertyColumn Property="x => x.CandidateName" Title="Ứng viên" />
+                        <PropertyColumn Property="x => x.Country" Title="Quốc gia" />
+                        <PropertyColumn Property="x => x.VisaType" Title="Loại visa" />
+                        <TemplateColumn Title="Trạng thái">
+                            <CellTemplate>
+                                <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(context.Item.Status)">@Labels.Vi(context.Item.Status)</MudChip>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Ngày nộp">
+                            <CellTemplate>@(context.Item.SubmittedDate?.ToString("dd/MM/yyyy") ?? "—")</CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="" Sortable="false">
+                            <CellTemplate>
+                                @if (_canUpdateVisa)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditVisa(context.Item.Id))" />
+                                }
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                    <PagerContent><MudDataGridPager T="VisaRow" /></PagerContent>
+                </MudDataGrid>
+            </MudHidden>
+            <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+                @if (_visas.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Chưa có hồ sơ visa.</MudText>
+                }
+                else
+                {
+                    @foreach (var v in _visas)
+                    {
+                        <MudPaper Class="mobile-card pa-3" Elevation="0">
+                            <div class="d-flex justify-space-between align-center" style="gap:8px">
+                                <div style="min-width:0">
+                                    <MudText Typo="Typo.subtitle2" Style="font-weight:600">@v.CandidateName</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@v.Country • @(string.IsNullOrWhiteSpace(v.VisaType) ? "—" : v.VisaType)</MudText>
+                                </div>
+                                <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(v.Status)">@Labels.Vi(v.Status)</MudChip>
+                            </div>
+                            <div class="d-flex justify-space-between align-center mt-2" style="gap:8px">
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Nộp: @(v.SubmittedDate?.ToString("dd/MM/yyyy") ?? "—")</MudText>
+                                @if (_canUpdateVisa)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditVisa(v.Id))" />
+                                }
+                            </div>
+                        </MudPaper>
+                    }
+                }
+            </MudHidden>
         </MudTabPanel>
 
         <MudTabPanel Text="@($"Vé máy bay ({_flights.Count})")">
@@ -62,26 +89,56 @@
                     </Authorized>
                 </AuthorizeView>
             </div>
-            <MudDataGrid T="FlightRow" Items="_flights" Hover="true" Dense="true" Striped="true">
-                <Columns>
-                    <PropertyColumn Property="x => x.CandidateName" Title="Ứng viên" />
-                    <PropertyColumn Property="x => x.Airline" Title="Hãng bay" />
-                    <PropertyColumn Property="x => x.TicketCode" Title="Mã vé" />
-                    <PropertyColumn Property="x => x.Destination" Title="Điểm đến" />
-                    <TemplateColumn Title="Giờ bay">
-                        <CellTemplate>@context.Item.DepartureText</CellTemplate>
-                    </TemplateColumn>
-                    <TemplateColumn Title="" Sortable="false">
-                        <CellTemplate>
-                            @if (_canUpdateFlight)
-                            {
-                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditFlight(context.Item.Id))" />
-                            }
-                        </CellTemplate>
-                    </TemplateColumn>
-                </Columns>
-                <PagerContent><MudDataGridPager T="FlightRow" /></PagerContent>
-            </MudDataGrid>
+            <MudHidden Breakpoint="Breakpoint.SmAndDown">
+                <MudDataGrid T="FlightRow" Items="_flights" Hover="true" Dense="true" Striped="true">
+                    <Columns>
+                        <PropertyColumn Property="x => x.CandidateName" Title="Ứng viên" />
+                        <PropertyColumn Property="x => x.Airline" Title="Hãng bay" />
+                        <PropertyColumn Property="x => x.TicketCode" Title="Mã vé" />
+                        <PropertyColumn Property="x => x.Destination" Title="Điểm đến" />
+                        <TemplateColumn Title="Giờ bay">
+                            <CellTemplate>@context.Item.DepartureText</CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="" Sortable="false">
+                            <CellTemplate>
+                                @if (_canUpdateFlight)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditFlight(context.Item.Id))" />
+                                }
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                    <PagerContent><MudDataGridPager T="FlightRow" /></PagerContent>
+                </MudDataGrid>
+            </MudHidden>
+            <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+                @if (_flights.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Chưa có vé máy bay.</MudText>
+                }
+                else
+                {
+                    @foreach (var f in _flights)
+                    {
+                        <MudPaper Class="mobile-card pa-3" Elevation="0">
+                            <div class="d-flex justify-space-between align-center" style="gap:8px">
+                                <div style="min-width:0">
+                                    <MudText Typo="Typo.subtitle2" Style="font-weight:600">@f.CandidateName</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(f.Airline) ? "—" : f.Airline) • @(string.IsNullOrWhiteSpace(f.TicketCode) ? "—" : f.TicketCode)</MudText>
+                                </div>
+                                @if (_canUpdateFlight)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditFlight(f.Id))" />
+                                }
+                            </div>
+                            <div class="d-flex justify-space-between align-center mt-2" style="gap:8px">
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(f.Destination) ? "—" : f.Destination)</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@f.DepartureText</MudText>
+                            </div>
+                        </MudPaper>
+                    }
+                }
+            </MudHidden>
         </MudTabPanel>
     </MudTabs>
 </MudPaper>

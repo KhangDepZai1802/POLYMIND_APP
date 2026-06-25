@@ -58,3 +58,59 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+
+/* ===== POLYMIND responsive helpers ===== */
+/* Tránh tràn ngang toàn trang trên mobile */
+html, body {
+    overflow-x: hidden;
+}
+
+/* Bảng dài cho phép cuộn ngang gọn trong khung (desktop) */
+.table-scroll-x {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Thẻ KPI/nội dung: hiệu ứng nổi nhẹ khi rê chuột (desktop) */
+@media (hover: hover) {
+    .stat-card {
+        transition: box-shadow .15s ease, transform .15s ease;
+    }
+    .stat-card:hover {
+        transform: translateY(-2px);
+    }
+}
+
+/* Trên mobile thu nhỏ tiêu đề trang cho gọn */
+@media (max-width: 599.98px) {
+    .page-title {
+        font-size: 1.25rem !important;
+    }
+}
+
+/* Giá trị KPI trong StatCard: desktop lớn, mobile gọn — tránh tràn ô khi 2 thẻ/hàng */
+.stat-value {
+    font-weight: 700;
+    line-height: 1.2;
+    font-size: 1.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 599.98px) {
+    .stat-value {
+        font-size: 1.15rem;
+        white-space: normal;
+        word-break: break-word;
+    }
+}
+
+/* Danh sách dạng thẻ (mobile) thay cho bảng: viền nhẹ, bo góc, vùng chạm rộng */
+.mobile-card {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+}
+.mobile-card + .mobile-card {
+    margin-top: 8px;
+}
