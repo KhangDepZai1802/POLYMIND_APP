@@ -29,7 +29,7 @@
 
 ## 🎯 TRẠNG THÁI HIỆN TẠI
 
-- **CHỐT HOSTING: Oracle Cloud Always Free VM (Session 26, Claude + user).** User cần web **24/7** (truy cập cả ngoài giờ, ở nhà) → không tự host máy công ty (tắt máy là sập) cũng không Vercel (sai loại nền tảng cho Blazor Server + DB + job nền). Chọn **VM Always Free (ARM Ampere)** chạy nguyên bộ `docker-compose.production.yml`, DuckDNS trỏ domain → public IP VM, Caddy auto HTTPS. Runbook chi tiết 4 giai đoạn: **[docs/06-deploy-oracle.md](docs/06-deploy-oracle.md)**. Đang ở **GĐ1** (user tạo tài khoản Oracle + VM). Demo nhanh tạm thời đã chạy được qua Cloudflare Quick Tunnel (link đổi mỗi lần, chỉ để xem thử).
+- **CHỐT HOSTING GIAI ĐOẠN TEST: laptop + Cloudflare Tunnel (Session 26, Claude + user).** Bối cảnh thật làm rõ ở cuối session: web **đang test với 2 đối tác**, sửa hằng ngày theo góp ý, **chưa dùng thật**, user **ngại trình sếp xin tiền hằng tháng** cho app chưa xong → chọn **FREE: chạy app trên laptop cá nhân (16GB RAM, OK) + Cloudflare Quick Tunnel** cho đối tác vào test. Không cần thẻ, không phí. **Hạn chế đã thống nhất:** chỉ vào được khi laptop bật + có mạng (≈ giờ làm việc); link `*.trycloudflare.com` **đổi mỗi lần khởi động lại tunnel** → gửi lại link cho 2 đối tác. Tạo sẵn **`scripts/demo-start.ps1`** (bật Docker+app+tunnel, in+copy link) và **`scripts/demo-stop.ps1`**. Khi web xong → dùng thật mới tính Oracle/VPS VN (runbook Oracle vẫn giữ: [docs/06-deploy-oracle.md](docs/06-deploy-oracle.md)).
 - **HARDENING DEPLOY phần code đã XONG (Session 25, Claude):** (1) Đã **commit** toàn bộ phần field hồ sơ nhạy cảm Session 23 (commit `43e5c59`). (2) **Production seeding an toàn:** `DbSeeder` giờ chỉ tạo 8 user mẫu `Admin@123` ở **Development**; ở **Production** chỉ tạo DUY NHẤT 1 super admin thật từ env `SuperAdmin__Email`/`SuperAdmin__Password` — thiếu env thì KHÔNG tạo tài khoản nào (không còn cửa hậu Admin@123). (3) **Ẩn hint demo login** ở Login.razor khi không phải Development. (4) **Profile Caddy + DuckDNS** trong `docker-compose.production.yml` (`--profile caddy`, Caddyfile auto Let's Encrypt) + DuckDNS updater (`--profile duckdns`); Nginx chuyển sang `--profile nginx` làm fallback. `.env.production.example` + README cập nhật. Build 0 warning/0 error; `docker compose config` validate cả 2 profile. **Còn lại = việc cần máy/mạng công ty (xem VIỆC TIẾP THEO).**
 - **Bản demo MVP chạy được**, đã smoke-test toàn bộ trang HTTP 200. App: `http://localhost:5177`, login `admin@polymind.local / Admin@123`.
 - Build sạch (`dotnet build Polymind.slnx` = 0 error, 0 warning). Docker (Postgres/Redis/MinIO) cần `docker compose up -d`.
@@ -57,7 +57,14 @@
 
 ## ⏭️ VIỆC TIẾP THEO (baton — làm cái này trước)
 
-**HARDENING DEPLOY phần code đã XONG (Session 25). Việc tiếp theo = cần MÁY/MẠNG CÔNG TY (không tự động được trên máy dev):**
+**GIAI ĐOẠN TEST (hiện tại): laptop + Cloudflare Tunnel — user tự vận hành hằng ngày.**
+- Mỗi ngày muốn cho 2 đối tác test: chạy **`scripts/demo-start.ps1`** (double-click hoặc PowerShell) → nó in + copy **link `*.trycloudflare.com`** → gửi đối tác. Tắt: `scripts/demo-stop.ps1`.
+- Link đổi mỗi lần restart tunnel → gửi lại link mới. Giữ laptop cắm điện + không sleep khi đang test. Sửa code xong: chạy lại `demo-start.ps1` (hoặc `dotnet watch`).
+- **Việc của AI session sau (nếu user yêu cầu):** cải tiến demo (vd link cố định nếu user mua domain rẻ; hoặc `dotnet watch` để hot-reload khi sửa theo góp ý đối tác). KHÔNG cần đụng deploy production tới khi web chốt xong.
+
+**Khi web CHỐT XONG → dùng thật (để sau):** chọn Oracle Always Free (free 24/7, cần thẻ xác minh) hoặc VPS VN trả phí (data trong nước, hóa đơn VAT — trình sếp). Code production đã sẵn sàng từ Session 25 (seeding an toàn, profile Caddy/DuckDNS). Chi tiết bên dưới:
+
+**HARDENING DEPLOY phần code đã XONG (Session 25). Khi deploy thật cần MÁY/MẠNG (không tự động được trên máy dev):**
 1. **Tạo `.env.production` thật** từ `.env.production.example`: đổi MỌI secret (`POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`, `JWT_KEY` >= 32 ký tự), đặt `SUPERADMIN_EMAIL` + `SUPERADMIN_PASSWORD` mạnh (đây là tài khoản đăng nhập duy nhất ở production — KHÔNG còn `Admin@123`), đặt `DOMAIN`=`polymindolms.duckdns.org` (fallback `polymindolmsvn`/`polymindolms2026`) + `ACME_EMAIL`.
 2. **Kiểm tra mạng (gate bắt buộc):** so WAN IP của router với public IP ngoài Internet (vd whatismyip). Nếu KHÁC nhau → CGNAT → DuckDNS public KHÔNG đủ, chuyển fallback tunnel (Cloudflare Tunnel). Nếu GIỐNG → port-forward 80/443 về máy chạy Docker, trỏ bản ghi A DuckDNS về public IP (IP động thì bật `--profile duckdns`).
 3. **Chạy production:** `docker compose --env-file .env.production -f docker-compose.production.yml --profile caddy up -d --build`. Đợi Caddy xin cert Let's Encrypt (log `docker logs polymind-prod-caddy`), test `https://<DOMAIN>/health`, chạy `scripts/smoke-test.ps1` qua domain thật, đăng nhập bằng super admin vừa tạo.
@@ -121,6 +128,13 @@
 ---
 
 ## 📜 NHẬT KÝ SESSION (mới nhất ở trên)
+
+### [2026-06-25] Session 26 (tiếp) — Claude — Chốt FREE cho giai đoạn test: laptop + Cloudflare Tunnel
+- **Bước ngoặt bối cảnh:** user tiết lộ web đang **test với 2 đối tác** (sửa hằng ngày theo góp ý), **chưa dùng thật**, sợ sếp không duyệt chi phí hằng tháng. → Chốt giải pháp **FREE, không thẻ**: app chạy trên **laptop cá nhân** + **Cloudflare Quick Tunnel**.
+- **Làm được:** Cài `cloudflared` (winget). Xác nhận laptop đủ phần cứng (**15.7GB RAM / 20 luồng**). Tạo `scripts/demo-start.ps1` (auto: Docker `up -d` → `dotnet run` 0.0.0.0:5177 cửa sổ riêng → `cloudflared tunnel --url` → bắt regex link `*.trycloudflare.com`, in + `Set-Clipboard`) và `scripts/demo-stop.ps1` (kill cloudflared + process cổng 5177, giữ Docker). Đã chạy thử end-to-end: link công khai trả HTTP 200 (`/health` Healthy, `/login` 200).
+- **File chính:** `scripts/demo-start.ps1`, `scripts/demo-stop.ps1` (mới), `WORKLOG.md`.
+- **Đã test:** không build (chỉ script + docs). Chuỗi app↔tunnel↔link verify 200.
+- **Lưu ý/cảnh báo cho người sau:** (1) **Tiến trình do AI chạy hộ qua tool bị dọn khi phiên kết thúc** — cửa sổ app `Start-Process` không trụ lại khi *tôi* chạy script; nhưng khi **user tự double-click `demo-start.ps1`** thì cửa sổ thuộc về user, trụ bình thường. → Hướng dẫn user TỰ chạy script để có thiết lập bền. (2) Link quick tunnel **đổi mỗi lần restart** → muốn link cố định free phải có domain trên Cloudflare (tốn ~vài chục k/năm) hoặc chuyển Oracle. (3) App chạy **Development** (có demo data + 8 user mẫu Admin@123) — hợp để đối tác test; **đừng share link rộng**. (4) Sửa code xong: đóng cửa sổ app rồi chạy lại `demo-start.ps1`, hoặc dùng `dotnet watch`. (5) Giữ laptop **cắm điện + không sleep** khi đang cho test.
 
 ### [2026-06-25] Session 26 — Claude — Chốt hosting Oracle Always Free + bắt đầu triển khai
 - **Bối cảnh:** sau khi hardening code (S25), user hỏi deploy thật. Làm rõ với user: (1) tự host máy công ty = chỉ sống giờ hành chính, tắt máy/điện/mạng là sập; (2) Vercel KHÔNG chạy được app này (Blazor Server có trạng thái + WebSocket + Postgres/MinIO/Redis/Hangfire — Vercel là serverless/frontend tĩnh, sai loại); (3) muốn 24/7 free → **Oracle Cloud Always Free VM** là lựa chọn số 1 (VM luôn bật thật, không phải serverless ngủ).
