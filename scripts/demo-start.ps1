@@ -32,8 +32,10 @@ Write-Host '      Docker OK.'
 if (Get-NetTCPConnection -LocalPort 5177 -State Listen -ErrorAction SilentlyContinue) {
   Write-Host '[2/3] App da chay san tren cong 5177.'
 } else {
-  Write-Host '[2/3] Khoi dong app (mo cua so rieng)...'
-  $cmd = "`$env:ASPNETCORE_ENVIRONMENT='Development'; `$env:ASPNETCORE_URLS='http://0.0.0.0:5177'; dotnet run --project `"$root\src\Polymind.Web`" --no-launch-profile"
+  Write-Host '[2/3] Khoi dong app voi Hot Reload (mo cua so rieng)...'
+  # dotnet watch: sua code + Ctrl+S la tu ap dung; doi tac chi can F5 refresh.
+  # DOTNET_WATCH_RESTART_ON_RUDE_EDIT=true: thay doi lon thi tu restart, khong hoi y/n.
+  $cmd = "`$env:ASPNETCORE_ENVIRONMENT='Development'; `$env:ASPNETCORE_URLS='http://0.0.0.0:5177'; `$env:DOTNET_WATCH_RESTART_ON_RUDE_EDIT='true'; dotnet watch --project `"$root\src\Polymind.Web`" run --no-launch-profile"
   Start-Process powershell -ArgumentList '-NoExit','-Command',$cmd
   Write-Host '      Dang build + khoi dong (lan dau hoi lau)...'
   for ($i=0; $i -lt 80; $i++) { if (Get-NetTCPConnection -LocalPort 5177 -State Listen -ErrorAction SilentlyContinue) { break }; Start-Sleep 3 }
