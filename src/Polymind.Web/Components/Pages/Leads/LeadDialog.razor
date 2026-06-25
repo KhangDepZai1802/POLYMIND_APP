@@ -26,27 +26,37 @@
             <MudItem xs="12" sm="6">
                 <MudTextField @bind-Value="_model.Cccd" Label="CCCD" Variant="Variant.Outlined" Margin="Margin.Dense" />
             </MudItem>
+            <AuthorizeView Roles="super_admin">
+                <Authorized>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_model.Email" Label="Email" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                </Authorized>
+            </AuthorizeView>
             <MudItem xs="12" sm="6">
-                <MudTextField @bind-Value="_model.Email" Label="Email" Variant="Variant.Outlined" Margin="Margin.Dense" />
-            </MudItem>
-            <MudItem xs="12" sm="6">
-                <MudTextField @bind-Value="_model.Province" Label="Tỉnh/Thành phố" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                <MudAutocomplete T="string" @bind-Value="_model.Province" Label="Tỉnh/Thành phố"
+                                 SearchFunc="SearchProvince" CoerceValue="true" ResetValueOnEmptyText="false"
+                                 Clearable="true" MaxItems="40" Variant="Variant.Outlined" Margin="Margin.Dense" />
             </MudItem>
             <MudItem xs="12" sm="6">
                 <MudTextField @bind-Value="_model.Address" Label="Địa chỉ" Variant="Variant.Outlined" Margin="Margin.Dense" />
             </MudItem>
-            <MudItem xs="12" sm="6">
-                <MudTextField @bind-Value="_model.Occupation" Label="Nghề nghiệp hiện tại" Variant="Variant.Outlined" Margin="Margin.Dense" />
-            </MudItem>
-            <MudItem xs="12" sm="6">
-                <MudTextField @bind-Value="_model.EducationLevel" Label="Trình độ học vấn" Variant="Variant.Outlined" Margin="Margin.Dense" />
-            </MudItem>
-            <MudItem xs="12" sm="6">
-                <MudTextField @bind-Value="_model.WorkExperience" Label="Kinh nghiệm làm việc" Variant="Variant.Outlined" Margin="Margin.Dense" />
-            </MudItem>
-            <MudItem xs="12" sm="6">
-                <MudTextField @bind-Value="_model.Languages" Label="Ngoại ngữ" Variant="Variant.Outlined" Margin="Margin.Dense" />
-            </MudItem>
+            <AuthorizeView Roles="super_admin">
+                <Authorized>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_model.Occupation" Label="Nghề nghiệp hiện tại" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_model.EducationLevel" Label="Trình độ học vấn" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_model.WorkExperience" Label="Kinh nghiệm làm việc" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_model.Languages" Label="Ngoại ngữ" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                </Authorized>
+            </AuthorizeView>
             <MudItem xs="12" sm="6">
                 <MudSelect T="LeadSource" @bind-Value="_model.Source" Label="Nguồn" Variant="Variant.Outlined" Margin="Margin.Dense">
                     @foreach (var s in Enum.GetValues<LeadSource>())
@@ -91,6 +101,7 @@
     private Lead _model = new() { FullName = "", Source = LeadSource.Hotline };
     private DateTime? _dob;
     private bool _saving;
+    private bool _canEditSensitiveProfile;
 
     private record JobOrderOption(Guid Id, string Code, string Country);
     private record UserOption(Guid Id, string FullName);
@@ -99,6 +110,9 @@
 
     protected override async Task OnInitializedAsync()
     {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _canEditSensitiveProfile = authState.User.IsInRole(Polymind.Infrastructure.Persistence.Constants.RoleNames.SuperAdmin);
+
         await using var db = await DbFactory.CreateDbContextAsync();
         _jobOrders = await db.JobOrders
             .Where(j => j.Status != JobOrderStatus.Cancelled)
@@ -108,6 +122,9 @@
             .OrderBy(u => u.FullName)
             .Select(u => new UserOption(u.Id, u.FullName)).ToListAsync();
     }
+
+    private Task<IEnumerable<string>> SearchProvince(string value, CancellationToken token)
+        => Task.FromResult(VietnamProvinces.Search(value));
 
     private void Cancel() => MudDialog.Cancel();
 
@@ -124,6 +141,8 @@
 
         await using var db = await DbFactory.CreateDbContextAsync();
         _model.Dob = _dob is null ? null : DateOnly.FromDateTime(_dob.Value);
+        if (!_canEditSensitiveProfile) ClearSensitiveProfile(_model);
+
         _model.Code = $"LD-{DateTime.Now:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}";
         _model.Status = LeadStatus.New;
         db.Leads.Add(_model);
@@ -137,6 +156,15 @@
         await db.SaveChangesAsync();
 
         MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private static void ClearSensitiveProfile(Lead lead)
+    {
+        lead.Email = null;
+        lead.Occupation = null;
+        lead.EducationLevel = null;
+        lead.WorkExperience = null;
+        lead.Languages = null;
     }
 
     private async Task<bool> HasPermission(string permission)

@@ -35,7 +35,9 @@
                         </MudSelect>
                     </MudItem>
                     <MudItem xs="12" sm="6">
-                        <MudTextField @bind-Value="_m.Province" Label="Tỉnh/Thành phố" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        <MudAutocomplete T="string" @bind-Value="_m.Province" Label="Tỉnh/Thành phố"
+                                         SearchFunc="SearchProvince" CoerceValue="true" ResetValueOnEmptyText="false"
+                                         Clearable="true" MaxItems="40" Variant="Variant.Outlined" Margin="Margin.Dense" />
                     </MudItem>
                     <MudItem xs="12">
                         <MudTextField @bind-Value="_m.Address" Label="Địa chỉ" Variant="Variant.Outlined" Margin="Margin.Dense" />
@@ -92,6 +94,31 @@
                     </MudItem>
                 </MudGrid>
             </MudTabPanel>
+
+            @* Thông tin nhạy cảm — chỉ super_admin được xem/sửa *@
+            <AuthorizeView Roles="super_admin">
+                <Authorized>
+                    <MudTabPanel Text="Hồ sơ (Super admin)" Icon="@Icons.Material.Filled.Lock">
+                        <MudGrid>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField @bind-Value="_m.Email" Label="Email" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField @bind-Value="_m.Occupation" Label="Nghề nghiệp hiện tại" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField @bind-Value="_m.EducationLevel" Label="Trình độ học vấn" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField @bind-Value="_m.WorkExperience" Label="Kinh nghiệm làm việc" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField @bind-Value="_m.Languages" Label="Ngoại ngữ" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                        </MudGrid>
+                    </MudTabPanel>
+                </Authorized>
+            </AuthorizeView>
         </MudTabs>
     </DialogContent>
     <DialogActions>
@@ -108,15 +135,22 @@
 
     private readonly FormModel _m = new();
     private bool _saving;
+    private bool _canEditSensitiveProfile;
     private bool IsEdit => CandidateId is not null;
 
     protected override async Task OnInitializedAsync()
     {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _canEditSensitiveProfile = authState.User.IsInRole(Polymind.Infrastructure.Persistence.Constants.RoleNames.SuperAdmin);
+
         if (CandidateId is null) return;
         await using var db = await DbFactory.CreateDbContextAsync();
         var c = await db.Candidates.FirstOrDefaultAsync(x => x.Id == CandidateId);
         if (c is not null) _m.LoadFrom(c);
     }
+
+    private Task<IEnumerable<string>> SearchProvince(string value, CancellationToken token)
+        => Task.FromResult(VietnamProvinces.Search(value));
 
     private void Cancel() => MudDialog.Cancel();
 
@@ -149,7 +183,7 @@
                 }
                 var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
                 var oldValue = Snapshot(c);
-                _m.ApplyTo(c);
+                _m.ApplyTo(c, _canEditSensitiveProfile);
                 c.UpdatedAt = DateTimeOffset.UtcNow;
                 db.AddAudit(actorId, "update", "candidates", c.Id, oldValue, Snapshot(c));
             }
@@ -161,7 +195,7 @@
                     Code = $"UV-{DateTime.Now:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}",
                     CreatedBy = actorId,
                 };
-                _m.ApplyTo(c);
+                _m.ApplyTo(c, _canEditSensitiveProfile);
                 db.Candidates.Add(c);
                 db.AddAudit(actorId, "create", "candidates", c.Id, null, Snapshot(c));
             }
@@ -203,6 +237,11 @@
         c.BankAccountNumber,
         c.BankName,
         c.BankAccountName,
+        c.Email,
+        c.Occupation,
+        c.EducationLevel,
+        c.WorkExperience,
+        c.Languages,
         c.AgentId,
         c.CreatedBy,
     };
@@ -228,6 +267,11 @@
         public string? BankAccountNumber { get; set; }
         public string? BankName { get; set; }
         public string? BankAccountName { get; set; }
+        public string? Email { get; set; }
+        public string? Occupation { get; set; }
+        public string? EducationLevel { get; set; }
+        public string? WorkExperience { get; set; }
+        public string? Languages { get; set; }
 
         public void LoadFrom(Candidate c)
         {
@@ -249,9 +293,14 @@
             BankAccountNumber = c.BankAccountNumber;
             BankName = c.BankName;
             BankAccountName = c.BankAccountName;
+            Email = c.Email;
+            Occupation = c.Occupation;
+            EducationLevel = c.EducationLevel;
+            WorkExperience = c.WorkExperience;
+            Languages = c.Languages;
         }
 
-        public void ApplyTo(Candidate c)
+        public void ApplyTo(Candidate c, bool includeSensitiveProfile)
         {
             c.FullName = FullName.Trim();
             c.Phone = Phone;
@@ -271,6 +320,14 @@
             c.BankAccountNumber = BankAccountNumber;
             c.BankName = BankName;
             c.BankAccountName = BankAccountName;
+
+            if (!includeSensitiveProfile) return;
+
+            c.Email = Email;
+            c.Occupation = Occupation;
+            c.EducationLevel = EducationLevel;
+            c.WorkExperience = WorkExperience;
+            c.Languages = Languages;
         }
     }
 }

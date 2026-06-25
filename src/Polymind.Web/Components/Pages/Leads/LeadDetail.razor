@@ -27,12 +27,50 @@ else
                     <MudChip T="string" Color="Labels.ColorOf(_lead.Status)">@Labels.Vi(_lead.Status)</MudChip>
                 </div>
                 <MudDivider Class="mb-3" />
+
+                <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Thông tin cá nhân</b></MudText>
                 <MudGrid>
                     @Field("Số điện thoại", _lead.Phone)
-                    @Field("Email", _lead.Email)
+                    @Field("Ngày sinh", _lead.Dob?.ToString("dd/MM/yyyy"))
+                    @Field("Giới tính", _lead.Gender is null ? null : Labels.Vi(_lead.Gender.Value))
+                    @Field("Số CCCD", _lead.Cccd)
                     @Field("Tỉnh/Thành", _lead.Province)
+                </MudGrid>
+                @if (!string.IsNullOrWhiteSpace(_lead.Address))
+                {
+                    <MudText Typo="Typo.body2" Class="mt-2"><b>Địa chỉ:</b> @_lead.Address</MudText>
+                }
+
+                <MudDivider Class="my-3" />
+                <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Nguyện vọng</b></MudText>
+                <MudGrid>
                     @Field("Quốc gia mong muốn", _lead.TargetCountry)
+                    @Field("Đơn hàng quan tâm", _interestedJobOrder)
+                </MudGrid>
+
+                @* Thông tin nhạy cảm — chỉ super_admin được xem *@
+                <AuthorizeView Roles="super_admin">
+                    <Authorized>
+                        <MudDivider Class="my-3" />
+                        <div class="d-flex align-center mb-2" style="gap:6px">
+                            <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Warning" />
+                            <MudText Typo="Typo.subtitle2"><b>Hồ sơ chi tiết (chỉ super admin)</b></MudText>
+                        </div>
+                        <MudGrid>
+                            @Field("Email", _lead.Email)
+                            @Field("Nghề nghiệp", _lead.Occupation)
+                            @Field("Trình độ học vấn", _lead.EducationLevel)
+                            @Field("Kinh nghiệm làm việc", _lead.WorkExperience)
+                            @Field("Ngoại ngữ", _lead.Languages)
+                        </MudGrid>
+                    </Authorized>
+                </AuthorizeView>
+
+                <MudDivider Class="my-3" />
+                <MudGrid>
                     @Field("Nguồn", Labels.Vi(_lead.Source))
+                    @Field("Người phụ trách", _assignedToName)
+                    @Field("Lịch hẹn tư vấn", _lead.AppointmentAt?.ToLocalTime().ToString("dd/MM/yyyy HH:mm"))
                     @Field("Ngày tạo", _lead.CreatedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm"))
                 </MudGrid>
                 @if (!string.IsNullOrWhiteSpace(_lead.Notes))
@@ -131,6 +169,8 @@ else
     private Guid? _assignTo;
     private DateTime? _appointmentDate;
     private TimeSpan? _appointmentTime;
+    private string? _assignedToName;
+    private string? _interestedJobOrder;
     private record UserOption(Guid Id, string FullName);
     private List<UserOption> _users = new();
 
@@ -159,6 +199,19 @@ else
             _users = await db.Users.Where(u => u.IsActive)
                 .OrderBy(u => u.FullName)
                 .Select(u => new UserOption(u.Id, u.FullName)).ToListAsync();
+
+            _assignedToName = _lead.AssignedTo is null
+                ? null
+                : _users.FirstOrDefault(u => u.Id == _lead.AssignedTo)?.FullName
+                  ?? (await db.Users.Where(u => u.Id == _lead.AssignedTo).Select(u => u.FullName).FirstOrDefaultAsync());
+
+            _interestedJobOrder = null;
+            if (_lead.InterestedJobOrderId is not null)
+            {
+                var jo = await db.JobOrders.Where(j => j.Id == _lead.InterestedJobOrderId)
+                    .Select(j => new { j.Code, j.Country }).FirstOrDefaultAsync();
+                if (jo is not null) _interestedJobOrder = $"{jo.Code} — {jo.Country}";
+            }
         }
     }
 
@@ -296,7 +349,15 @@ else
                 FullName = lead.FullName,
                 Phone = lead.Phone,
                 Province = lead.Province,
+                Address = lead.Address,
                 Gender = lead.Gender,
+                Dob = lead.Dob,
+                CccdNumber = lead.Cccd,
+                Email = lead.Email,
+                Occupation = lead.Occupation,
+                EducationLevel = lead.EducationLevel,
+                WorkExperience = lead.WorkExperience,
+                Languages = lead.Languages,
                 AgentId = lead.AgentId,
                 CreatedBy = adminId,
             };

@@ -20,6 +20,12 @@ public class Candidate : BaseEntity
     public string? Province { get; set; }
     public MaritalStatus? MaritalStatus { get; set; }
     public string? Phone { get; set; }
+    // Thông tin nhạy cảm — chỉ super_admin xem/sửa (đồng bộ từ Lead khi convert).
+    public string? Email { get; set; }
+    public string? Occupation { get; set; }
+    public string? EducationLevel { get; set; }
+    public string? WorkExperience { get; set; }
+    public string? Languages { get; set; }
     public string? EmergencyContactName { get; set; }
     public string? EmergencyContactPhone { get; set; }
     public string? EmergencyContactRelation { get; set; }

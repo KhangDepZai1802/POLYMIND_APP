@@ -87,6 +87,24 @@ else
                         @Field("Chủ TK", _candidate.BankAccountName)
                     </MudGrid>
                 }
+
+                @* Thông tin nhạy cảm — chỉ super_admin được xem *@
+                <AuthorizeView Roles="super_admin">
+                    <Authorized>
+                        <MudDivider Class="my-3" />
+                        <div class="d-flex align-center mb-2" style="gap:6px">
+                            <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Warning" />
+                            <MudText Typo="Typo.subtitle2"><b>Hồ sơ & nguyện vọng (chỉ super admin)</b></MudText>
+                        </div>
+                        <MudGrid>
+                            @Field("Email", _candidate.Email)
+                            @Field("Nghề nghiệp", _candidate.Occupation)
+                            @Field("Trình độ học vấn", _candidate.EducationLevel)
+                            @Field("Kinh nghiệm làm việc", _candidate.WorkExperience)
+                            @Field("Ngoại ngữ", _candidate.Languages)
+                        </MudGrid>
+                    </Authorized>
+                </AuthorizeView>
             </MudPaper>
 
             @if (_cjo is not null && _cjo.CurrentStep < WorkflowStep.Completed && _canUpdateCandidate)

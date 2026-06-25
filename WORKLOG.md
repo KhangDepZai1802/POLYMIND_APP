@@ -31,6 +31,8 @@
 
 - **Bản demo MVP chạy được**, đã smoke-test toàn bộ trang HTTP 200. App: `http://localhost:5177`, login `admin@polymind.local / Admin@123`.
 - Build sạch (`dotnet build Polymind.slnx` = 0 error, 0 warning). Docker (Postgres/Redis/MinIO) cần `docker compose up -d`.
+- **ĐÃ CHỐT HƯỚNG DEPLOY DÙNG THẬT NỘI BỘ (Session 24, Codex planning):** deploy trên **máy Windows công ty**, nhân viên truy cập bằng **link public miễn phí DuckDNS** và login app; ưu tiên domain `https://polymindolms.duckdns.org` (fallback nếu bận: `polymindolmsvn`, `polymindolms2026`). Production dùng **DB sạch**, không seed demo data. Trước khi public Internet **bắt buộc hardening tài khoản**: không để user mẫu/mật khẩu `Admin@123` dùng được ở production; tạo user thật, mật khẩu mạnh, backup trước khi mở port. Mạng công ty **chưa rõ có public IPv4 hay bị CGNAT** → bước đầu tiên khi deploy là kiểm tra WAN IP/router + khả năng port-forward 80/443. Đề xuất dùng **Caddy + DuckDNS** cho HTTPS tự động thay vì Nginx cert thủ công; giữ Nginx hiện tại làm fallback.
+- **Session 23 (tiếp, Codex):** Đã hoàn tất phần Claude còn dang dở theo yêu cầu user: thêm 5 trường nhạy cảm `Email/Occupation/EducationLevel/WorkExperience/Languages` vào `Candidate` + migration, hiển thị/nhập ở Lead và Candidate nhưng chỉ `super_admin` thấy/sửa; convert Lead→Candidate giữ đủ 5 trường này. Build sạch; DB local đã có đủ 5 cột mới.
 - **ĐẠI TU GIAO DIỆN — XONG TOÀN BỘ Phase 1→5 (Session 23, Claude):** responsive/mobile-first theo plan `v-y-b-y-gi-t-m-ticklish-castle.md`. **Phase 1:** drawer overlay responsive + dark mode + `Theme/PolymindTheme.cs` + app.css. **Phase 2:** component dùng chung `StatCard`/`PageHeader` nối vào các trang; KPI 2 thẻ/hàng mobile (`xs=6`). **Phase 3:** bảng → thẻ trên mobile (`MudHidden` swap) cho Leads/Candidates/Visas/Finance/Admin; `MudSimpleTable` rộng cuộn ngang `.table-scroll-x` (Reports/Admin/Notifications/AgentDetail/MyCommissions/CandidateDetail). **Phase 4:** dialog mặc định full-width + nút đóng X (`MudDialogProvider`); CandidateDetail bọc 2 bảng công nợ/hồ sơ; MudTabs/timeline/form đã responsive sẵn (xs=12/TimelinePosition.Start). **Phase 5 QA:** build 0 warning/0 error; chạy `:5177` (Docker up), smoke-test HTTP admin 10 trang = 200 không error-boundary, 3 trang chi tiết (candidate/agent/lead) = 200, agent `/my-commissions`+`/candidates` = 200 & `/reports` = 302 (redirect đúng). **Còn lại = QA bằng mắt ở DevTools 390/820/1440px (cần người dùng) + commit.**
 - **Session 20:** Docker services đã bật; Codex chưa start được web app do lệnh chạy nền/DLL bị hệ thống approval chặn. Chạy thủ công bằng lệnh trong nhật ký Session 20 nếu cần mở demo ngay.
 - **Session 21 (Claude):** Theo yêu cầu user — **audit lại toàn bộ phần Codex làm** (Đợt 1-3 + Phase C/D/E/F/G) đối chiếu `POLYMIND APP.docx`. Kết luận: phần lớn ĐÚNG spec. **Phát hiện + đã FIX 1 lỗ hổng:** §13 "Nhắc thanh toán hoa hồng" có enum `CommissionPayment` + nhãn nhưng `NotificationService` không hề sinh → đã thêm khối sinh nhắc cho hoa hồng `Approved` chưa chi (recipient kế toán/giám đốc). **Cải thiện UX theo yêu cầu:** module Phân quyền (`/admin`) viết lại thành **ma trận tiếng Việt** (module × hành động) + hướng dẫn + chú thích + nút "Chọn/Bỏ cả dòng" + khóa chỉnh super_admin, cho super admin không rành kỹ thuật vẫn dùng được. Build xanh, `/admin` `/notifications` = 200.
@@ -55,8 +57,8 @@
 
 **ĐẠI TU GIAO DIỆN: Phase 1→5 đã XONG (Session 23). Việc tiếp theo:**
 1. **QA bằng mắt trên thiết bị thật/DevTools** (việc duy nhất còn lại của plan UI — cần con người, không tự động được): mở `:5177`, mô phỏng **390 / 820 / 1440px**, duyệt từng trang theo checklist Phase 5 (không tràn ngang, KPI 2 cột mobile, bảng→thẻ, drawer overlay tự đóng sau điều hướng, dark mode đổi + được lưu khi reload). Smoke-test HTTP đã PASS (xem nhật ký Session 23).
-2. **Commit toàn bộ** Phase 1→5 UI + Phase H (REST API) — tất cả đang uncommitted.
-3. Sau đại tu giao diện → **deploy production** (xem memory deploy-plan: seed an toàn prod, secrets thật, AllowedHosts, TLS).
+2. **Commit toàn bộ** Phase 1→5 UI + Phase H (REST API) + phần sửa hồ sơ Lead/Candidate nhạy cảm (Session 23 tiếp) — tất cả đang uncommitted.
+3. Sau đại tu giao diện → **deploy production theo hướng DuckDNS đã chốt**: commit toàn bộ thay đổi hiện tại → sửa production seeding để chỉ seed role/permission + super admin thật từ env, không tạo 8 user mẫu `Admin@123` → ẩn hint demo login ở production → thêm deploy profile Caddy + DuckDNS → tạo `.env.production` với secret mạnh → kiểm tra CGNAT/public IP và port-forward 80/443 → nếu mở port được thì chạy compose production, test `/health`, chạy `scripts/smoke-test.ps1` qua `https://polymindolms.duckdns.org`; nếu CGNAT/không mở port được thì không cố DuckDNS, chuyển fallback tunnel.
 - **Lưu ý kỹ thuật Phase 2+3+4 (cho người sau):**
   - Component dùng chung ở `Components/Shared/`: `StatCard.razor` (param `Title/Value/Icon/Color/Caption`, tự render `MudItem xs=6 sm=4 md=3 lg=2`), `PageHeader.razor` (param `Title/Subtitle` + slot `Actions`). Đã import sẵn trong `_Imports.razor` (`Polymind.Web.Components.Shared`).
   - Pattern bảng→thẻ: `<MudHidden Breakpoint="Breakpoint.SmAndDown">` bọc DataGrid (chỉ ≥md), `<MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">` bọc danh sách thẻ (chỉ ≤sm). Mỗi trang tự render thẻ riêng (cột mỗi entity khác nhau).
@@ -79,6 +81,16 @@
 3. Commit/push các thay đổi Phase F→G lên GitHub nếu muốn đồng bộ remote trước khi triển khai.
 4. Nếu chỉ cần chạy demo local: `docker compose up -d`, rồi trong terminal chạy DLL build sẵn từ `src/Polymind.Web`: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet bin\Debug\net10.0\Polymind.Web.dll --urls http://localhost:5177`.
 
+**Quyết định deploy nội bộ đã chốt với user (Session 24, chỉ ghi kế hoạch — chưa code):**
+- Hosting: **máy Windows công ty hiện có**, uptime kỳ vọng **giờ hành chính**.
+- Access model: **link public** để nhân viên chỉ cần mở URL và login, không bắt cài VPN/Tailscale giai đoạn đầu.
+- DNS free: **DuckDNS**, ưu tiên `polymindolms.duckdns.org`; fallback tên nếu bận: `polymindolmsvn.duckdns.org`, `polymindolms2026.duckdns.org`.
+- Dữ liệu production: **DB sạch**, không seed demo data.
+- Security gate bắt buộc trước khi public: không để tài khoản mẫu/mật khẩu `Admin@123` tồn tại/dùng được ở production; tạo user thật, mật khẩu mạnh, backup trước khi mở port.
+- Network gate bắt buộc: kiểm tra router WAN IP so với public IP ngoài Internet. Nếu khác nhau/CGNAT hoặc không port-forward được 80/443 thì DuckDNS public không đủ; chuyển fallback tunnel.
+- HTTPS/proxy đề xuất: thêm **Caddy** cho profile DuckDNS để tự xin/gia hạn Let's Encrypt cert; giữ Nginx hiện tại (`deploy/nginx/default.conf`) làm fallback/legacy.
+- Fallback: Cloudflare Quick Tunnel chỉ dùng test/dev; ngrok free chỉ dùng pilot ngắn vì có giới hạn data/request và interstitial; nếu muốn ổn định hơn mà không mở port được thì cân nhắc mua domain rẻ + Cloudflare Tunnel/Access.
+
 **Lưu ý Đợt 5 cho người sau:**
 - `AgentScope` (scoped, `Identity/AgentScope.cs`) là nguồn sự thật cho data-scope đại lý: `GetAsync()` trả `(IsAgentOnly, AgentId)`, cache trong 1 request. "Agent-only" = có role `agent` và KHÔNG kèm role nội bộ nào. Dùng nó ở mọi trang dùng chung cần bó hẹp.
 - Đại lý gắn user qua `Agent.UserId` (seed ở `SeedExtrasAsync`, idempotent — chỉ gắn nếu chưa có agent nào trỏ tới user đó). Demo: `agent@` ↔ AG-000001.
@@ -98,12 +110,41 @@
 ## 🚧 BLOCKERS / NỢ KỸ THUẬT
 
 - (chưa có blocker)
-- Nợ triển khai thật: cần `.env.production` với secret thật, chứng chỉ TLS thật (`fullchain.pem`/`privkey.pem`), SMTP/provider SMS/Zalo thật nếu bật gửi ngoài InApp.
+- Nợ triển khai thật: cần `.env.production` với secret thật, chứng chỉ TLS thật (ưu tiên Caddy tự cấp Let's Encrypt cho DuckDNS; Nginx manual cert vẫn là fallback), SMTP/provider SMS/Zalo thật nếu bật gửi ngoài InApp.
+- **CẢNH BÁO DEPLOY PUBLIC:** Không public production nếu còn user mẫu/mật khẩu `Admin@123`. DuckDNS/No-IP chỉ giải quyết DNS động; vẫn cần public IP hoặc port-forward 80/443 hoạt động. Nếu mạng công ty bị CGNAT/không mở port được thì không cố DuckDNS, chuyển fallback tunnel.
 - ~~Module placeholder chờ làm thật~~ — ĐÃ XONG HẾT (finance/agents/visa/reports đều có trang thật).
 
 ---
 
 ## 📜 NHẬT KÝ SESSION (mới nhất ở trên)
+
+### [2026-06-25] Session 24 — Codex — Chốt hướng deploy web dùng thật nội bộ
+- **Làm được:** Lục lại toàn bộ task deploy đã thảo luận/ghi trong WORKLOG/docs: repo đã có `Dockerfile`, `docker-compose.production.yml`, Nginx HTTPS reverse proxy, `.env.production.example`, `/health`, Serilog logs, backup/restore/smoke-test. Thảo luận và chốt hướng deploy dùng thật cho nội bộ công ty.
+- **Quyết định đã chốt:** chạy trên **máy Windows công ty**, uptime kỳ vọng **giờ hành chính**; nhân viên dùng **link public** rồi login app, không bắt cài VPN/Tailscale giai đoạn đầu; DNS free dùng **DuckDNS**, ưu tiên `https://polymindolms.duckdns.org` (fallback `polymindolmsvn`, `polymindolms2026`); production dùng **DB sạch**, không seed demo data; bắt buộc hardening tài khoản trước khi mở Internet.
+- **Baton deploy cho Claude:** commit toàn bộ thay đổi hiện tại trước deploy; sửa production seeding để chỉ seed role/permission + super admin thật từ env, không tạo 8 user mẫu `Admin@123`; ẩn hint demo login ở production; thêm deploy profile **Caddy + DuckDNS** để auto HTTPS; tạo `.env.production` secret mạnh; kiểm tra CGNAT/public IP và port-forward 80/443; nếu mở port được thì chạy compose production + test `/health` + `scripts/smoke-test.ps1` qua domain thật; thiết lập backup hằng ngày bằng `scripts/backup.ps1`.
+- **File thay đổi chính:** chỉ `WORKLOG.md` (ghi lại quyết định/tiến độ, chưa code deploy).
+- **Đã test:** không chạy app/test vì chỉ cập nhật kế hoạch vào WORKLOG; sau khi ghi log có chạy `dotnet build Polymind.slnx` để giữ quy ước dự án.
+- **Lưu ý/cảnh báo cho người sau:** Không public production nếu còn tài khoản mẫu/mật khẩu `Admin@123`. DuckDNS/No-IP chỉ giải quyết DNS động; vẫn cần public IPv4 hoặc port-forward 80/443 hoạt động. Nếu router WAN IP khác public IP ngoài Internet (CGNAT) hoặc không mở port được thì không cố DuckDNS/port-forward; dùng fallback tunnel. Cloudflare Quick Tunnel chỉ hợp test/dev; ngrok free chỉ hợp pilot ngắn vì giới hạn data/request và có interstitial.
+
+### [2026-06-25] Session 23 (tiếp) — Codex — Hoàn tất field hồ sơ nhạy cảm Lead/Candidate
+- **Làm được:** Làm nốt phần Claude đang dở theo yêu cầu user: thêm `Email`, `Occupation`, `EducationLevel`, `WorkExperience`, `Languages` vào entity `Candidate` để không mất dữ liệu khi convert Lead→Ứng viên. Thêm migration `AddCandidateProfileFields`, cập nhật snapshot EF. `LeadDetail.Convert()` chép đủ 5 trường mới sang Candidate.
+- **Quyền xem/sửa:** LeadDetail/CandidateDetail hiển thị 5 trường nhạy cảm trong `AuthorizeView Roles="super_admin"`; LeadDialog/CandidateDialog chỉ render input cho `super_admin`. Codex bổ sung guard phía `Save`: non-super_admin không thể ghi 5 trường này dù UI/circuit bị can thiệp.
+- **File thay đổi chính:** `src/Polymind.Domain/Entities/Candidate.cs`, migration `20260625080334_AddCandidateProfileFields*`, `CandidateDialog.razor`, `CandidateDetail.razor`, `LeadDialog.razor`, `LeadDetail.razor`, `VietnamProvinces.cs`, `WORKLOG.md`.
+- **Đã test:** `dotnet build Polymind.slnx` = 0 warning/0 error. Docker Postgres healthy; chạy app foreground từ `src/Polymind.Web` thấy startup OK, migration báo DB up-to-date; xác minh DB bằng `docker exec` có đủ 5 cột mới: `education_level,email,languages,occupation,work_experience`. HTTP smoke bằng background job bị sandbox/tool timeout nên chưa chốt lại bằng request tự động trong phiên Codex này.
+- **Lưu ý/cảnh báo:** Khi chạy DLL phải đặt working directory là `src/Polymind.Web`; chạy từ root sẽ thiếu `ConnectionStrings:Default`. Sandbox hiện chặn ghi/đọc một số DataProtection key trong `%LOCALAPPDATA%`, app vẫn listen được nhưng log có warning `DataProtection-Keys` khi chạy foreground trong sandbox.
+
+### [2026-06-25] Session 23 (tiếp) — Claude — Rà soát nghiệp vụ + sửa thiếu sót nhập/hiển thị
+- **Bối cảnh:** user yêu cầu rà soát logic/luồng nghiệp vụ; chỉ ra (1) tỉnh/thành nhập tay chưa có dropdown (muốn địa chỉ mới sau sáp nhập), (2) CCCD đã nhập nhưng không hiển thị ở chi tiết — yêu cầu mọi field đã nhập phải hiện ở trang chi tiết.
+- **Phát hiện (đối chiếu form ↔ entity ↔ trang chi tiết):**
+  - **LeadDetail thiếu hiển thị** hàng loạt field mà LeadDialog có thu thập: CCCD, ngày sinh, giới tính, địa chỉ, nghề nghiệp, học vấn, kinh nghiệm, ngoại ngữ, đơn hàng quan tâm, người phụ trách → đây là **thiếu sót**, không phải cố ý. CandidateDetail vốn đã hiện CCCD (tab Giấy tờ) nên phía ứng viên không lỗi hiển thị.
+  - **Convert Lead→Ứng viên** chỉ chép FullName/Phone/Province/Gender/AgentId → **mất CCCD/Dob/Address** khi chuyển (ứng viên tạo từ lead bị trống CCCD dù lead đã nhập).
+  - Lưu ý mô hình: `Candidate` **không có** field Email/Occupation/Education/Experience/Languages (chỉ Lead có) → các field này không thể chép sang ứng viên (giới hạn schema, chưa migration; đã ghi nhận).
+- **Đã sửa:**
+  - Thêm `Display/VietnamProvinces.cs` — **34 đơn vị cấp tỉnh sau sáp nhập 2025** (6 TP TƯ + 28 tỉnh) + hàm `Search` (bỏ dấu, không phân biệt hoa thường). LeadDialog + CandidateDialog đổi ô "Tỉnh/Thành phố" sang **`MudAutocomplete`** (CoerceValue=true → vẫn gõ tự do được để giữ dữ liệu cũ).
+  - `LeadDetail.razor`: bổ sung 3 nhóm hiển thị (Thông tin cá nhân / Hồ sơ & nguyện vọng / nguồn-phụ trách-lịch hẹn) hiện đủ field gồm CCCD; load thêm tên người phụ trách + mã đơn hàng quan tâm.
+  - `LeadDetail.Convert()`: chép thêm `Cccd→CccdNumber`, `Dob`, `Address` sang Candidate.
+- **Đã test:** `dotnet build` = 0 warning/0 error. Chạy `:5177`, set CCCD thử lên 1 lead qua psql → `/leads/{id}` = 200, HTML chứa giá trị CCCD `012345678901` (trước đây không có chỗ render); đã revert dữ liệu test. (Nhãn tiếng Việt bị HTML-encode nên grep theo số ASCII.)
+- **Lưu ý/cảnh báo:** (1) Nếu muốn ứng viên giữ luôn Email/nghề/học vấn/ngoại ngữ từ lead → cần thêm field vào `Candidate` + migration (chưa làm, ngoài phạm vi yêu cầu). (2) Danh sách tỉnh là hằng số trong code; nếu nhà nước đổi nữa thì sửa `VietnamProvinces.All`.
 
 ### [2026-06-25] Session 23 — Claude
 - **Bối cảnh:** user yêu cầu "tiếp tục phase 2+3, mỗi 2 phase báo vào worklog 1 lần" — đại tu giao diện responsive theo plan `v-y-b-y-gi-t-m-ticklish-castle.md`. Phase 1 (layout/theme/dark mode) đã làm xong từ phiên trước (uncommitted: `MainLayout.razor`, `Theme/PolymindTheme.cs`, `app.css`); 2 component Phase 2 (`StatCard`/`PageHeader`) đã được tạo file nhưng **chưa nối vào trang nào**.
