@@ -49,6 +49,10 @@ services:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__Default: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
       Jwt__Key: ${JWT_KEY}
+      # Super admin thật cho production (KHÔNG có tài khoản mẫu Admin@123 ở Production).
+      SuperAdmin__Email: ${SUPERADMIN_EMAIL}
+      SuperAdmin__Password: ${SUPERADMIN_PASSWORD}
+      SuperAdmin__FullName: ${SUPERADMIN_FULLNAME:-Super Admin}
       Minio__Endpoint: minio:9000
       Minio__AccessKey: ${MINIO_ROOT_USER}
       Minio__SecretKey: ${MINIO_ROOT_PASSWORD}
@@ -70,10 +74,14 @@ services:
     volumes:
       - prod_weblogs:/app/logs
 
+  # Reverse proxy — chọn 1 trong 2 bằng --profile:
+  #   --profile caddy : Caddy tự cấp Let's Encrypt qua DuckDNS (khuyến nghị, cần port-forward 80/443).
+  #   --profile nginx : Nginx với cert thủ công trong deploy/nginx/certs (fallback/legacy).
   nginx:
     image: nginx:1.27-alpine
     container_name: polymind-prod-nginx
     restart: unless-stopped
+    profiles: ["nginx"]
     ports:
       - "80:80"
       - "443:443"
@@ -83,8 +91,40 @@ services:
       - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - ./deploy/nginx/certs:/etc/nginx/certs:ro
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: polymind-prod-caddy
+    restart: unless-stopped
+    profiles: ["caddy"]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    depends_on:
+      - web
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - prod_caddydata:/data
+      - prod_caddyconfig:/config
+
+  # Cập nhật bản ghi DuckDNS về public IP hiện tại (chỉ cần khi IP động/CGNAT-free).
+  # Bật bằng: --profile caddy --profile duckdns
+  duckdns:
+    image: lscr.io/linuxserver/duckdns:latest
+    container_name: polymind-prod-duckdns
+    restart: unless-stopped
+    profiles: ["duckdns"]
+    environment:
+      SUBDOMAINS: ${DUCKDNS_SUBDOMAIN}
+      TOKEN: ${DUCKDNS_TOKEN}
+      TZ: Asia/Ho_Chi_Minh
+
 volumes:
   prod_pgdata:
   prod_miniodata:
   prod_redisdata:
   prod_weblogs:
+  prod_caddydata:
+  prod_caddyconfig:

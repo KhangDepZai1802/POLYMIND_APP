@@ -68,34 +68,42 @@ Development local dùng `src/Polymind.Web/appsettings.Development.json` với c�
 
 ## Production Deploy
 
-1. Tạo file env:
+1. Tạo file env và đổi MỌI secret (đặc biệt `SUPERADMIN_EMAIL`/`SUPERADMIN_PASSWORD` — production KHÔNG tạo tài khoản mẫu `Admin@123`, nếu để trống sẽ không có tài khoản nào để đăng nhập):
 
 ```powershell
 Copy-Item .env.production.example .env.production
 notepad .env.production
 ```
 
-2. Cấp TLS certificate cho Nginx:
+2. Chọn 1 trong 2 reverse proxy:
 
-Đặt 2 file vào `deploy/nginx/certs/`:
+**Phương án A — Caddy + DuckDNS (khuyến nghị, tự cấp/gia hạn Let's Encrypt):**
 
-- `fullchain.pem`
-- `privkey.pem`
-
-3. Build và chạy:
+- Đặt `DOMAIN`, `ACME_EMAIL` trong `.env.production`.
+- Bản ghi A của `DOMAIN` phải trỏ về public IP công ty và đã port-forward 80/443. IP động thì thêm `--profile duckdns` (cần `DUCKDNS_SUBDOMAIN`/`DUCKDNS_TOKEN`).
 
 ```powershell
-docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
+docker compose --env-file .env.production -f docker-compose.production.yml --profile caddy up -d --build
+# IP động:
+# docker compose --env-file .env.production -f docker-compose.production.yml --profile caddy --profile duckdns up -d --build
 ```
 
-4. Kiểm tra:
+**Phương án B — Nginx cert thủ công (fallback/legacy):**
+
+Đặt `fullchain.pem` + `privkey.pem` vào `deploy/nginx/certs/`, rồi:
+
+```powershell
+docker compose --env-file .env.production -f docker-compose.production.yml --profile nginx up -d --build
+```
+
+3. Kiểm tra:
 
 ```powershell
 docker compose --env-file .env.production -f docker-compose.production.yml ps
-curl -k https://localhost/health
+curl https://<DOMAIN>/health   # Caddy: cert thật; Nginx self-signed: thêm -k
 ```
 
-Ứng dụng tự chạy migration khi startup. Demo data chỉ seed ở môi trường `Development`, không seed trong `Production`.
+Ứng dụng tự chạy migration khi startup. Demo data + 8 tài khoản mẫu chỉ seed ở môi trường `Development`; `Production` chỉ tạo duy nhất super admin từ `SUPERADMIN_EMAIL`/`SUPERADMIN_PASSWORD`.
 
 ## Backup Và Restore
 

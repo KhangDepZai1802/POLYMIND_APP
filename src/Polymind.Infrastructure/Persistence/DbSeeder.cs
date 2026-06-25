@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Polymind.Domain.Entities;
 using Polymind.Infrastructure.Identity;
@@ -103,9 +105,39 @@ public static class DbSeeder
         foreach (var (roleName, permissionNames) in RolePermissionMap)
             await AssignRolePermissionsAsync(db, roleManager, logger, roleName, permissionNames);
 
-        // 4) Tài khoản mẫu cho từng vai trò.
-        foreach (var seedUser in SeedUsers)
-            await EnsureSeedUserAsync(userManager, logger, seedUser);
+        // 4) Tài khoản.
+        var env = s.GetRequiredService<IHostEnvironment>();
+        if (env.IsDevelopment())
+        {
+            // Dev: seed đủ 8 tài khoản mẫu (mật khẩu chung Admin@123) cho demo/test RBAC.
+            foreach (var seedUser in SeedUsers)
+                await EnsureSeedUserAsync(userManager, logger, seedUser, DefaultAdminPassword);
+        }
+        else
+        {
+            // Production: TUYỆT ĐỐI không tạo tài khoản mẫu/mật khẩu Admin@123.
+            // Chỉ tạo duy nhất 1 super admin thật từ biến môi trường (SuperAdmin__Email / SuperAdmin__Password).
+            var config = s.GetRequiredService<IConfiguration>();
+            var adminEmail = config["SuperAdmin:Email"];
+            var adminPassword = config["SuperAdmin:Password"];
+            var adminName = config["SuperAdmin:FullName"];
+
+            if (string.IsNullOrWhiteSpace(adminEmail) || string.IsNullOrWhiteSpace(adminPassword))
+            {
+                logger.LogError(
+                    "Production thiếu SuperAdmin:Email / SuperAdmin:Password (env SuperAdmin__Email, SuperAdmin__Password). " +
+                    "KHÔNG tạo bất kỳ tài khoản nào (tránh lộ mật khẩu mặc định). " +
+                    "Hãy đặt 2 biến này với mật khẩu mạnh rồi khởi động lại để tạo super admin thật.");
+            }
+            else
+            {
+                var superAdmin = new SeedUser(
+                    adminEmail.Trim(),
+                    string.IsNullOrWhiteSpace(adminName) ? "Super Admin" : adminName.Trim(),
+                    RoleNames.SuperAdmin);
+                await EnsureSeedUserAsync(userManager, logger, superAdmin, adminPassword);
+            }
+        }
     }
 
     private static async Task AssignRolePermissionsAsync(
@@ -154,7 +186,7 @@ public static class DbSeeder
         await db.SaveChangesAsync();
     }
 
-    private static async Task EnsureSeedUserAsync(UserManager<ApplicationUser> userManager, ILogger logger, SeedUser seed)
+    private static async Task EnsureSeedUserAsync(UserManager<ApplicationUser> userManager, ILogger logger, SeedUser seed, string password)
     {
         var user = await userManager.FindByEmailAsync(seed.Email);
         if (user is null)
@@ -168,16 +200,16 @@ public static class DbSeeder
                 IsActive = true,
             };
 
-            var createResult = await userManager.CreateAsync(user, DefaultAdminPassword);
+            var createResult = await userManager.CreateAsync(user, password);
             if (!createResult.Succeeded)
             {
-                logger.LogError("Tạo user mẫu {Email} thất bại: {Errors}",
+                logger.LogError("Tạo user {Email} thất bại: {Errors}",
                     seed.Email,
                     string.Join("; ", createResult.Errors.Select(e => e.Description)));
                 return;
             }
 
-            logger.LogInformation("Đã tạo user mẫu {Email} / {Role}", seed.Email, seed.Role);
+            logger.LogInformation("Đã tạo user {Email} / {Role}", seed.Email, seed.Role);
         }
         else
         {

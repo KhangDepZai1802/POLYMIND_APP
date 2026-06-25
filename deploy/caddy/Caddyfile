@@ -1,0 +1,15 @@
+# Caddy reverse proxy cho profile DuckDNS — tự xin/gia hạn Let's Encrypt.
+# Biến lấy từ service caddy trong docker-compose.production.yml ({$DOMAIN}, {$ACME_EMAIL}).
+# Yêu cầu: bản ghi A của DOMAIN trỏ về public IP của công ty và đã port-forward 80/443.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+	# Blazor Server dùng WebSocket — reverse_proxy của Caddy hỗ trợ sẵn, không cần cấu hình thêm.
+	reverse_proxy web:8080 {
+		header_up X-Forwarded-Proto {scheme}
+	}
+}

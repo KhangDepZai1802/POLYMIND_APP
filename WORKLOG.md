@@ -29,6 +29,7 @@
 
 ## 🎯 TRẠNG THÁI HIỆN TẠI
 
+- **HARDENING DEPLOY phần code đã XONG (Session 25, Claude):** (1) Đã **commit** toàn bộ phần field hồ sơ nhạy cảm Session 23 (commit `43e5c59`). (2) **Production seeding an toàn:** `DbSeeder` giờ chỉ tạo 8 user mẫu `Admin@123` ở **Development**; ở **Production** chỉ tạo DUY NHẤT 1 super admin thật từ env `SuperAdmin__Email`/`SuperAdmin__Password` — thiếu env thì KHÔNG tạo tài khoản nào (không còn cửa hậu Admin@123). (3) **Ẩn hint demo login** ở Login.razor khi không phải Development. (4) **Profile Caddy + DuckDNS** trong `docker-compose.production.yml` (`--profile caddy`, Caddyfile auto Let's Encrypt) + DuckDNS updater (`--profile duckdns`); Nginx chuyển sang `--profile nginx` làm fallback. `.env.production.example` + README cập nhật. Build 0 warning/0 error; `docker compose config` validate cả 2 profile. **Còn lại = việc cần máy/mạng công ty (xem VIỆC TIẾP THEO).**
 - **Bản demo MVP chạy được**, đã smoke-test toàn bộ trang HTTP 200. App: `http://localhost:5177`, login `admin@polymind.local / Admin@123`.
 - Build sạch (`dotnet build Polymind.slnx` = 0 error, 0 warning). Docker (Postgres/Redis/MinIO) cần `docker compose up -d`.
 - **ĐÃ CHỐT HƯỚNG DEPLOY DÙNG THẬT NỘI BỘ (Session 24, Codex planning):** deploy trên **máy Windows công ty**, nhân viên truy cập bằng **link public miễn phí DuckDNS** và login app; ưu tiên domain `https://polymindolms.duckdns.org` (fallback nếu bận: `polymindolmsvn`, `polymindolms2026`). Production dùng **DB sạch**, không seed demo data. Trước khi public Internet **bắt buộc hardening tài khoản**: không để user mẫu/mật khẩu `Admin@123` dùng được ở production; tạo user thật, mật khẩu mạnh, backup trước khi mở port. Mạng công ty **chưa rõ có public IPv4 hay bị CGNAT** → bước đầu tiên khi deploy là kiểm tra WAN IP/router + khả năng port-forward 80/443. Đề xuất dùng **Caddy + DuckDNS** cho HTTPS tự động thay vì Nginx cert thủ công; giữ Nginx hiện tại làm fallback.
@@ -55,10 +56,12 @@
 
 ## ⏭️ VIỆC TIẾP THEO (baton — làm cái này trước)
 
-**ĐẠI TU GIAO DIỆN: Phase 1→5 đã XONG (Session 23). Việc tiếp theo:**
-1. **QA bằng mắt trên thiết bị thật/DevTools** (việc duy nhất còn lại của plan UI — cần con người, không tự động được): mở `:5177`, mô phỏng **390 / 820 / 1440px**, duyệt từng trang theo checklist Phase 5 (không tràn ngang, KPI 2 cột mobile, bảng→thẻ, drawer overlay tự đóng sau điều hướng, dark mode đổi + được lưu khi reload). Smoke-test HTTP đã PASS (xem nhật ký Session 23).
-2. **Commit toàn bộ** Phase 1→5 UI + Phase H (REST API) + phần sửa hồ sơ Lead/Candidate nhạy cảm (Session 23 tiếp) — tất cả đang uncommitted.
-3. Sau đại tu giao diện → **deploy production theo hướng DuckDNS đã chốt**: commit toàn bộ thay đổi hiện tại → sửa production seeding để chỉ seed role/permission + super admin thật từ env, không tạo 8 user mẫu `Admin@123` → ẩn hint demo login ở production → thêm deploy profile Caddy + DuckDNS → tạo `.env.production` với secret mạnh → kiểm tra CGNAT/public IP và port-forward 80/443 → nếu mở port được thì chạy compose production, test `/health`, chạy `scripts/smoke-test.ps1` qua `https://polymindolms.duckdns.org`; nếu CGNAT/không mở port được thì không cố DuckDNS, chuyển fallback tunnel.
+**HARDENING DEPLOY phần code đã XONG (Session 25). Việc tiếp theo = cần MÁY/MẠNG CÔNG TY (không tự động được trên máy dev):**
+1. **Tạo `.env.production` thật** từ `.env.production.example`: đổi MỌI secret (`POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`, `JWT_KEY` >= 32 ký tự), đặt `SUPERADMIN_EMAIL` + `SUPERADMIN_PASSWORD` mạnh (đây là tài khoản đăng nhập duy nhất ở production — KHÔNG còn `Admin@123`), đặt `DOMAIN`=`polymindolms.duckdns.org` (fallback `polymindolmsvn`/`polymindolms2026`) + `ACME_EMAIL`.
+2. **Kiểm tra mạng (gate bắt buộc):** so WAN IP của router với public IP ngoài Internet (vd whatismyip). Nếu KHÁC nhau → CGNAT → DuckDNS public KHÔNG đủ, chuyển fallback tunnel (Cloudflare Tunnel). Nếu GIỐNG → port-forward 80/443 về máy chạy Docker, trỏ bản ghi A DuckDNS về public IP (IP động thì bật `--profile duckdns`).
+3. **Chạy production:** `docker compose --env-file .env.production -f docker-compose.production.yml --profile caddy up -d --build`. Đợi Caddy xin cert Let's Encrypt (log `docker logs polymind-prod-caddy`), test `https://<DOMAIN>/health`, chạy `scripts/smoke-test.ps1` qua domain thật, đăng nhập bằng super admin vừa tạo.
+4. **Backup hằng ngày:** lên lịch `scripts/backup.ps1 -EnvFile .env.production`.
+5. **QA giao diện bằng mắt** (nợ từ Session 23, cần con người): 390/820/1440px theo checklist Phase 5.
 - **Lưu ý kỹ thuật Phase 2+3+4 (cho người sau):**
   - Component dùng chung ở `Components/Shared/`: `StatCard.razor` (param `Title/Value/Icon/Color/Caption`, tự render `MudItem xs=6 sm=4 md=3 lg=2`), `PageHeader.razor` (param `Title/Subtitle` + slot `Actions`). Đã import sẵn trong `_Imports.razor` (`Polymind.Web.Components.Shared`).
   - Pattern bảng→thẻ: `<MudHidden Breakpoint="Breakpoint.SmAndDown">` bọc DataGrid (chỉ ≥md), `<MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">` bọc danh sách thẻ (chỉ ≤sm). Mỗi trang tự render thẻ riêng (cột mỗi entity khác nhau).
@@ -117,6 +120,18 @@
 ---
 
 ## 📜 NHẬT KÝ SESSION (mới nhất ở trên)
+
+### [2026-06-25] Session 25 — Claude — Commit Session 23 + hardening deploy (phần code)
+- **Bối cảnh:** user yêu cầu "tiến hành bước tiếp theo trong WORKLOG.md". Baton: (1) QA bằng mắt — cần người, (2) commit, (3) deploy hardening. Phát hiện Phase 1→5 UI + Phase H **đã commit từ trước** (commit `uxui`, `phase 4+5`) — ghi chú "chưa commit" trong WORKLOG đã cũ; chỉ còn phần field nhạy cảm Session 23 là uncommitted.
+- **Làm được:**
+  - **Commit `43e5c59`** toàn bộ phần field hồ sơ nhạy cảm Lead/Candidate + `VietnamProvinces.cs` + migration `AddCandidateProfileFields` (Session 23). Build verify 0 warning/0 error trước khi commit. Commit thẳng `main` theo quy ước dự án (mọi session trước đều commit `main`), KHÔNG push.
+  - **Production seeding an toàn (`DbSeeder.cs`):** resolve `IHostEnvironment`/`IConfiguration`; Development giữ 8 user mẫu `Admin@123`; Production chỉ tạo 1 super admin thật từ `SuperAdmin:Email`/`SuperAdmin:Password` (env `SuperAdmin__*`). Thiếu env → log error + KHÔNG tạo tài khoản nào (đóng cửa hậu Admin@123). `EnsureSeedUserAsync` thêm tham số `password`. Không reset mật khẩu user đã tồn tại.
+  - **Ẩn hint demo login** (`Login.razor`): inject `IHostEnvironment`, chỉ render dòng "Demo: admin@.../Admin@123" khi `IsDevelopment()`.
+  - **Profile Caddy + DuckDNS:** `deploy/caddy/Caddyfile` (auto Let's Encrypt qua `{$DOMAIN}`/`{$ACME_EMAIL}`, reverse_proxy `web:8080`, hỗ trợ WS Blazor). `docker-compose.production.yml`: nginx → `profiles:["nginx"]` (fallback), thêm `caddy` (`profiles:["caddy"]`, port 80/443, volume `prod_caddydata`/`prod_caddyconfig`) + `duckdns` updater (`profiles:["duckdns"]`); web thêm env `SuperAdmin__Email/Password/FullName`.
+  - **Cập nhật `.env.production.example`** (thêm SUPERADMIN_*, DOMAIN, ACME_EMAIL, DUCKDNS_*) + **README** (2 phương án proxy + nhấn mạnh production không có Admin@123).
+- **File chính:** `DbSeeder.cs`, `Login.razor`, `docker-compose.production.yml`, `deploy/caddy/Caddyfile` (mới), `.env.production.example`, `docs/00-README.md`, `WORKLOG.md`.
+- **Đã test:** `dotnet build Polymind.slnx` = **0 warning, 0 error** (2 lần: trước commit + sau khi sửa). `docker compose --env-file .env.production.example -f docker-compose.production.yml config` validate OK cho cả `--profile caddy` và `--profile nginx`; xác nhận web service nhận `SuperAdmin__*`. **CHƯA** chạy stack production thật (cần `.env.production` secret thật + máy/mạng công ty — xem VIỆC TIẾP THEO).
+- **Lưu ý/cảnh báo cho người sau:** (1) Production phải đặt `SUPERADMIN_EMAIL`/`SUPERADMIN_PASSWORD`, nếu không sẽ **không có tài khoản nào để đăng nhập** (đúng thiết kế, tránh lộ mật khẩu mặc định). (2) Chọn đúng **1** profile proxy (caddy HOẶC nginx) — cả hai cùng bind 80/443 nên không chạy đồng thời. (3) Caddy auto-HTTPS chỉ thành công khi bản ghi A DuckDNS trỏ đúng public IP và đã port-forward 80/443; chưa kiểm tra CGNAT là gate bắt buộc tiếp theo. (4) Phần code hardening chưa commit (đang chờ entry này) — commit ngay sau khi cập nhật WORKLOG.
 
 ### [2026-06-25] Session 24 — Codex — Chốt hướng deploy web dùng thật nội bộ
 - **Làm được:** Lục lại toàn bộ task deploy đã thảo luận/ghi trong WORKLOG/docs: repo đã có `Dockerfile`, `docker-compose.production.yml`, Nginx HTTPS reverse proxy, `.env.production.example`, `/health`, Serilog logs, backup/restore/smoke-test. Thảo luận và chốt hướng deploy dùng thật cho nội bộ công ty.
