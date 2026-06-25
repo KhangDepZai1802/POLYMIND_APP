@@ -29,6 +29,7 @@
 
 ## 🎯 TRẠNG THÁI HIỆN TẠI
 
+- **CHỐT HOSTING: Oracle Cloud Always Free VM (Session 26, Claude + user).** User cần web **24/7** (truy cập cả ngoài giờ, ở nhà) → không tự host máy công ty (tắt máy là sập) cũng không Vercel (sai loại nền tảng cho Blazor Server + DB + job nền). Chọn **VM Always Free (ARM Ampere)** chạy nguyên bộ `docker-compose.production.yml`, DuckDNS trỏ domain → public IP VM, Caddy auto HTTPS. Runbook chi tiết 4 giai đoạn: **[docs/06-deploy-oracle.md](docs/06-deploy-oracle.md)**. Đang ở **GĐ1** (user tạo tài khoản Oracle + VM). Demo nhanh tạm thời đã chạy được qua Cloudflare Quick Tunnel (link đổi mỗi lần, chỉ để xem thử).
 - **HARDENING DEPLOY phần code đã XONG (Session 25, Claude):** (1) Đã **commit** toàn bộ phần field hồ sơ nhạy cảm Session 23 (commit `43e5c59`). (2) **Production seeding an toàn:** `DbSeeder` giờ chỉ tạo 8 user mẫu `Admin@123` ở **Development**; ở **Production** chỉ tạo DUY NHẤT 1 super admin thật từ env `SuperAdmin__Email`/`SuperAdmin__Password` — thiếu env thì KHÔNG tạo tài khoản nào (không còn cửa hậu Admin@123). (3) **Ẩn hint demo login** ở Login.razor khi không phải Development. (4) **Profile Caddy + DuckDNS** trong `docker-compose.production.yml` (`--profile caddy`, Caddyfile auto Let's Encrypt) + DuckDNS updater (`--profile duckdns`); Nginx chuyển sang `--profile nginx` làm fallback. `.env.production.example` + README cập nhật. Build 0 warning/0 error; `docker compose config` validate cả 2 profile. **Còn lại = việc cần máy/mạng công ty (xem VIỆC TIẾP THEO).**
 - **Bản demo MVP chạy được**, đã smoke-test toàn bộ trang HTTP 200. App: `http://localhost:5177`, login `admin@polymind.local / Admin@123`.
 - Build sạch (`dotnet build Polymind.slnx` = 0 error, 0 warning). Docker (Postgres/Redis/MinIO) cần `docker compose up -d`.
@@ -120,6 +121,13 @@
 ---
 
 ## 📜 NHẬT KÝ SESSION (mới nhất ở trên)
+
+### [2026-06-25] Session 26 — Claude — Chốt hosting Oracle Always Free + bắt đầu triển khai
+- **Bối cảnh:** sau khi hardening code (S25), user hỏi deploy thật. Làm rõ với user: (1) tự host máy công ty = chỉ sống giờ hành chính, tắt máy/điện/mạng là sập; (2) Vercel KHÔNG chạy được app này (Blazor Server có trạng thái + WebSocket + Postgres/MinIO/Redis/Hangfire — Vercel là serverless/frontend tĩnh, sai loại); (3) muốn 24/7 free → **Oracle Cloud Always Free VM** là lựa chọn số 1 (VM luôn bật thật, không phải serverless ngủ).
+- **Làm được:** Demo tạm bằng **Cloudflare Quick Tunnel** (`cloudflared` cài qua winget) trỏ tới app dev `:5177` → link public `*.trycloudflare.com` test OK (`/health` Healthy, `/login` 200) — dùng để user xem thử khác mạng, không cần port-forward. Viết **runbook deploy Oracle** `docs/06-deploy-oracle.md` (4 GĐ: tài khoản+VM ARM → DuckDNS → SSH cài Docker+deploy compose caddy → verify+auto-start+backup), kèm gotchas Oracle (region không đổi, out-of-capacity ARM, 2 lớp firewall Security List + iptables OS, Let's Encrypt cần domain).
+- **File chính:** `docs/06-deploy-oracle.md` (mới), `WORKLOG.md`.
+- **Đã test:** không build (chỉ thêm docs); app dev vẫn đang chạy `:5177` + tunnel sống trong session này.
+- **Lưu ý/cảnh báo cho người sau:** (1) Đang chờ user hoàn tất **GĐ1** (tạo VM Oracle) rồi báo lại Public IP + đường dẫn private key + Ubuntu version để tiếp GĐ3. (2) Có thể điều khiển deploy GĐ3 qua SSH **từ máy local user** (Bash/PowerShell tool chạy trên máy user, có ssh + Internet). (3) VM là **ARM64** — mọi image trong compose đều multi-arch OK; image `web` build .NET 10 trên ARM cần ≥6 GB RAM. (4) Trên VM có public IP nên KHÔNG cần `--profile duckdns` nếu reserve IP tĩnh; DuckDNS chỉ để có domain cho Caddy xin cert. (5) App dev + Cloudflare tunnel đang chạy nền — nhớ dừng khi xong.
 
 ### [2026-06-25] Session 25 — Claude — Commit Session 23 + hardening deploy (phần code)
 - **Bối cảnh:** user yêu cầu "tiến hành bước tiếp theo trong WORKLOG.md". Baton: (1) QA bằng mắt — cần người, (2) commit, (3) deploy hardening. Phát hiện Phase 1→5 UI + Phase H **đã commit từ trước** (commit `uxui`, `phase 4+5`) — ghi chú "chưa commit" trong WORKLOG đã cũ; chỉ còn phần field nhạy cảm Session 23 là uncommitted.
