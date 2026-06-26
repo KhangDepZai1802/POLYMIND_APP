@@ -3,6 +3,7 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 @inject IAuthorizationService AuthorizationService
 @inject AuthenticationStateProvider AuthStateProvider
 
@@ -81,16 +82,27 @@ else
 
             <MudPaper Class="pa-4" Elevation="1">
                 <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Lịch sử chăm sóc</b></MudText>
-                <MudTimeline TimelinePosition="TimelinePosition.Start">
-                    @foreach (var a in _activities)
-                    {
-                        <MudTimelineItem Color="Color.Primary" Size="Size.Small">
-                            <MudText Typo="Typo.body2"><b>@ActivityLabel(a.ActivityType)</b></MudText>
-                            <MudText Typo="Typo.caption">@a.Content</MudText>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.CreatedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm")</MudText>
-                        </MudTimelineItem>
-                    }
-                </MudTimeline>
+                @* Hơn 4 hoạt động → giới hạn chiều cao + cuộn riêng, để thông tin khác không bị đẩy sâu xuống. *@
+                <div class="@(_activities.Count > 4 ? "lead-history-scroll" : "")">
+                    <MudTimeline TimelinePosition="TimelinePosition.Start">
+                        @for (var i = 0; i < _activities.Count; i++)
+                        {
+                            var a = _activities[i];
+                            var isLatest = i == 0; // _activities sắp xếp mới nhất ở đầu
+                            <MudTimelineItem Color="@(isLatest ? Color.Success : Color.Primary)" Size="Size.Small">
+                                <div class="d-flex align-center" style="gap:6px">
+                                    <MudText Typo="Typo.body2"><b>@ActivityLabel(a.ActivityType)</b></MudText>
+                                    @if (isLatest)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled" Class="my-0">Mới nhất</MudChip>
+                                    }
+                                </div>
+                                <MudText Typo="Typo.caption">@a.Content</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.CreatedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm")</MudText>
+                            </MudTimelineItem>
+                        }
+                    </MudTimeline>
+                </div>
             </MudPaper>
         </MudItem>
 
@@ -99,35 +111,45 @@ else
             {
                 <MudPaper Class="pa-4 mb-4" Elevation="1">
                     <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Cập nhật trạng thái</b></MudText>
+                    @if (IsConverted)
+                    {
+                        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                            Lead này đã chuyển thành ứng viên. Đổi trạng thái sẽ <b>chuyển ngược về Lead</b> (chỉ được khi ứng viên chưa phát sinh dữ liệu).
+                        </MudAlert>
+                    }
                     <MudSelect T="LeadStatus" @bind-Value="_newStatus" Label="Trạng thái mới" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2">
-                        @foreach (var s in Enum.GetValues<LeadStatus>())
+                        @* "Đã chuyển" (Converted) KHÔNG cho chọn thủ công — chỉ đặt qua nút "Chuyển thành ứng viên" để chắc chắn tạo hồ sơ ứng viên. *@
+                        @foreach (var s in Enum.GetValues<LeadStatus>().Where(s => s != LeadStatus.Converted))
                         {
                             <MudSelectItem Value="@s">@Labels.Vi(s)</MudSelectItem>
                         }
                     </MudSelect>
                     <MudTextField @bind-Value="_statusNote" Label="Ghi chú" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" Class="mb-2" />
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="UpdateStatus" Disabled="_busy">Lưu trạng thái</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="@(IsConverted ? Color.Warning : Color.Primary)" FullWidth="true" OnClick="UpdateStatus" Disabled="_busy">
+                        @(IsConverted ? "Đổi trạng thái → chuyển ngược về Lead" : "Lưu trạng thái")
+                    </MudButton>
                 </MudPaper>
             }
 
             @if (_canUpdateLead)
             {
+                @* Lead đã chuyển → khóa Phân công + Lịch hẹn (xám, bấm vào báo không thể đổi). *@
                 <MudPaper Class="pa-4 mb-4" Elevation="1">
                     <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Phân công phụ trách</b></MudText>
-                    <MudSelect T="Guid?" @bind-Value="_assignTo" Label="Người phụ trách" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" Class="mb-2">
+                    <MudSelect T="Guid?" @bind-Value="_assignTo" Label="Người phụ trách" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" Class="mb-2" Disabled="IsConverted">
                         @foreach (var u in _users)
                         {
                             <MudSelectItem T="Guid?" Value="@u.Id">@u.FullName</MudSelectItem>
                         }
                     </MudSelect>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true" OnClick="AssignLead" Disabled="_busy">Lưu phân công</MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="@(IsConverted ? Color.Default : Color.Primary)" FullWidth="true" OnClick="AssignLead" Disabled="_busy" Style="@(IsConverted ? "opacity:.55" : "")">Lưu phân công</MudButton>
                 </MudPaper>
 
                 <MudPaper Class="pa-4 mb-4" Elevation="1">
                     <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Lịch hẹn tư vấn</b></MudText>
-                    <MudDatePicker @bind-Date="_appointmentDate" Label="Ngày hẹn" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" Class="mb-2" />
-                    <MudTimePicker @bind-Time="_appointmentTime" Label="Giờ hẹn" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" />
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true" OnClick="SaveAppointment" Disabled="_busy">Lưu lịch hẹn</MudButton>
+                    <MudDatePicker @bind-Date="_appointmentDate" Label="Ngày hẹn" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" Class="mb-2" Disabled="IsConverted" />
+                    <MudTimePicker @bind-Time="_appointmentTime" Label="Giờ hẹn" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" Disabled="IsConverted" />
+                    <MudButton Variant="Variant.Outlined" Color="@(IsConverted ? Color.Default : Color.Primary)" FullWidth="true" OnClick="SaveAppointment" Disabled="_busy" Style="@(IsConverted ? "opacity:.55" : "")">Lưu lịch hẹn</MudButton>
                     @if (_lead.AppointmentAt is not null)
                     {
                         <MudText Typo="Typo.caption" Class="mt-2 mud-text-secondary">Hẹn hiện tại: <b>@_lead.AppointmentAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</b></MudText>
@@ -135,22 +157,37 @@ else
                 </MudPaper>
             }
 
-            @if (_lead.Status != LeadStatus.Converted)
+            @if (IsConverted)
             {
-                @if (_canUpdateLead && _canCreateCandidate)
-                {
-                    <MudPaper Class="pa-4" Elevation="1">
-                        <MudText Typo="Typo.subtitle1" Class="mb-2"><b>Chuyển thành ứng viên</b></MudText>
-                        <MudText Typo="Typo.body2" Class="mb-3 mud-text-secondary">Tạo hồ sơ ứng viên từ lead này và bắt đầu quy trình 17 bước.</MudText>
-                        <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.PersonAdd" FullWidth="true" OnClick="Convert" Disabled="_busy">
-                            Chuyển thành ứng viên
-                        </MudButton>
-                    </MudPaper>
-                }
+                @* Đã có hồ sơ ứng viên thật → cho xem nhanh + danh sách lead đã chuyển. *@
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudAlert Severity="Severity.Success" Dense="true" Class="mb-3">Lead này đã được chuyển thành ứng viên.</MudAlert>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Person" FullWidth="true" Class="mb-2"
+                               OnClick="@(() => Nav.NavigateTo($"/candidates/{_convertedCandidateId}"))">
+                        Xem hồ sơ ứng viên
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.HowToReg" FullWidth="true"
+                               OnClick="@(() => Nav.NavigateTo("/leads/converted"))">
+                        Danh sách Lead đã chuyển thành ứng viên
+                    </MudButton>
+                </MudPaper>
             }
-            else
+            else if (_canUpdateLead && _canCreateCandidate)
             {
-                <MudAlert Severity="Severity.Success">Lead này đã được chuyển thành ứng viên.</MudAlert>
+                @* Chưa có hồ sơ ứng viên — kể cả khi status đã là "Đã chuyển" (lead bị kẹt do đổi trạng thái thủ công) vẫn cho tạo. *@
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.subtitle1" Class="mb-2"><b>Chuyển thành ứng viên</b></MudText>
+                    <MudText Typo="Typo.body2" Class="mb-3 mud-text-secondary">Tạo hồ sơ ứng viên từ lead này và bắt đầu quy trình 17 bước.</MudText>
+                    @if (_lead.Status == LeadStatus.Converted)
+                    {
+                        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+                            Lead đang ở trạng thái "Đã chuyển" nhưng <b>chưa có hồ sơ ứng viên</b> (do đổi trạng thái thủ công). Bấm nút dưới để tạo hồ sơ.
+                        </MudAlert>
+                    }
+                    <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.PersonAdd" FullWidth="true" OnClick="Convert" Disabled="_busy">
+                        Chuyển thành ứng viên
+                    </MudButton>
+                </MudPaper>
             }
         </MudItem>
     </MudGrid>
@@ -171,6 +208,8 @@ else
     private TimeSpan? _appointmentTime;
     private string? _assignedToName;
     private string? _interestedJobOrder;
+    private Guid? _convertedCandidateId;
+    private bool IsConverted => _convertedCandidateId is not null;
     private record UserOption(Guid Id, string FullName);
     private List<UserOption> _users = new();
 
@@ -205,6 +244,9 @@ else
                 : _users.FirstOrDefault(u => u.Id == _lead.AssignedTo)?.FullName
                   ?? (await db.Users.Where(u => u.Id == _lead.AssignedTo).Select(u => u.FullName).FirstOrDefaultAsync());
 
+            _convertedCandidateId = await db.Candidates.Where(c => c.LeadId == Id)
+                .Select(c => (Guid?)c.Id).FirstOrDefaultAsync();
+
             _interestedJobOrder = null;
             if (_lead.InterestedJobOrderId is not null)
             {
@@ -215,9 +257,13 @@ else
         }
     }
 
+    private void NotifyConvertedLocked()
+        => Snackbar.Add("Lead này đã được chuyển sang ứng viên — không thể thay đổi phân công/lịch hẹn. Chỉ có thể đổi trạng thái (chuyển ngược về Lead).", Severity.Warning);
+
     private async Task AssignLead()
     {
         if (_lead is null) return;
+        if (IsConverted) { NotifyConvertedLocked(); return; }
         if (!await HasPermission("leads:update"))
         {
             Snackbar.Add("Bạn không có quyền phân công lead.", Severity.Warning);
@@ -253,6 +299,7 @@ else
     private async Task SaveAppointment()
     {
         if (_lead is null) return;
+        if (IsConverted) { NotifyConvertedLocked(); return; }
         if (!await HasPermission("leads:update"))
         {
             Snackbar.Add("Bạn không có quyền cập nhật lead.", Severity.Warning);
@@ -299,6 +346,13 @@ else
             return;
         }
 
+        // Lead đã chuyển thành ứng viên → đổi trạng thái = chuyển ngược về Lead.
+        if (IsConverted)
+        {
+            await RevertToLead();
+            return;
+        }
+
         _busy = true;
         try
         {
@@ -326,6 +380,70 @@ else
         }
     }
 
+    private async Task RevertToLead()
+    {
+        if (_lead is null || _convertedCandidateId is null) return;
+
+        var confirm = await DialogService.ShowMessageBoxAsync(
+            "Chuyển ngược về Lead?",
+            $"Lead này đã được chuyển thành ứng viên. Đổi trạng thái sẽ XÓA hồ sơ ứng viên và đưa người này trở lại danh sách Lead với trạng thái \"{Labels.Vi(_newStatus)}\". Bạn có chắc chắn?",
+            yesText: "Đồng ý, chuyển ngược", cancelText: "Hủy");
+        if (confirm != true) return;
+
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var candidateId = _convertedCandidateId.Value;
+
+            // Chỉ cho chuyển ngược khi ứng viên CHƯA phát sinh dữ liệu — tránh mất dữ liệu ngoài ý muốn.
+            var hasData =
+                await db.CandidateDocuments.AnyAsync(x => x.CandidateId == candidateId)
+                || await db.Payments.AnyAsync(x => x.CandidateId == candidateId)
+                || await db.CandidateJobOrders.AnyAsync(x => x.CandidateId == candidateId)
+                || await db.Visas.AnyAsync(x => x.CandidateId == candidateId)
+                || await db.Flights.AnyAsync(x => x.CandidateId == candidateId)
+                || await db.AgentCommissions.AnyAsync(x => x.CandidateId == candidateId);
+            if (hasData)
+            {
+                Snackbar.Add("Không thể chuyển ngược: ứng viên đã phát sinh dữ liệu (giấy tờ/công nợ/đơn hàng/visa/vé/hoa hồng). Hãy xử lý ở trang Ứng viên trước.", Severity.Error);
+                return;
+            }
+
+            var lead = await db.Leads.FirstAsync(l => l.Id == Id);
+            var candidate = await db.Candidates.FirstOrDefaultAsync(c => c.Id == candidateId);
+            var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+
+            if (candidate is not null)
+            {
+                db.AddAudit(actorId, "revert_to_lead", "candidates", candidate.Id,
+                    new { candidate.Code, candidate.FullName }, new { reverted = true });
+                db.Candidates.Remove(candidate);
+            }
+
+            var old = lead.Status;
+            lead.Status = _newStatus;
+            lead.UpdatedAt = DateTimeOffset.UtcNow;
+            db.LeadActivities.Add(new LeadActivity
+            {
+                LeadId = Id,
+                ActivityType = LeadActivityType.StatusChange,
+                Content = string.IsNullOrWhiteSpace(_statusNote)
+                    ? $"Chuyển ngược ứng viên về Lead: {Labels.Vi(old)} → {Labels.Vi(_newStatus)}"
+                    : _statusNote,
+                OldStatus = old,
+                NewStatus = _newStatus,
+            });
+            await db.SaveChangesAsync();
+            Snackbar.Add("Đã chuyển ngược ứng viên về Lead.", Severity.Success);
+            Nav.NavigateTo("/leads");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
     private async Task Convert()
     {
         if (_lead is null) return;
@@ -335,11 +453,27 @@ else
             return;
         }
 
+        var confirm = await DialogService.ShowMessageBoxAsync(
+            "Chuyển thành ứng viên?",
+            $"Tạo hồ sơ ứng viên từ lead \"{_lead.FullName}\" và bắt đầu quy trình 17 bước. Bạn có chắc chắn?",
+            yesText: "Đồng ý", cancelText: "Hủy");
+        if (confirm != true) return;
+
         _busy = true;
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
             var lead = await db.Leads.FirstAsync(l => l.Id == Id);
+
+            // Chống tạo trùng: nếu lead này đã có hồ sơ ứng viên thì điều hướng tới hồ sơ đó.
+            var existingId = await db.Candidates.Where(c => c.LeadId == Id).Select(c => (Guid?)c.Id).FirstOrDefaultAsync();
+            if (existingId is not null)
+            {
+                Snackbar.Add("Lead này đã có hồ sơ ứng viên.", Severity.Info);
+                Nav.NavigateTo($"/candidates/{existingId}");
+                return;
+            }
+
             var adminId = await db.Users.Select(u => u.Id).FirstOrDefaultAsync();
 
             var candidate = new Candidate

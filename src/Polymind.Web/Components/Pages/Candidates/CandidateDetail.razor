@@ -199,31 +199,52 @@ else
                     }
                     else
                     {
-                        <div class="table-scroll-x">
-                            <MudSimpleTable Dense="true" Hover="true" Striped="true">
-                                <thead>
-                                    <tr>
-                                        <th>Mã</th>
-                                        <th>Loại</th>
-                                        <th style="text-align:right">Số tiền</th>
-                                        <th>Trạng thái</th>
-                                        <th>Hạn thu</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var payment in _payments)
-                                    {
+                        <MudHidden Breakpoint="Breakpoint.SmAndDown">
+                            <div class="table-scroll-x">
+                                <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                    <thead>
                                         <tr>
-                                            <td>@payment.Code</td>
-                                            <td>@Labels.Vi(payment.Type)</td>
-                                            <td style="text-align:right">@($"{payment.Amount:N0} đ")</td>
-                                            <td><MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(payment.Status)">@Labels.Vi(payment.Status)</MudChip></td>
-                                            <td>@(payment.DueDate?.ToString("dd/MM/yyyy") ?? "—")</td>
+                                            <th>Mã</th>
+                                            <th>Loại</th>
+                                            <th style="text-align:right">Số tiền</th>
+                                            <th>Trạng thái</th>
+                                            <th>Hạn thu</th>
                                         </tr>
-                                    }
-                                </tbody>
-                            </MudSimpleTable>
-                        </div>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var payment in _payments)
+                                        {
+                                            <tr>
+                                                <td>@payment.Code</td>
+                                                <td>@Labels.Vi(payment.Type)</td>
+                                                <td style="text-align:right">@($"{payment.Amount:N0} đ")</td>
+                                                <td><MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(payment.Status)">@Labels.Vi(payment.Status)</MudChip></td>
+                                                <td>@(payment.DueDate?.ToString("dd/MM/yyyy") ?? "—")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            </div>
+                        </MudHidden>
+
+                        <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+                            @foreach (var payment in _payments)
+                            {
+                                <MudPaper Class="mobile-card pa-3" Elevation="0">
+                                    <div class="d-flex justify-space-between align-center" style="gap:8px">
+                                        <div style="min-width:0">
+                                            <MudText Typo="Typo.subtitle2" Style="font-weight:600">@Labels.Vi(payment.Type)</MudText>
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@payment.Code</MudText>
+                                        </div>
+                                        <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(payment.Status)">@Labels.Vi(payment.Status)</MudChip>
+                                    </div>
+                                    <div class="d-flex justify-space-between align-center mt-1" style="gap:8px">
+                                        <MudText Typo="Typo.body2"><b>@($"{payment.Amount:N0} đ")</b></MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Hạn: @(payment.DueDate?.ToString("dd/MM/yyyy") ?? "—")</MudText>
+                                    </div>
+                                </MudPaper>
+                            }
+                        </MudHidden>
                     }
                 </MudPaper>
             }
@@ -305,6 +326,7 @@ else
                 }
                 else
                 {
+                    <MudHidden Breakpoint="Breakpoint.SmAndDown">
                     <div class="table-scroll-x">
                     <MudSimpleTable Dense="true" Hover="true" Striped="true">
                         <thead>
@@ -380,6 +402,62 @@ else
                         </tbody>
                     </MudSimpleTable>
                     </div>
+                    </MudHidden>
+
+                    <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+                        @foreach (var document in _documents)
+                        {
+                            <MudPaper Class="mobile-card pa-3" Elevation="0">
+                                <div class="d-flex justify-space-between align-center" style="gap:8px">
+                                    <div style="min-width:0">
+                                        <MudText Typo="Typo.subtitle2" Style="font-weight:600">@Labels.Vi(document.DocType)</MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="word-break:break-all">@document.FileName</MudText>
+                                    </div>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default">v@document.VersionNumber</MudChip>
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(document.Notes))
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@document.Notes</MudText>
+                                }
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">
+                                    @FormatFileSize(document.FileSize) • @document.UploadedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                                </MudText>
+                                <div class="d-flex flex-wrap mt-1" style="gap:4px">
+                                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Filled.Download"
+                                               OnClick="@(() => DownloadDocument(document.VersionId))">
+                                        Tải
+                                    </MudButton>
+                                    @if (_versionsByDoc.TryGetValue(document.DocumentId, out var mvers) && mvers.Count > 1)
+                                    {
+                                        <MudButton Size="Size.Small" Variant="Variant.Text"
+                                                   StartIcon="@Icons.Material.Filled.History"
+                                                   OnClick="@(() => ToggleHistory(document.DocumentId))">
+                                            Lịch sử (@mvers.Count)
+                                        </MudButton>
+                                    }
+                                </div>
+                                @if (_expandedDocId == document.DocumentId && _versionsByDoc.TryGetValue(document.DocumentId, out var mhistory))
+                                {
+                                    <MudDivider Class="my-2" />
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-1"><b>Các phiên bản</b></MudText>
+                                    @foreach (var v in mhistory)
+                                    {
+                                        <div class="d-flex align-center py-1" style="gap:8px">
+                                            <MudChip T="string" Size="Size.Small" Color="@(v.IsCurrent ? Color.Success : Color.Default)">v@v.VersionNumber</MudChip>
+                                            <span class="flex-grow-1" style="min-width:0;word-break:break-all">@v.FileName <span class="mud-text-secondary">(@FormatFileSize(v.FileSize))</span></span>
+                                            <MudIconButton Icon="@Icons.Material.Filled.Download" Size="Size.Small" OnClick="@(() => DownloadDocument(v.VersionId))" />
+                                            @if (_canUpdateCandidate && !v.IsCurrent)
+                                            {
+                                                <MudIconButton Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Small" Color="Color.Primary"
+                                                               OnClick="@(() => RestoreVersion(document.DocumentId, v.VersionId))" />
+                                            }
+                                        </div>
+                                    }
+                                }
+                            </MudPaper>
+                        }
+                    </MudHidden>
                 }
             </MudPaper>
         </MudItem>

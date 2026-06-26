@@ -1,0 +1,100 @@
+@page "/leads/converted"
+@attribute [Authorize(Policy = "leads:read")]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject IDialogService DialogService
+
+<PageTitle>Lead đã chuyển thành ứng viên — POLYMIND</PageTitle>
+
+<PageHeader Eyebrow="CRM" Title="Lead đã chuyển thành ứng viên" Subtitle="@($"{_rows.Count} lead đã có hồ sơ ứng viên")">
+    <Actions>
+        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/leads"))">
+            Về danh sách Lead
+        </MudButton>
+    </Actions>
+</PageHeader>
+
+<MudPaper Elevation="1" Class="pa-4">
+    <MudTextField @bind-Value="_search" Placeholder="Tìm tên, SĐT, mã lead/ứng viên..." Adornment="Adornment.Start"
+                  AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+
+    @if (!Filtered.Any())
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Chưa có lead nào được chuyển thành ứng viên.</MudText>
+    }
+    else
+    {
+        @* Desktop: bảng *@
+        <MudHidden Breakpoint="Breakpoint.SmAndDown">
+            <MudSimpleTable Hover="true" Dense="true" Striped="true" Class="cursor-pointer">
+                <thead>
+                    <tr><th>Mã Lead</th><th>Họ tên</th><th>SĐT</th><th>Mã ứng viên</th><th>Ngày chuyển</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in Filtered)
+                    {
+                        <tr @onclick="@(() => OpenLead(r))">
+                            <td>@r.LeadCode</td>
+                            <td>@r.FullName</td>
+                            <td>@(string.IsNullOrWhiteSpace(r.Phone) ? "—" : r.Phone)</td>
+                            <td><MudChip T="string" Size="Size.Small" Color="Color.Success">@r.CandidateCode</MudChip></td>
+                            <td>@r.ConvertedAt.LocalDateTime.ToString("dd/MM/yyyy")</td>
+                            <td style="text-align:right"><MudIcon Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </MudHidden>
+
+        @* Mobile: thẻ *@
+        <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+            @foreach (var r in Filtered)
+            {
+                <MudPaper Class="mobile-card pa-3" Elevation="0" Style="cursor:pointer" @onclick="@(() => OpenLead(r))">
+                    <div class="d-flex justify-space-between align-center" style="gap:8px">
+                        <div style="min-width:0">
+                            <MudText Typo="Typo.subtitle2" Style="font-weight:600">@r.FullName</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@r.LeadCode • @(string.IsNullOrWhiteSpace(r.Phone) ? "—" : r.Phone)</MudText>
+                        </div>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success">@r.CandidateCode</MudChip>
+                    </div>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">Ngày chuyển: @r.ConvertedAt.LocalDateTime.ToString("dd/MM/yyyy")</MudText>
+                </MudPaper>
+            }
+        </MudHidden>
+    }
+</MudPaper>
+
+@code {
+    private record Row(Guid LeadId, string LeadCode, string FullName, string? Phone, Guid CandidateId, string CandidateCode, DateTimeOffset ConvertedAt);
+
+    private List<Row> _rows = new();
+    private string _search = "";
+
+    private IEnumerable<Row> Filtered => _rows.Where(r =>
+        string.IsNullOrWhiteSpace(_search)
+        || r.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase)
+        || (r.Phone?.Contains(_search) ?? false)
+        || r.LeadCode.Contains(_search, StringComparison.OrdinalIgnoreCase)
+        || r.CandidateCode.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _rows = await (from c in db.Candidates
+                       where c.LeadId != null
+                       join l in db.Leads on c.LeadId!.Value equals l.Id
+                       orderby c.CreatedAt descending
+                       select new Row(l.Id, l.Code, c.FullName, c.Phone, c.Id, c.Code, c.CreatedAt))
+                      .ToListAsync();
+    }
+
+    private async Task OpenLead(Row r)
+    {
+        var confirm = await DialogService.ShowMessageBoxAsync(
+            "Lead đã chuyển thành ứng viên",
+            $"Lead \"{r.FullName}\" đã được chuyển sang ứng viên. Bạn có chắc chắn muốn mở để chỉnh sửa?",
+            yesText: "Mở", cancelText: "Hủy");
+        if (confirm == true) Nav.NavigateTo($"/leads/{r.LeadId}");
+    }
+}

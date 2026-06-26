@@ -106,6 +106,18 @@ html, body {
     }
 }
 
+/* Lịch sử chăm sóc (Lead): hơn 4 hoạt động thì cuộn riêng trong khung,
+   tránh đẩy các thông tin khác xuống sâu. ~4 mục hiện rồi mới cuộn. */
+.lead-history-scroll {
+    max-height: 340px;
+    overflow-y: auto;
+    padding-right: 8px;
+    /* viền mảnh + bóng nhẹ gợi ý đây là vùng cuộn được */
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 12px;
+    padding-top: 8px;
+}
+
 /* Danh sách dạng thẻ (mobile) thay cho bảng: viền nhẹ, bo góc, vùng chạm rộng */
 .mobile-card {
     border: 1px solid var(--mud-palette-lines-default);

@@ -65,23 +65,41 @@ else
                 }
                 else
                 {
-                    <MudDataGrid T="CandidateRow" Items="_candidates" Hover="true" Dense="true" Striped="true"
-                                 RowClick="@(args => Nav.NavigateTo($"/candidates/{args.Item.CandidateId}"))" Class="cursor-pointer">
-                        <Columns>
-                            <PropertyColumn Property="x => x.Code" Title="Mã" />
-                            <PropertyColumn Property="x => x.FullName" Title="Họ tên" />
-                            <TemplateColumn Title="Bước hiện tại">
-                                <CellTemplate>
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">@Labels.Vi(context.Item.Step)</MudChip>
-                                </CellTemplate>
-                            </TemplateColumn>
-                            <TemplateColumn Title="Trạng thái">
-                                <CellTemplate>
-                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@Labels.Vi(context.Item.Status)</MudChip>
-                                </CellTemplate>
-                            </TemplateColumn>
-                        </Columns>
-                    </MudDataGrid>
+                    <MudHidden Breakpoint="Breakpoint.SmAndDown">
+                        <MudDataGrid T="CandidateRow" Items="_candidates" Hover="true" Dense="true" Striped="true"
+                                     RowClick="@(args => Nav.NavigateTo($"/candidates/{args.Item.CandidateId}"))" Class="cursor-pointer">
+                            <Columns>
+                                <PropertyColumn Property="x => x.Code" Title="Mã" />
+                                <PropertyColumn Property="x => x.FullName" Title="Họ tên" />
+                                <TemplateColumn Title="Bước hiện tại">
+                                    <CellTemplate>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">@Labels.Vi(context.Item.Step)</MudChip>
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                <TemplateColumn Title="Trạng thái">
+                                    <CellTemplate>
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@Labels.Vi(context.Item.Status)</MudChip>
+                                    </CellTemplate>
+                                </TemplateColumn>
+                            </Columns>
+                        </MudDataGrid>
+                    </MudHidden>
+
+                    <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+                        @foreach (var c in _candidates)
+                        {
+                            <MudPaper Class="mobile-card pa-3" Elevation="0" Style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/candidates/{c.CandidateId}"))">
+                                <div class="d-flex justify-space-between align-center" style="gap:8px">
+                                    <div style="min-width:0">
+                                        <MudText Typo="Typo.subtitle2" Style="font-weight:600">@c.FullName</MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@c.Code</MudText>
+                                    </div>
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@Labels.Vi(c.Status)</MudChip>
+                                </div>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="mt-1">@Labels.Vi(c.Step)</MudChip>
+                            </MudPaper>
+                        }
+                    </MudHidden>
                 }
             </MudPaper>
         </MudItem>

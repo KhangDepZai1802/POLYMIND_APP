@@ -63,14 +63,26 @@ else
                 }
                 else
                 {
-                    <MudDataGrid T="CandidateRow" Items="_candidates" Hover="true" Dense="true" Striped="true"
-                                 RowClick="@(args => Nav.NavigateTo($"/candidates/{args.Item.Id}"))" Class="cursor-pointer">
-                        <Columns>
-                            <PropertyColumn Property="x => x.Code" Title="Mã" />
-                            <PropertyColumn Property="x => x.FullName" Title="Họ tên" />
-                            <PropertyColumn Property="x => x.Phone" Title="SĐT" />
-                        </Columns>
-                    </MudDataGrid>
+                    <MudHidden Breakpoint="Breakpoint.SmAndDown">
+                        <MudDataGrid T="CandidateRow" Items="_candidates" Hover="true" Dense="true" Striped="true"
+                                     RowClick="@(args => Nav.NavigateTo($"/candidates/{args.Item.Id}"))" Class="cursor-pointer">
+                            <Columns>
+                                <PropertyColumn Property="x => x.Code" Title="Mã" />
+                                <PropertyColumn Property="x => x.FullName" Title="Họ tên" />
+                                <PropertyColumn Property="x => x.Phone" Title="SĐT" />
+                            </Columns>
+                        </MudDataGrid>
+                    </MudHidden>
+
+                    <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+                        @foreach (var c in _candidates)
+                        {
+                            <MudPaper Class="mobile-card pa-3" Elevation="0" Style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/candidates/{c.Id}"))">
+                                <MudText Typo="Typo.subtitle2" Style="font-weight:600">@c.FullName</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@c.Code • @(string.IsNullOrWhiteSpace(c.Phone) ? "—" : c.Phone)</MudText>
+                            </MudPaper>
+                        }
+                    </MudHidden>
                 }
             </MudPaper>
 
@@ -122,37 +134,68 @@ else
                 }
                 else
                 {
-                    <MudDataGrid T="CommissionRow" Items="_commissions" Hover="true" Dense="true" Striped="true">
-                        <Columns>
-                            <PropertyColumn Property="x => x.CandidateName" Title="Ứng viên" />
-                            <TemplateColumn Title="Mốc">
-                                <CellTemplate>@Labels.Vi(context.Item.Milestone)</CellTemplate>
-                            </TemplateColumn>
-                            <TemplateColumn Title="Hoa hồng">
-                                <CellTemplate>@($"{context.Item.Amount:N0} đ")</CellTemplate>
-                            </TemplateColumn>
-                            <TemplateColumn Title="Trạng thái">
-                                <CellTemplate>
-                                    <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(context.Item.Status)">@Labels.Vi(context.Item.Status)</MudChip>
-                                </CellTemplate>
-                            </TemplateColumn>
-                            <TemplateColumn Title="" Sortable="false">
-                                <CellTemplate>
+                    <MudHidden Breakpoint="Breakpoint.SmAndDown">
+                        <MudDataGrid T="CommissionRow" Items="_commissions" Hover="true" Dense="true" Striped="true">
+                            <Columns>
+                                <PropertyColumn Property="x => x.CandidateName" Title="Ứng viên" />
+                                <TemplateColumn Title="Mốc">
+                                    <CellTemplate>@Labels.Vi(context.Item.Milestone)</CellTemplate>
+                                </TemplateColumn>
+                                <TemplateColumn Title="Hoa hồng">
+                                    <CellTemplate>@($"{context.Item.Amount:N0} đ")</CellTemplate>
+                                </TemplateColumn>
+                                <TemplateColumn Title="Trạng thái">
+                                    <CellTemplate>
+                                        <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(context.Item.Status)">@Labels.Vi(context.Item.Status)</MudChip>
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                <TemplateColumn Title="" Sortable="false">
+                                    <CellTemplate>
+                                        @if (_canApproveCommission)
+                                        {
+                                            @if (context.Item.Status == CommissionStatus.Pending)
+                                            {
+                                                <MudButton Size="Size.Small" Color="Color.Info" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Verified" OnClick="@(() => ApproveCommission(context.Item.Id))">Duyệt</MudButton>
+                                            }
+                                            else if (context.Item.Status == CommissionStatus.Approved)
+                                            {
+                                                <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Paid" OnClick="@(() => MarkCommissionPaid(context.Item.Id))">Đã chi</MudButton>
+                                            }
+                                        }
+                                    </CellTemplate>
+                                </TemplateColumn>
+                            </Columns>
+                        </MudDataGrid>
+                    </MudHidden>
+
+                    <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+                        @foreach (var c in _commissions)
+                        {
+                            <MudPaper Class="mobile-card pa-3" Elevation="0">
+                                <div class="d-flex justify-space-between align-center" style="gap:8px">
+                                    <div style="min-width:0">
+                                        <MudText Typo="Typo.subtitle2" Style="font-weight:600">@c.CandidateName</MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@Labels.Vi(c.Milestone)</MudText>
+                                    </div>
+                                    <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(c.Status)">@Labels.Vi(c.Status)</MudChip>
+                                </div>
+                                <div class="d-flex justify-space-between align-center mt-1" style="gap:8px">
+                                    <MudText Typo="Typo.body2"><b>@($"{c.Amount:N0} đ")</b></MudText>
                                     @if (_canApproveCommission)
                                     {
-                                        @if (context.Item.Status == CommissionStatus.Pending)
+                                        @if (c.Status == CommissionStatus.Pending)
                                         {
-                                            <MudButton Size="Size.Small" Color="Color.Info" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Verified" OnClick="@(() => ApproveCommission(context.Item.Id))">Duyệt</MudButton>
+                                            <MudButton Size="Size.Small" Color="Color.Info" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Verified" OnClick="@(() => ApproveCommission(c.Id))">Duyệt</MudButton>
                                         }
-                                        else if (context.Item.Status == CommissionStatus.Approved)
+                                        else if (c.Status == CommissionStatus.Approved)
                                         {
-                                            <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Paid" OnClick="@(() => MarkCommissionPaid(context.Item.Id))">Đã chi</MudButton>
+                                            <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Paid" OnClick="@(() => MarkCommissionPaid(c.Id))">Đã chi</MudButton>
                                         }
                                     }
-                                </CellTemplate>
-                            </TemplateColumn>
-                        </Columns>
-                    </MudDataGrid>
+                                </div>
+                            </MudPaper>
+                        }
+                    </MudHidden>
                 }
             </MudPaper>
         </MudItem>

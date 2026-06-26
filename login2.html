@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="/">
+    
+    <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.46ein0sx1k.css" />
+    <link rel="stylesheet" href="app.15x29leftk.css" />
+    <link rel="stylesheet" href="Polymind.Web.fqlqir0qov.styles.css" />
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet">
+    <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet">
+    <link href="css/login.css" rel="stylesheet">
+    <script type="importmap">{
+  "imports": {
+    "./Components/Layout/ReconnectModal.razor.js": "./Components/Layout/ReconnectModal.abdmv1u4y3.razor.js",
+    "./_content/MudBlazor/MudBlazor.min.js": "./_content/MudBlazor/MudBlazor.min.xvsyfqkrg0.js",
+    "./_framework/blazor.server.js": "./_framework/blazor.server.xbbil6v7co.js",
+    "./_framework/blazor.web.js": "./_framework/blazor.web.hwaxidwiwj.js",
+    "./lib/bootstrap/dist/js/bootstrap.bundle.js": "./lib/bootstrap/dist/js/bootstrap.bundle.6cfz1n2cew.js",
+    "./lib/bootstrap/dist/js/bootstrap.bundle.min.js": "./lib/bootstrap/dist/js/bootstrap.bundle.min.493y06b0oq.js",
+    "./lib/bootstrap/dist/js/bootstrap.esm.min.js": "./lib/bootstrap/dist/js/bootstrap.esm.min.jj8uyg4cgr.js",
+    "./lib/bootstrap/dist/js/bootstrap.esm.js": "./lib/bootstrap/dist/js/bootstrap.esm.vr1egmr9el.js",
+    "./lib/bootstrap/dist/js/bootstrap.min.js": "./lib/bootstrap/dist/js/bootstrap.min.63fj8s7r0e.js",
+    "./lib/bootstrap/dist/js/bootstrap.js": "./lib/bootstrap/dist/js/bootstrap.notf2xhcfb.js"
+  }
+}</script>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <title>Đăng nhập — POLYMIND</title></head>
+
+<body>
+
+<div class="login-page"><div class="login-shell"><section class="login-hero"><div class="login-hero-brand"><span class="login-logo"><img src="img/logo-polymind.png" alt="POLYMIND"></span>
+                <div><h2>POLYMIND OLMS</h2>
+                    <span class="login-hero-tag">QUẢN LÝ XUẤT KHẨU LAO ĐỘNG</span></div></div>
+            <span class="pm-eyebrow login-hero-eyebrow">VẬN HÀNH THÔNG MINH</span>
+            <h1 class="login-hero-title">Quản lý trọn hành trình xuất khẩu lao động.</h1>
+            <p class="login-hero-sub">Lead · Ứng viên · Đơn hàng · Tài chính · Visa.</p></section>
+
+        <div class="login-card"><span class="pm-eyebrow">CHÀO MỪNG TRỞ LẠI</span>
+            <h2 class="login-card-title">Đăng nhập hệ thống</h2>
+            <p class="login-card-sub">Sử dụng tài khoản được cấp.</p>
+
+            <form method="post" action="/login"><input type="hidden" name="_handler" value="login" /><input type="hidden" name="__RequestVerificationToken" value="CfDJ8NkqPv6hpbFLh1qtfp9cS5rPbFBV6MEGg1_3Bhl8M1X2SKaX-qVESQlBwzqmAdRQKF7BlMDCrQsj4MpKij0RTVBXoDcNvoemtKFbkefW3zRArRfIxAhWvdOGEJ2RZbc2czg6VdZpu7EqfZFNhMY2Luo" /><label class="login-label">Email</label>
+                <input placeholder="Nh&#x1EAD;p email &#x111;&#x103;ng nh&#x1EAD;p" autocomplete="username" name="Input.Email" class="login-input valid" value="" />
+                
+
+                <label class="login-label">Mật khẩu</label>
+                <div class="login-pwd-wrap"><input type="password" id="login-password" placeholder="&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;" autocomplete="current-password" name="Input.Password" class="login-input valid" value="" />
+                    <button type="button" class="login-pwd-toggle" tabindex="-1" aria-label="Hiện/ẩn mật khẩu" onclick="(function(b){var i=document.getElementById('login-password');var s=b.querySelector('.eye-show'),h=b.querySelector('.eye-hide');if(i.type==='password'){i.type='text';s.style.display='none';h.style.display='inline-flex';}else{i.type='password';s.style.display='inline-flex';h.style.display='none';}})(this)"><svg class="eye-show" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"></path></svg>
+                        <svg class="eye-hide" style="display:none" viewBox="0 0 24 24"><path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2z"></path></svg></button></div>
+                
+
+                <button type="submit" class="login-btn">Đăng nhập →</button></form>
+
+            <p class="login-help">Cần hỗ trợ? Liên hệ quản trị hệ thống.</p></div></div>
+
+    <footer class="app-footer"><div class="af-logos"><img src="img/logo-polymind.png" alt="POLYMIND">
+        <span class="af-x">×</span>
+        <img src="img/logo-vietgroup.png" alt="VIETGROUP"></div>
+    <p class="af-copy">© 2026 Bản quyền thuộc về POLYMIND x VIETGROUP</p>
+    <p class="af-slogan">POLYMIND — Đồng Hành Cùng Bạn Vươn Xa</p></footer></div>
+        <blazor-focus-on-navigate selector="h1"></blazor-focus-on-navigate>
+    <script type="module" src="Components/Layout/ReconnectModal.abdmv1u4y3.razor.js" b-8ncthbkzae></script>
+
+<dialog id="components-reconnect-modal" data-nosnippet b-8ncthbkzae><div class="components-reconnect-container" b-8ncthbkzae><div class="components-rejoining-animation" aria-hidden="true" b-8ncthbkzae><div b-8ncthbkzae></div>
+            <div b-8ncthbkzae></div></div>
+        <p class="components-reconnect-first-attempt-visible" b-8ncthbkzae>
+            Rejoining the server...
+        </p>
+        <p class="components-reconnect-repeated-attempt-visible" b-8ncthbkzae>
+            Rejoin failed... trying again in <span id="components-seconds-to-next-attempt" b-8ncthbkzae></span> seconds.
+        </p>
+        <p class="components-reconnect-failed-visible" b-8ncthbkzae>
+            Failed to rejoin.<br b-8ncthbkzae>Please retry or reload the page.
+        </p>
+        <button id="components-reconnect-button" class="components-reconnect-failed-visible" b-8ncthbkzae>
+            Retry
+        </button>
+        <p class="components-pause-visible" b-8ncthbkzae>
+            The session has been paused by the server.
+        </p>
+        <p class="components-resume-failed-visible" b-8ncthbkzae>
+            Failed to resume the session.<br b-8ncthbkzae>Please retry or reload the page.
+        </p>
+        <button id="components-resume-button" class="components-pause-visible components-resume-failed-visible" b-8ncthbkzae>
+            Resume
+        </button></div></dialog>
+    <script src="_framework/blazor.web.hwaxidwiwj.js"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script></body></html><!--Blazor-Server-Component-State:CfDJ8NkqPv6hpbFLh1qtfp9cS5r7JGtjHxp61hOD6U0SIOnLCPoUWsmQRBFLEC0PIHCcY6QdsxvsbMH5ZejXmGprZNzQHKU8ZSNw5jvenA8hqMiVWJakXkCei1xqOEO01GEsvBDsETvRGb90/eMX3fyg23amZm87tlh4CJIJCj/riqGMMXOtm1wIioLI/WpKuQOq5cdHm2zEPeVimNSS4mGhQ7kX9rIlBa9uvDcRFDwN+a3m9TuIeZYS5eDec41uU/vwo7/Vsp5bXeIeASg1rNAICr71EX7fftVEWQUF7WmatLKkfsO0buEG98CPbx3d7smrGMSz5NhRIdVY8ailXU15bcBg9y184XENjTsHvEl2yx/0FrRFSREFyp0pOkFvONaqWZrjeVJgGn2pXTDN1KhJY0Eab4qMc9Icf9qcjWV9B65g9NP9f/vbUosQpMnFFE+gxdYXkCO5vXfy5dnYrGSlALn0oEag76sfsQEen7TjIZ4yGZMMT3X1us+3Bku8NYbnrbsHmE8NkDQJGAatNkF7Z/RYjW6ZhX6+6fDjjW7jdRN2WzGa+RKCCwarBs+iHikpQMY5O0kumIa5Jeayh7UsBht+3V7SiIPbRv10fkv2cFx7daoBZ1U06mamMZkLxLb2b/QvX7/VMboO+si9c3HTxccRcLTUl+U+NHj/LDOUaEplUMkL/eZjWawVi0bxTABFrQMBSoC8MFID4PWpRpGQEIhyJwn2XhWWX9Rv/+NyhRkIFP5djhkZehROmxFCyYs2OfRVbD8QU2fVFSd+udqb00D6V1F7WyuSe2GxEQrAMsnGXBMFezS9eG/UEXhmEMUdT/kfl1oSEWoWhKZzxkJxrKZJa2P31KXWp3L7MTaR7/28uzB5bFvew7/BmQE17eEEs8Q2AHAx+xjeGFd5nkH4lEy6Rcvzx7ohdCkZeblfAaBbNSEccbA7Hx8JJHoecgwGmvFatmbl5AzMRruhzOJDbrjRCix9XxKjLKVH7cggb/YoOrKcwZ5V5Kgs30u9r00K3EifV2snNHMhz5QGIuhorumouBGGSVIWd2XGXXzMDf0v6Kw5I9M04Rb5GDWJXP7yJ4/2MQIEeGTnhofOpr7grSKBSvq0vOt4+cTP1TgwkXYOi36w1UB45CZo79AWw7AgsA==-->

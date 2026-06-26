@@ -3,22 +3,22 @@
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    justify-content: flex-start; /* neo nội dung lên trên; footer đi liền dưới thẻ */
     background: #EFF5FC;
     font-family: 'Roboto', sans-serif;
 }
 
 .login-shell {
-    flex: 1 0 auto;
+    flex: 0 0 auto;
     width: 100%;
     max-width: 1040px;
     margin: 0 auto;
     padding: 1.25rem 1rem 0;
     display: flex;
     flex-direction: column;
-    justify-content: flex-start; /* neo nội dung lên trên, tránh túm tụm giữa */
 }
-/* Footer dính đáy ở trang login (đẩy hết khoảng trống xuống dưới cùng) */
-.login-page > .app-footer { margin-top: auto; }
+/* Footer đi LIỀN dưới thẻ (khoảng cách cố định) → không thừa khi màn hình quá dài */
+.login-page > .app-footer { margin-top: 1.5rem; flex: 0 0 auto; }
 
 /* ----- Hero navy ----- */
 .login-hero {
@@ -77,11 +77,11 @@
     max-width: 42ch;
 }
 
-/* ----- Thẻ form trắng (đè lên hero một chút) ----- */
+/* ----- Thẻ form trắng (NẰM DƯỚI hero, không đè để khỏi che chữ) ----- */
 .login-card {
     width: 100%;
     max-width: 440px;
-    margin: -2rem auto 1.5rem;
+    margin: 0.9rem auto 0;
     background: #fff;
     border-radius: 22px;
     padding: 1.9rem 1.6rem;
@@ -208,6 +208,7 @@
 /* Desktop: hero + thẻ nằm cạnh nhau cho hiện đại */
 @media (min-width: 900px) {
     .login-shell {
+        flex: 1 0 auto;          /* desktop: giữ nguyên như cũ (đã OK) */
         flex-direction: row;
         align-items: center;
         gap: 2.5rem;
@@ -222,6 +223,7 @@
         justify-content: center;
     }
     .login-card { margin: 0; flex: none; }
+    .login-page > .app-footer { margin-top: auto; } /* desktop: footer dính đáy như cũ */
 }
 
 /* ----- Logo tile dùng chung (hero) ----- */
