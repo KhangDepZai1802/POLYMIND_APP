@@ -7,9 +7,9 @@
 @inject IAuthorizationService AuthorizationService
 @inject AuthenticationStateProvider AuthStateProvider
 
-<PageTitle>Đại lý — POLYMIND</PageTitle>
+<PageTitle>Đại lý &amp; Cộng tác viên — POLYMIND</PageTitle>
 
-<PageHeader Eyebrow="HOA HỒNG" Title="Đại lý & Cộng tác viên" Subtitle="@($"{_rows.Count} đại lý")">
+<PageHeader Eyebrow="HOA HỒNG" Title="Đại lý và Cộng tác viên" Subtitle="@($"{_agents.Count} đại lý • {_ctvBoard.Count} cộng tác viên")">
     <Actions>
         <AuthorizeView Policy="agents:create">
             <Authorized>
@@ -21,7 +21,141 @@
     </Actions>
 </PageHeader>
 
+@* ===== Bảng thi đua 1: Doanh số đại lý ===== *@
+<MudPaper Elevation="1" Class="pa-4 mb-4">
+    <div class="d-flex align-center mb-3" style="gap:8px">
+        <MudIcon Icon="@Icons.Material.Filled.EmojiEvents" Color="Color.Warning" />
+        <MudText Typo="Typo.subtitle1"><b>Bảng thi đua — Doanh số Đại lý</b></MudText>
+    </div>
+    @if (_agentBoard.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Dense="true">Chưa có dữ liệu đại lý.</MudAlert>
+    }
+    else
+    {
+        <MudHidden Breakpoint="Breakpoint.SmAndDown">
+            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                <thead>
+                    <tr>
+                        <th style="width:48px">#</th>
+                        <th>Đại lý</th>
+                        <th style="text-align:center">CTV</th>
+                        <th style="text-align:center">Ứng viên</th>
+                        <th style="text-align:right">Hoa hồng</th>
+                        <th style="text-align:right">Doanh số (đã thu)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ var ar = 0; }
+                    @foreach (var a in _agentBoard)
+                    {
+                        ar++;
+                        var rank = ar;
+                        <tr style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/agents/{a.Id}"))">
+                            <td>@RankBadge(rank)</td>
+                            <td><b>@a.Name</b><MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@a.Code</MudText></td>
+                            <td style="text-align:center">@a.CollaboratorCount</td>
+                            <td style="text-align:center">@a.CandidateCount</td>
+                            <td style="text-align:right">@($"{a.Commission:N0} đ")</td>
+                            <td style="text-align:right"><Money Amount="a.Revenue" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </MudHidden>
+        <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+            @{ var arm = 0; }
+            @foreach (var a in _agentBoard)
+            {
+                arm++;
+                var rank = arm;
+                <MudPaper Class="mobile-card pa-3" Elevation="0" Style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/agents/{a.Id}"))">
+                    <div class="d-flex align-center" style="gap:10px">
+                        @RankBadge(rank)
+                        <div style="min-width:0;flex:1">
+                            <MudText Typo="Typo.subtitle2" Style="font-weight:600">@a.Name</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.CollaboratorCount CTV • @a.CandidateCount ứng viên</MudText>
+                        </div>
+                        <Money Amount="a.Revenue" />
+                    </div>
+                </MudPaper>
+            }
+        </MudHidden>
+    }
+</MudPaper>
+
+@* ===== Bảng thi đua 2: Doanh số CTV (mọi đại lý) ===== *@
+<MudPaper Elevation="1" Class="pa-4 mb-4">
+    <div class="d-flex align-center mb-3" style="gap:8px">
+        <MudIcon Icon="@Icons.Material.Filled.MilitaryTech" Color="Color.Secondary" />
+        <MudText Typo="Typo.subtitle1"><b>Bảng thi đua — Doanh số Cộng tác viên</b></MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">(bấm tên CTV để xem thông tin liên lạc)</MudText>
+    </div>
+    @if (_ctvBoard.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Dense="true">Chưa có cộng tác viên.</MudAlert>
+    }
+    else
+    {
+        <MudHidden Breakpoint="Breakpoint.SmAndDown">
+            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                <thead>
+                    <tr>
+                        <th style="width:48px">#</th>
+                        <th>Cộng tác viên</th>
+                        <th>Đại lý</th>
+                        <th style="text-align:center">Ứng viên</th>
+                        <th style="text-align:center">Trạng thái</th>
+                        <th style="text-align:right">Doanh số (đã thu)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ var cr = 0; }
+                    @foreach (var c in _ctvBoard)
+                    {
+                        cr++;
+                        var rank = cr;
+                        <tr>
+                            <td>@RankBadge(rank)</td>
+                            <td>
+                                <MudLink Class="cursor-pointer" Style="text-decoration:underline;font-weight:600" @onclick="@(() => ShowCtv(c.Id))">@c.FullName</MudLink>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@c.Code</MudText>
+                            </td>
+                            <td>@c.AgentName</td>
+                            <td style="text-align:center">@c.CandidateCount</td>
+                            <td style="text-align:center">
+                                <MudChip T="string" Size="Size.Small" Color="@(c.IsActive ? Color.Success : Color.Default)">@(c.IsActive ? "Hoạt động" : "Ngừng")</MudChip>
+                            </td>
+                            <td style="text-align:right"><Money Amount="c.Revenue" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </MudHidden>
+        <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+            @{ var crm = 0; }
+            @foreach (var c in _ctvBoard)
+            {
+                crm++;
+                var rank = crm;
+                <MudPaper Class="mobile-card pa-3" Elevation="0">
+                    <div class="d-flex align-center" style="gap:10px">
+                        @RankBadge(rank)
+                        <div style="min-width:0;flex:1">
+                            <MudLink Style="text-decoration:underline;font-weight:600" @onclick="@(() => ShowCtv(c.Id))">@c.FullName</MudLink>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@c.AgentName • @c.CandidateCount ứng viên</MudText>
+                        </div>
+                        <Money Amount="c.Revenue" />
+                    </div>
+                </MudPaper>
+            }
+        </MudHidden>
+    }
+</MudPaper>
+
+@* ===== Danh sách đại lý (điều hướng chi tiết) ===== *@
 <MudPaper Elevation="1" Class="pa-4">
+    <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Danh sách đại lý</b></MudText>
     <MudTextField @bind-Value="_search" Placeholder="Tìm tên, mã, SĐT..." Adornment="Adornment.Start"
                   AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
 
@@ -62,10 +196,6 @@
                         </div>
                         <MudChip T="string" Size="Size.Small" Color="@(a.IsActive ? Color.Success : Color.Default)">@(a.IsActive ? "Đang hợp tác" : "Ngừng")</MudChip>
                     </div>
-                    @if (!string.IsNullOrWhiteSpace(a.RepresentativeName))
-                    {
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">Đại diện: @a.RepresentativeName</MudText>
-                    }
                 </MudPaper>
             }
         }
@@ -73,10 +203,15 @@
 </MudPaper>
 
 @code {
-    private List<Agent> _rows = new();
+    private record AgentBoardRow(Guid Id, string Code, string Name, int CollaboratorCount, int CandidateCount, decimal Commission, decimal Revenue);
+    private record CtvBoardRow(Guid Id, string Code, string FullName, string AgentName, bool IsActive, int CandidateCount, decimal Revenue);
+
+    private List<Agent> _agents = new();
+    private List<AgentBoardRow> _agentBoard = new();
+    private List<CtvBoardRow> _ctvBoard = new();
     private string _search = "";
 
-    private IEnumerable<Agent> Filtered => _rows.Where(a =>
+    private IEnumerable<Agent> Filtered => _agents.Where(a =>
         string.IsNullOrWhiteSpace(_search)
         || a.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
         || a.Code.Contains(_search, StringComparison.OrdinalIgnoreCase)
@@ -87,7 +222,55 @@
     private async Task Load()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        _rows = await db.Agents.OrderBy(a => a.Name).ToListAsync();
+        _agents = await db.Agents.OrderBy(a => a.Name).ToListAsync();
+        var ctvs = await db.Collaborators.ToListAsync();
+        var cands = await db.Candidates.Select(c => new { c.Id, c.AgentId, c.CollaboratorId }).ToListAsync();
+        var paidByCandidate = await db.Payments
+            .Where(p => p.Status == PaymentStatus.Paid)
+            .GroupBy(p => p.CandidateId)
+            .Select(g => new { CandidateId = g.Key, Sum = g.Sum(x => x.Amount) })
+            .ToDictionaryAsync(x => x.CandidateId, x => x.Sum);
+        var commissionByAgent = await db.AgentCommissions
+            .GroupBy(c => c.AgentId)
+            .Select(g => new { AgentId = g.Key, Sum = g.Sum(x => x.CommissionAmount) })
+            .ToDictionaryAsync(x => x.AgentId, x => x.Sum);
+
+        decimal RevenueOfCandidate(Guid id) => paidByCandidate.GetValueOrDefault(id, 0m);
+
+        // Bảng đại lý
+        _agentBoard = _agents.Select(a =>
+        {
+            var agentCands = cands.Where(c => c.AgentId == a.Id).ToList();
+            return new AgentBoardRow(
+                a.Id, a.Code, a.Name,
+                ctvs.Count(c => c.AgentId == a.Id && c.IsActive),
+                agentCands.Count,
+                commissionByAgent.GetValueOrDefault(a.Id, 0m),
+                agentCands.Sum(c => RevenueOfCandidate(c.Id)));
+        })
+        .OrderByDescending(x => x.Revenue).ThenByDescending(x => x.CandidateCount)
+        .ToList();
+
+        // Bảng CTV
+        var agentNames = _agents.ToDictionary(a => a.Id, a => a.Name);
+        _ctvBoard = ctvs.Select(c =>
+        {
+            var ctvCands = cands.Where(x => x.CollaboratorId == c.Id).ToList();
+            return new CtvBoardRow(
+                c.Id, c.Code, c.FullName,
+                agentNames.GetValueOrDefault(c.AgentId, "—"),
+                c.IsActive,
+                ctvCands.Count,
+                ctvCands.Sum(x => RevenueOfCandidate(x.Id)));
+        })
+        .OrderByDescending(x => x.Revenue).ThenByDescending(x => x.CandidateCount)
+        .ToList();
+    }
+
+    private async Task ShowCtv(Guid id)
+    {
+        var parameters = new DialogParameters<CollaboratorInfoDialog> { { x => x.CollaboratorId, id } };
+        await DialogService.ShowAsync<CollaboratorInfoDialog>("Thông tin cộng tác viên", parameters);
     }
 
     private async Task OpenCreate()
@@ -113,4 +296,6 @@
         var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
         return result.Succeeded;
     }
+
+    private RenderFragment RankBadge(int rank) =>@<span class="rank-badge @(rank == 1 ? "rank-1" : rank == 2 ? "rank-2" : rank == 3 ? "rank-3" : "rank-n")">@rank</span>;
 }

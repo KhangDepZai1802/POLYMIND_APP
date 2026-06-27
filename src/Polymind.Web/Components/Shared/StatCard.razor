@@ -1,6 +1,8 @@
 @* Thẻ KPI gọn, responsive: điện thoại 2 thẻ/hàng, icon ẩn để nhường chỗ; desktop đầy đủ. *@
 <MudItem xs="6" sm="4" md="3" lg="2">
-    <MudPaper Class="pa-3 pa-sm-4 stat-card" Elevation="1" Style="height:100%">
+    <MudPaper Class="@($"pa-3 pa-sm-4 stat-card{(Clickable ? " stat-card-clickable" : "")}")" Elevation="1"
+              Style="@($"height:100%;{(Clickable ? "cursor:pointer" : "")}")"
+              @onclick="HandleClick">
         <div class="d-flex justify-space-between align-start" style="gap:8px">
             <div style="min-width:0">
                 <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="line-height:1.25">@Title</MudText>
@@ -21,4 +23,12 @@
     [Parameter] public string Icon { get; set; } = Icons.Material.Filled.Insights;
     [Parameter] public Color Color { get; set; } = Color.Primary;
     [Parameter] public string? Caption { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    private bool Clickable => OnClick.HasDelegate;
+
+    private async Task HandleClick()
+    {
+        if (Clickable) await OnClick.InvokeAsync();
+    }
 }

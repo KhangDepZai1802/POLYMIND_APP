@@ -1,0 +1,247 @@
+@page "/messages"
+@attribute [Authorize(Policy = "messages:read")]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
+
+<PageTitle>Tin nhắn — POLYMIND</PageTitle>
+
+<PageHeader Eyebrow="NỘI BỘ" Title="Tin nhắn" Subtitle="@($"{_contacts.Count} người có thể nhắn • {_contacts.Sum(c => c.Unread)} chưa đọc")" />
+
+<MudGrid>
+    @* Danh sách liên hệ *@
+    <MudItem xs="12" md="4">
+        <MudPaper Elevation="1" Class="pa-2" Style="height:100%">
+            <MudTextField @bind-Value="_search" Placeholder="Tìm người nhận..." Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" />
+            @if (_contacts.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">Không có ai bạn được phép nhắn tin.</MudAlert>
+            }
+            else
+            {
+                <MudList T="Guid" Dense="true" Class="pa-0">
+                    @foreach (var c in FilteredContacts)
+                    {
+                        <MudListItem T="Guid" OnClick="@(() => SelectContact(c.Id))"
+                                     Style="@(c.Id == _selectedId ? "background:var(--mud-palette-action-default-hover);border-radius:10px" : "border-radius:10px")">
+                            <div class="d-flex align-center" style="gap:10px">
+                                <MudBadge Content="c.Unread" Color="Color.Error" Overlap="true" Visible="c.Unread > 0">
+                                    <MudAvatar Color="Color.Primary" Size="Size.Small">@Initials(c.Name)</MudAvatar>
+                                </MudBadge>
+                                <div style="min-width:0;flex:1">
+                                    <div class="d-flex align-center" style="gap:6px">
+                                        <MudText Typo="Typo.body2" Style="font-weight:600">@c.Name</MudText>
+                                    </div>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">
+                                        @c.RoleLabel@(string.IsNullOrEmpty(c.LastBody) ? "" : $" • {c.LastBody}")
+                                    </MudText>
+                                </div>
+                            </div>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        </MudPaper>
+    </MudItem>
+
+    @* Khung hội thoại *@
+    <MudItem xs="12" md="8">
+        <MudPaper Elevation="1" Class="pa-3 d-flex flex-column" Style="height:60vh;min-height:420px">
+            @if (_selectedId is null)
+            {
+                <div class="d-flex flex-column align-center justify-center flex-grow-1 mud-text-secondary">
+                    <MudIcon Icon="@Icons.Material.Filled.Forum" Size="Size.Large" />
+                    <MudText Typo="Typo.body2" Class="mt-2">Chọn một người để bắt đầu trò chuyện.</MudText>
+                </div>
+            }
+            else
+            {
+                <div class="d-flex align-center pb-2 mb-2" style="gap:10px;border-bottom:1px solid var(--mud-palette-lines-default)">
+                    <MudAvatar Color="Color.Primary" Size="Size.Small">@Initials(_selectedName)</MudAvatar>
+                    <div>
+                        <MudText Typo="Typo.subtitle2" Style="font-weight:600">@_selectedName</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@_selectedRole</MudText>
+                    </div>
+                </div>
+
+                <div class="chat-thread flex-grow-1" style="overflow-y:auto">
+                    @if (_thread.Count == 0)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary" Align="Align.Center">Chưa có tin nhắn. Hãy gửi lời chào!</MudText>
+                    }
+                    else
+                    {
+                        @foreach (var m in _thread)
+                        {
+                            <div class="chat-bubble @(m.Mine ? "chat-mine" : "chat-theirs")">
+                                <div>@m.Body</div>
+                                <div class="chat-meta">@m.At.ToLocalTime().ToString("dd/MM HH:mm")</div>
+                            </div>
+                        }
+                    }
+                </div>
+
+                <div class="d-flex align-end mt-2" style="gap:8px">
+                    <MudTextField @bind-Value="_compose" Placeholder="Nhập tin nhắn..." Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  Lines="2" Immediate="true" Class="flex-grow-1"
+                                  OnKeyDown="OnComposeKeyDown" />
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Send"
+                               OnClick="Send" Disabled="@(_sending || string.IsNullOrWhiteSpace(_compose))">Gửi</MudButton>
+                </div>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private record Contact(Guid Id, string Name, string RoleLabel, string? LastBody, DateTimeOffset? LastAt, int Unread);
+    private record ThreadMsg(Guid Id, bool Mine, string Body, DateTimeOffset At);
+
+    private Guid _meId;
+    private List<string> _myRoles = new();
+    private List<Contact> _contacts = new();
+    private List<ThreadMsg> _thread = new();
+    private Guid? _selectedId;
+    private string _selectedName = "";
+    private string _selectedRole = "";
+    private string _search = "";
+    private string _compose = "";
+    private bool _sending;
+
+    private IEnumerable<Contact> FilteredContacts => string.IsNullOrWhiteSpace(_search)
+        ? _contacts
+        : _contacts.Where(c => c.Name.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync() => await LoadContacts();
+
+    private async Task LoadContacts()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _meId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+
+        var rolesByUser = await (from ur in db.UserRoles
+                                 join r in db.Roles on ur.RoleId equals r.Id
+                                 select new { ur.UserId, Role = r.Name! })
+            .ToListAsync();
+        var rolesMap = rolesByUser.GroupBy(x => x.UserId).ToDictionary(g => g.Key, g => g.Select(x => x.Role).ToList());
+        _myRoles = rolesMap.GetValueOrDefault(_meId, new List<string>());
+
+        var users = await db.Users.Where(u => u.Id != _meId && u.IsActive)
+            .Select(u => new { u.Id, u.FullName, u.Email })
+            .ToListAsync();
+
+        // Tin nhắn liên quan tới tôi (để tính tin cuối + chưa đọc).
+        var myMsgs = await db.Messages
+            .Where(m => m.SenderId == _meId || m.RecipientId == _meId)
+            .ToListAsync();
+
+        var contacts = new List<Contact>();
+        foreach (var u in users)
+        {
+            var roles = rolesMap.GetValueOrDefault(u.Id, new List<string>());
+            if (!MessagingPolicy.CanMessage(_myRoles, roles)) continue;
+
+            var conv = myMsgs.Where(m => (m.SenderId == _meId && m.RecipientId == u.Id)
+                                      || (m.SenderId == u.Id && m.RecipientId == _meId)).ToList();
+            var last = conv.OrderByDescending(m => m.CreatedAt).FirstOrDefault();
+            var unread = conv.Count(m => m.RecipientId == _meId && m.SenderId == u.Id && !m.IsRead);
+            contacts.Add(new Contact(
+                u.Id,
+                string.IsNullOrWhiteSpace(u.FullName) ? (u.Email ?? "Người dùng") : u.FullName,
+                MessagingPolicy.PrimaryRoleLabel(roles),
+                last is null ? null : Truncate(last.Body, 38),
+                last?.CreatedAt,
+                unread));
+        }
+
+        _contacts = contacts
+            .OrderByDescending(c => c.Unread)
+            .ThenByDescending(c => c.LastAt ?? DateTimeOffset.MinValue)
+            .ThenBy(c => c.Name)
+            .ToList();
+    }
+
+    private async Task SelectContact(Guid id)
+    {
+        _selectedId = id;
+        var c = _contacts.First(x => x.Id == id);
+        _selectedName = c.Name;
+        _selectedRole = c.RoleLabel;
+        await LoadThread();
+    }
+
+    private async Task LoadThread()
+    {
+        if (_selectedId is null) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var other = _selectedId.Value;
+
+        var msgs = await db.Messages
+            .Where(m => (m.SenderId == _meId && m.RecipientId == other)
+                     || (m.SenderId == other && m.RecipientId == _meId))
+            .OrderBy(m => m.CreatedAt)
+            .ToListAsync();
+
+        // Đánh dấu đã đọc các tin gửi cho tôi.
+        var unread = msgs.Where(m => m.RecipientId == _meId && !m.IsRead).ToList();
+        if (unread.Count > 0)
+        {
+            foreach (var m in unread) { m.IsRead = true; m.ReadAt = DateTimeOffset.UtcNow; }
+            await db.SaveChangesAsync();
+        }
+
+        _thread = msgs.Select(m => new ThreadMsg(m.Id, m.SenderId == _meId, m.Body, m.CreatedAt)).ToList();
+
+        if (unread.Count > 0) await LoadContacts(); // cập nhật badge
+    }
+
+    private async Task OnComposeKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+            await Send();
+    }
+
+    private async Task Send()
+    {
+        if (_selectedId is null || string.IsNullOrWhiteSpace(_compose) || _sending) return;
+        _sending = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+
+            // Bảo vệ phía server: xác thực lại quyền nhắn tới người nhận.
+            var recipientRoles = await (from ur in db.UserRoles
+                                        join r in db.Roles on ur.RoleId equals r.Id
+                                        where ur.UserId == _selectedId.Value
+                                        select r.Name!).ToListAsync();
+            if (!MessagingPolicy.CanMessage(_myRoles, recipientRoles))
+            {
+                Snackbar.Add("Bạn không được phép nhắn tin cho người này.", Severity.Warning);
+                return;
+            }
+
+            db.Messages.Add(new Message
+            {
+                SenderId = _meId,
+                RecipientId = _selectedId.Value,
+                Body = _compose.Trim(),
+                IsRead = false,
+            });
+            await db.SaveChangesAsync();
+            _compose = "";
+            await LoadThread();
+            await LoadContacts();
+        }
+        finally { _sending = false; }
+    }
+
+    private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max] + "…";
+
+    private static string Initials(string name)
+    {
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return "?";
+        return parts.Length == 1 ? parts[0][..1].ToUpper() : $"{parts[^2][0]}{parts[^1][0]}".ToUpper();
+    }
+}

@@ -1,0 +1,22 @@
+@* Chip "bước hiện tại": màu chuyển mượt đỏ (bước 1) → xanh lá (bước 16); bước 17 = cầu vồng lấp lánh. *@
+@if ((int)Step >= 17)
+{
+    <span class="step-chip step-rainbow" title="@Labels.Vi(Step)">@Labels.Vi(Step)</span>
+}
+else
+{
+    <span class="step-chip" style="@($"background:{Bg()}")" title="@Labels.Vi(Step)">@Labels.Vi(Step)</span>
+}
+
+@code {
+    [Parameter] public WorkflowStep Step { get; set; }
+
+    // Bước 1..16 → sắc độ HSL 0° (đỏ) tới 120° (xanh lá), chuyển mượt.
+    private string Bg()
+    {
+        var idx = (int)Step;                     // 1..16
+        var t = Math.Clamp((idx - 1) / 15.0, 0, 1);
+        var hue = t * 120;                       // 0 = đỏ, 120 = xanh lá
+        return $"hsl({hue.ToString("0", System.Globalization.CultureInfo.InvariantCulture)}, 78%, 42%)";
+    }
+}

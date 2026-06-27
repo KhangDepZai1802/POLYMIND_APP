@@ -3,6 +3,7 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AgentScope AgentScope
 @inject NavigationManager Nav
+@inject IDialogService DialogService
 
 <PageTitle>Báo cáo — POLYMIND</PageTitle>
 
@@ -47,20 +48,32 @@
 }
 else
 {
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-1 d-block">Bấm vào từng thẻ để xem thống kê sơ lược.</MudText>
     <MudGrid Spacing="2">
-        <StatCard Title="Tổng Lead" Value="@_totalLeads.ToString("N0")" Icon="@Icons.Material.Filled.ContactPhone" Color="Color.Info" />
-        <StatCard Title="Tỷ lệ chuyển đổi" Value="@($"{_conversionRate:0.#}%")" Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Primary" />
-        <StatCard Title="Ứng viên đang xử lý" Value="@_activeCandidates.ToString("N0")" Icon="@Icons.Material.Filled.Groups" Color="Color.Secondary" />
-        <StatCard Title="Doanh thu (đã thu)" Value="@($"{_totalRevenue:N0} đ")" Icon="@Icons.Material.Filled.Payments" Color="Color.Success" />
-        <StatCard Title="Tổng chi phí" Value="@($"{_totalExpense:N0} đ")" Icon="@Icons.Material.Filled.MoneyOff" Color="Color.Error" />
-        <StatCard Title="Lợi nhuận gộp" Value="@($"{(_totalRevenue - _totalExpense):N0} đ")" Icon="@Icons.Material.Filled.AccountBalance" Color="@((_totalRevenue - _totalExpense) >= 0 ? Color.Success : Color.Error)" />
-        <StatCard Title="Công nợ phải thu" Value="@($"{_receivables:N0} đ")" Icon="@Icons.Material.Filled.RequestQuote" Color="Color.Warning" />
-        <StatCard Title="Khoản thu quá hạn" Value="@_overduePayments.Count.ToString("N0")" Icon="@Icons.Material.Filled.RunningWithErrors" Color="@(_overduePayments.Count > 0 ? Color.Error : Color.Success)" />
-        <StatCard Title="Hồ sơ đã tải lên" Value="@_documentsUploaded.ToString("N0")" Icon="@Icons.Material.Filled.FolderShared" Color="Color.Info" />
-        <StatCard Title="Sắp xuất cảnh (30 ngày)" Value="@_upcomingFlights.Count.ToString("N0")" Icon="@Icons.Material.Filled.FlightTakeoff" Color="Color.Secondary" />
-        <StatCard Title="Tỷ lệ trúng tuyển" Value="@($"{_selectedRate:0.#}%")" Icon="@Icons.Material.Filled.HowToReg" Color="Color.Primary" />
-        <StatCard Title="Tỷ lệ đậu visa" Value="@($"{_visaApprovedRate:0.#}%")" Icon="@Icons.Material.Filled.AssignmentTurnedIn" Color="Color.Success" />
-        <StatCard Title="Tỷ lệ xuất cảnh" Value="@($"{_departureRate:0.#}%")" Icon="@Icons.Material.Filled.FlightTakeoff" Color="Color.Secondary" />
+        <StatCard Title="Tổng Lead" Value="@_totalLeads.ToString("N0")" Icon="@Icons.Material.Filled.ContactPhone" Color="Color.Info"
+                  OnClick="@(() => ShowStat("Tổng Lead", _totalLeads.ToString("N0"), Icons.Material.Filled.ContactPhone, Color.Info, "Tổng số lead, phân theo trạng thái.", LeadStatusDetails(), "/leads", "Mở danh sách Lead"))" />
+        <StatCard Title="Tỷ lệ chuyển đổi" Value="@($"{_conversionRate:0.#}%")" Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Primary"
+                  OnClick="@(() => ShowStat("Tỷ lệ chuyển đổi", $"{_conversionRate:0.#}%", Icons.Material.Filled.TrendingUp, Color.Primary, "Tỷ lệ lead đã chuyển thành ứng viên.", ConversionDetails()))" />
+        <StatCard Title="Ứng viên đang xử lý" Value="@_activeCandidates.ToString("N0")" Icon="@Icons.Material.Filled.Groups" Color="Color.Secondary"
+                  OnClick="@(() => ShowStat("Ứng viên đang xử lý", _activeCandidates.ToString("N0"), Icons.Material.Filled.Groups, Color.Secondary, "Phân bố ứng viên theo bước hiện tại (17 bước).", StepDetails(), "/candidates", "Mở danh sách Ứng viên"))" />
+        <StatCard Title="Doanh thu (đã thu)" Value="@($"{_totalRevenue:N0} đ")" Icon="@Icons.Material.Filled.Payments" Color="Color.Success"
+                  OnClick="@(() => ShowStat("Doanh thu (đã thu)", $"{_totalRevenue:N0} đ", Icons.Material.Filled.Payments, Color.Success, "Tổng tiền đã thu. Bảng dưới là doanh thu theo quốc gia.", RevenueCountryDetails()))" />
+        <StatCard Title="Tổng chi phí" Value="@($"{_totalExpense:N0} đ")" Icon="@Icons.Material.Filled.MoneyOff" Color="Color.Error"
+                  OnClick="@(() => ShowStat("Tổng chi phí", $"{_totalExpense:N0} đ", Icons.Material.Filled.MoneyOff, Color.Error, "Chi phí 6 tháng gần nhất.", MonthlyExpenseDetails(), "/finance", "Mở Tài chính"))" />
+        <StatCard Title="Lợi nhuận gộp" Value="@($"{(_totalRevenue - _totalExpense):N0} đ")" Icon="@Icons.Material.Filled.AccountBalance" Color="@((_totalRevenue - _totalExpense) >= 0 ? Color.Success : Color.Error)"
+                  OnClick="@(() => ShowStat("Lợi nhuận gộp", $"{(_totalRevenue - _totalExpense):N0} đ", Icons.Material.Filled.AccountBalance, (_totalRevenue - _totalExpense) >= 0 ? Color.Success : Color.Error, "Doanh thu đã thu trừ tổng chi phí.", ProfitDetails()))" />
+        <StatCard Title="Công nợ phải thu" Value="@($"{_receivables:N0} đ")" Icon="@Icons.Material.Filled.RequestQuote" Color="Color.Warning"
+                  OnClick="@(() => ShowStat("Công nợ phải thu", $"{_receivables:N0} đ", Icons.Material.Filled.RequestQuote, Color.Warning, "Tổng các khoản chưa thu.", ReceivablesDetails(), "/finance", "Mở Tài chính"))" />
+        <StatCard Title="Khoản thu quá hạn" Value="@_overduePayments.Count.ToString("N0")" Icon="@Icons.Material.Filled.RunningWithErrors" Color="@(_overduePayments.Count > 0 ? Color.Error : Color.Success)"
+                  OnClick="@(() => ShowStat("Khoản thu quá hạn", _overduePayments.Count.ToString("N0"), Icons.Material.Filled.RunningWithErrors, _overduePayments.Count > 0 ? Color.Error : Color.Success, "Các khoản thu đã quá hạn — liệt kê theo ứng viên.", OverdueListDetails(), "/finance", "Mở Tài chính"))" />
+        <StatCard Title="Sắp xuất cảnh (30 ngày)" Value="@_upcomingFlights.Count.ToString("N0")" Icon="@Icons.Material.Filled.FlightTakeoff" Color="Color.Secondary"
+                  OnClick="@(() => ShowStat("Sắp xuất cảnh (30 ngày)", _upcomingFlights.Count.ToString("N0"), Icons.Material.Filled.FlightTakeoff, Color.Secondary, "Chuyến bay xuất cảnh dự kiến trong 30 ngày tới.", UpcomingFlightDetails(), "/visa", "Mở Visa & Xuất cảnh"))" />
+        <StatCard Title="Tỷ lệ trúng tuyển" Value="@($"{_selectedRate:0.#}%")" Icon="@Icons.Material.Filled.HowToReg" Color="Color.Primary"
+                  OnClick="@(() => ShowStat("Tỷ lệ trúng tuyển", $"{_selectedRate:0.#}%", Icons.Material.Filled.HowToReg, Color.Primary, "Tỷ lệ ứng viên đạt từ bước Trúng tuyển trở đi.", FunnelDetails()))" />
+        <StatCard Title="Tỷ lệ đậu visa" Value="@($"{_visaApprovedRate:0.#}%")" Icon="@Icons.Material.Filled.AssignmentTurnedIn" Color="Color.Success"
+                  OnClick="@(() => ShowStat("Tỷ lệ đậu visa", $"{_visaApprovedRate:0.#}%", Icons.Material.Filled.AssignmentTurnedIn, Color.Success, "Tỷ lệ ứng viên đã đậu visa trở đi.", FunnelDetails()))" />
+        <StatCard Title="Tỷ lệ xuất cảnh" Value="@($"{_departureRate:0.#}%")" Icon="@Icons.Material.Filled.FlightTakeoff" Color="Color.Secondary"
+                  OnClick="@(() => ShowStat("Tỷ lệ xuất cảnh", $"{_departureRate:0.#}%", Icons.Material.Filled.FlightTakeoff, Color.Secondary, "Tỷ lệ ứng viên đã xuất cảnh trên tổng đang trong quy trình.", FunnelDetails()))" />
     </MudGrid>
 
     <MudGrid Class="mt-2">
@@ -259,27 +272,7 @@ else
     </MudGrid>
 
     <MudGrid Class="mt-2">
-        <MudItem xs="12" md="5">
-            <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
-                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Hồ sơ đã tải theo loại</b></MudText>
-                @if (_docsByType.Any())
-                {
-                    @foreach (var kv in _docsByType.OrderByDescending(x => x.Value))
-                    {
-                        <div class="d-flex align-center mb-2">
-                            <div style="width:140px">@Labels.Vi(kv.Key)</div>
-                            <MudProgressLinear Color="Color.Info" Value="@(_maxDocType == 0 ? 0 : kv.Value * 100.0 / _maxDocType)" Class="flex-grow-1 mx-3" Style="height:10px" Rounded="true" />
-                            <b>@kv.Value</b>
-                        </div>
-                    }
-                }
-                else
-                {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Chưa có hồ sơ nào được tải lên.</MudText>
-                }
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" md="7">
+        <MudItem xs="12">
             <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
                 <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Khoản thu quá hạn</b></MudText>
                 @if (_overduePayments.Any())
@@ -529,9 +522,6 @@ else
     private List<TopAgentRow> _topAgents = new();
 
     private decimal _receivables;
-    private int _documentsUploaded;
-    private Dictionary<DocumentType, int> _docsByType = new();
-    private int _maxDocType;
 
     private record OverdueRow(string CandidateName, PaymentType Type, decimal Amount, DateOnly? DueDate, int DaysOverdue);
     private List<OverdueRow> _overduePayments = new();
@@ -746,14 +736,6 @@ else
                 p.DueDate is null ? 0 : todayDate.DayNumber - p.DueDate.Value.DayNumber))
             .ToList();
 
-        // --- Hồ sơ đã tải lên ---
-        var docs = await db.CandidateDocuments
-            .Where(d => d.CurrentVersionId != null)
-            .Select(d => d.DocType).ToListAsync();
-        _documentsUploaded = docs.Count;
-        _docsByType = docs.GroupBy(t => t).ToDictionary(g => g.Key, g => g.Count());
-        _maxDocType = _docsByType.Count == 0 ? 0 : _docsByType.Values.Max();
-
         // --- Visa sắp tới (30 ngày) ---
         var horizon = todayDate.AddDays(30);
         var visas = await db.Visas
@@ -789,4 +771,75 @@ else
 
     private static bool SameMonth(DateOnly d, DateOnly month) => d.Year == month.Year && d.Month == month.Month;
     private static double Rate(int count, int total) => total == 0 ? 0 : count * 100.0 / total;
+
+    private async Task ShowStat(string title, string value, string icon, Color color, string note,
+        List<StatDetailDialog.Row>? details = null, string? link = null, string linkLabel = "Xem chi tiết")
+    {
+        var p = new DialogParameters<StatDetailDialog>
+        {
+            { x => x.Title, title }, { x => x.Value, value }, { x => x.Icon, icon }, { x => x.Color, color },
+            { x => x.Note, note }, { x => x.Details, details }, { x => x.LinkHref, link }, { x => x.LinkLabel, linkLabel },
+        };
+        await DialogService.ShowAsync<StatDetailDialog>(title, p);
+    }
+
+    private List<StatDetailDialog.Row> LeadStatusDetails() =>
+        _byStatus.OrderByDescending(x => x.Value)
+            .Select(x => new StatDetailDialog.Row(Labels.Vi(x.Key), x.Value.ToString())).ToList();
+
+    private List<StatDetailDialog.Row> ConversionDetails()
+    {
+        var converted = _byStatus.GetValueOrDefault(LeadStatus.Converted);
+        return new()
+        {
+            new("Tổng lead", _totalLeads.ToString("N0")),
+            new("Đã chuyển ứng viên", converted.ToString("N0")),
+            new("Tỷ lệ", $"{_conversionRate:0.#}%"),
+        };
+    }
+
+    private List<StatDetailDialog.Row> RevenueCountryDetails() =>
+        _revenueByCountry.Select(r => new StatDetailDialog.Row(r.Country, $"{r.Revenue:N0} đ")).ToList();
+
+    private List<StatDetailDialog.Row> ProfitDetails() => new()
+    {
+        new("Doanh thu (đã thu)", $"{_totalRevenue:N0} đ"),
+        new("Tổng chi phí", $"{_totalExpense:N0} đ"),
+        new("Lợi nhuận gộp", $"{(_totalRevenue - _totalExpense):N0} đ"),
+    };
+
+    private List<StatDetailDialog.Row> FunnelDetails() =>
+        _recruitmentFunnel.Select(f => new StatDetailDialog.Row(f.Stage, $"{f.Count} ({f.Rate:0.#}%)")).ToList();
+
+    private List<StatDetailDialog.Row> StepDetails() =>
+        _byStep.OrderBy(x => (int)x.Key)
+            .Select(x => new StatDetailDialog.Row($"{(int)x.Key}. {Labels.Vi(x.Key)}", x.Value.ToString())).ToList();
+
+    private List<StatDetailDialog.Row> MonthlyExpenseDetails() =>
+        _months.Select(m => new StatDetailDialog.Row(m.Label, $"{m.Expense:N0} đ")).ToList();
+
+    private List<StatDetailDialog.Row> ReceivablesDetails()
+    {
+        var overdueAmount = _overduePayments.Sum(p => p.Amount);
+        return new()
+        {
+            new("Tổng công nợ phải thu", $"{_receivables:N0} đ"),
+            new("Số khoản quá hạn", _overduePayments.Count.ToString("N0")),
+            new("Tiền quá hạn", $"{overdueAmount:N0} đ"),
+        };
+    }
+
+    private List<StatDetailDialog.Row> OverdueListDetails() =>
+        _overduePayments.Count == 0
+            ? new() { new("Khoản quá hạn", "0") }
+            : _overduePayments.OrderByDescending(p => p.Amount).Take(8)
+                .Select(p => new StatDetailDialog.Row($"{p.CandidateName} — {Labels.Vi(p.Type)}", $"{p.Amount:N0} đ")).ToList();
+
+    private List<StatDetailDialog.Row> UpcomingFlightDetails() =>
+        _upcomingFlights.Count == 0
+            ? new() { new("Trong 30 ngày tới", "0") }
+            : _upcomingFlights
+                .GroupBy(f => string.IsNullOrWhiteSpace(f.Destination) ? "Chưa rõ" : f.Destination!)
+                .OrderByDescending(g => g.Count())
+                .Select(g => new StatDetailDialog.Row(g.Key, $"{g.Count()} chuyến")).ToList();
 }

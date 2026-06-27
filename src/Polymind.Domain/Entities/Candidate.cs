@@ -40,6 +40,7 @@ public class Candidate : BaseEntity
     public string? BankName { get; set; }
     public string? BankAccountName { get; set; }
     public Guid? AgentId { get; set; }
+    public Guid? CollaboratorId { get; set; } // CTV trực tiếp giới thiệu (thuộc đại lý AgentId)
     public Guid CreatedBy { get; set; }
 
     public ICollection<CandidateDocument> Documents { get; set; } = new List<CandidateDocument>();

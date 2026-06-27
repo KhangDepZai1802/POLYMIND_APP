@@ -269,3 +269,83 @@ html, body {
 @media (max-width: 599.98px) {
     .af-logos img { height: 26px; }
 }
+
+/* ===== Tiền "bling bling" (gold gradient + ánh sáng quét) ===== */
+.money-bling {
+    font-weight: 800;
+    background: linear-gradient(92deg, #B8860B 0%, #E8B923 18%, #FFF4B8 40%, #E8B923 62%, #B8860B 100%);
+    background-size: 220% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    letter-spacing: .2px;
+    animation: money-shine 3.2s linear infinite;
+    text-shadow: 0 0 .5px rgba(184,134,11,.25);
+}
+@keyframes money-shine {
+    0% { background-position: 0% center; }
+    100% { background-position: 220% center; }
+}
+.money-bling .money-coin { -webkit-text-fill-color: initial; color: #E8B923; filter: drop-shadow(0 1px 1px rgba(0,0,0,.15)); }
+@media (prefers-reduced-motion: reduce) { .money-bling { animation: none; } }
+
+/* Hàng đãi ngộ trong card Jobs */
+.perk-row { display:flex; align-items:flex-start; gap:8px; }
+.perk-row .mud-icon-root { margin-top:2px; }
+
+/* Bảng thi đua: huy hiệu top 1/2/3 */
+.rank-badge { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:50%; font-weight:800; font-size:.8rem; color:#fff; }
+.rank-1 { background:linear-gradient(135deg,#FFD700,#E8B923); color:#5b4500; }
+.rank-2 { background:linear-gradient(135deg,#C0C0C0,#9aa0a6); color:#2b2f33; }
+.rank-3 { background:linear-gradient(135deg,#CD7F32,#a86a2c); }
+.rank-n { background:var(--mud-palette-lines-default); color:var(--mud-palette-text-secondary); }
+
+/* Khung hội thoại nhắn tin */
+.chat-thread { display:flex; flex-direction:column; gap:8px; padding:8px 4px; }
+.chat-bubble { max-width:78%; padding:8px 12px; border-radius:14px; font-size:.9rem; line-height:1.35; word-break:break-word; }
+.chat-mine { align-self:flex-end; background:var(--mud-palette-primary); color:var(--mud-palette-primary-text); border-bottom-right-radius:4px; }
+.chat-theirs { align-self:flex-start; background:var(--mud-palette-background-grey); color:var(--mud-palette-text-primary); border:1px solid var(--mud-palette-lines-default); border-bottom-left-radius:4px; }
+.chat-meta { font-size:.68rem; opacity:.75; margin-top:2px; }
+
+/* Thẻ KPI bấm được (Tổng quan / Báo cáo) */
+.stat-card-clickable { transition: transform .12s ease, box-shadow .12s ease; }
+.stat-card-clickable:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(13,63,120,.16); }
+.stat-card-clickable:active { transform: translateY(0); }
+
+/* ===== Chip "bước hiện tại" — gradient đỏ→xanh + bước 17 cầu vồng lấp lánh ===== */
+.step-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: .75rem;
+    font-weight: 700;
+    color: #fff;
+    white-space: nowrap;
+    line-height: 1.7;
+    text-shadow: 0 1px 1px rgba(0,0,0,.28);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+}
+.step-rainbow {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(90deg, #ff0040, #ff8c00, #ffd500, #2ecc40, #00c2d1, #2f6bff, #b14bff, #ff0040);
+    background-size: 300% 100%;
+    animation: step-rainbow-move 3s linear infinite;
+    box-shadow: 0 0 8px rgba(177,75,255,.55), inset 0 0 0 1px rgba(255,255,255,.25);
+}
+.step-rainbow::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,.85) 50%, transparent 70%);
+    transform: translateX(-120%);
+    animation: step-sparkle 2.4s ease-in-out infinite;
+}
+@keyframes step-rainbow-move { 0% { background-position: 0% 50%; } 100% { background-position: 300% 50%; } }
+@keyframes step-sparkle { 0% { transform: translateX(-120%); } 55%, 100% { transform: translateX(220%); } }
+@media (prefers-reduced-motion: reduce) {
+    .step-rainbow { animation: none; }
+    .step-rainbow::after { animation: none; }
+}

@@ -1,0 +1,68 @@
+@* Bảng nhỏ thống kê sơ lược cho 1 chỉ số KPI khi bấm vào thẻ ở Tổng quan / Báo cáo. *@
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center" style="gap:10px">
+            <MudIcon Icon="@Icon" Color="@Color" />
+            <MudText Typo="Typo.h6"><b>@Title</b></MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <div class="d-flex align-baseline mb-2" style="gap:8px">
+            <span class="stat-value" style="font-size:1.9rem;font-weight:800;color:var(--mud-palette-@ColorVar)">@Value</span>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(Note))
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">@Note</MudText>
+        }
+        @if (Details is { Count: > 0 })
+        {
+            <MudDivider Class="mb-2" />
+            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                <tbody>
+                    @foreach (var d in Details)
+                    {
+                        <tr>
+                            <td>@d.Label</td>
+                            <td style="text-align:right;font-weight:600">@d.Value</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (!string.IsNullOrWhiteSpace(LinkHref))
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.OpenInNew" Href="@LinkHref">@LinkLabel</MudButton>
+        }
+        <MudButton OnClick="@(() => MudDialog.Close())">Đóng</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    public record Row(string Label, string Value);
+
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public string Icon { get; set; } = Icons.Material.Filled.Insights;
+    [Parameter] public Color Color { get; set; } = Color.Primary;
+    [Parameter] public string? Note { get; set; }
+    [Parameter] public List<Row>? Details { get; set; }
+    [Parameter] public string? LinkHref { get; set; }
+    [Parameter] public string LinkLabel { get; set; } = "Xem chi tiết";
+
+    private string ColorVar => Color switch
+    {
+        Color.Primary => "primary",
+        Color.Secondary => "secondary",
+        Color.Tertiary => "tertiary",
+        Color.Info => "info",
+        Color.Success => "success",
+        Color.Warning => "warning",
+        Color.Error => "error",
+        Color.Dark => "dark",
+        _ => "text-primary"
+    };
+}

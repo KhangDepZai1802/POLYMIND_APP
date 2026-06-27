@@ -1,0 +1,131 @@
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_m.FullName" Label="Họ tên CTV *" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_m.Phone" Label="Số điện thoại" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_m.Email" Label="Email" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSwitch T="bool" @bind-Value="_m.IsActive" Color="Color.Success" Label="@(_m.IsActive ? "Đang hoạt động" : "Ngừng hoạt động")" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_m.Address" Label="Địa chỉ" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_m.Note" Label="Ghi chú" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Hủy</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="_saving">Lưu</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid AgentId { get; set; }
+    /// <summary>Null = thêm mới CTV cho đại lý; có giá trị = sửa CTV.</summary>
+    [Parameter] public Guid? CollaboratorId { get; set; }
+
+    private readonly FormModel _m = new();
+    private bool _saving;
+    private bool IsEdit => CollaboratorId is not null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (CollaboratorId is null) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var c = await db.Collaborators.FirstOrDefaultAsync(x => x.Id == CollaboratorId);
+        if (c is not null)
+        {
+            _m.FullName = c.FullName;
+            _m.Phone = c.Phone;
+            _m.Email = c.Email;
+            _m.Address = c.Address;
+            _m.Note = c.Note;
+            _m.IsActive = c.IsActive;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_m.FullName))
+        {
+            Snackbar.Add("Vui lòng nhập họ tên CTV.", Severity.Warning);
+            return;
+        }
+        var permission = IsEdit ? "collaborators:update" : "collaborators:create";
+        if (!await HasPermission(permission))
+        {
+            Snackbar.Add("Bạn không có quyền thực hiện thao tác này.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (IsEdit)
+            {
+                var c = await db.Collaborators.FirstOrDefaultAsync(x => x.Id == CollaboratorId);
+                if (c is null) { Snackbar.Add("Không tìm thấy CTV.", Severity.Error); return; }
+                c.FullName = _m.FullName.Trim();
+                c.Phone = _m.Phone;
+                c.Email = _m.Email;
+                c.Address = _m.Address;
+                c.Note = _m.Note;
+                c.IsActive = _m.IsActive;
+                c.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+            else
+            {
+                var seq = await db.Collaborators.CountAsync() + 1;
+                db.Collaborators.Add(new Collaborator
+                {
+                    Code = $"CTV-{DateTime.Now:yyMM}{Random.Shared.Next(100, 999)}",
+                    FullName = _m.FullName.Trim(),
+                    Phone = _m.Phone,
+                    Email = _m.Email,
+                    Address = _m.Address,
+                    Note = _m.Note,
+                    IsActive = _m.IsActive,
+                    AgentId = AgentId,
+                });
+            }
+            await db.SaveChangesAsync();
+        }
+        finally { _saving = false; }
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private async Task<bool> HasPermission(string permission)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        return result.Succeeded;
+    }
+
+    private sealed class FormModel
+    {
+        public string FullName { get; set; } = "";
+        public string? Phone { get; set; }
+        public string? Email { get; set; }
+        public string? Address { get; set; }
+        public string? Note { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+}

@@ -32,42 +32,53 @@ public static class DbSeeder
     {
         [RoleNames.Director] = Combine(
             Read("dashboard", "leads", "candidates", "job_orders", "payments", "expenses", "receipts",
-                "agents", "commissions", "visas", "flights", "reports", "users", "roles", "notifications", "audit"),
+                "agents", "collaborators", "commissions", "visas", "flights", "reports", "users", "roles", "notifications", "audit"),
             Actions("payments", "approve"),
             Actions("expenses", "approve"),
             Actions("commissions", "approve"),
-            Actions("reports", "create", "read")),
+            Actions("reports", "create", "read"),
+            Messaging()),
 
         [RoleNames.RecruitmentManager] = Combine(
             Crud("leads"),
             Actions("candidates", "create", "read", "update"),
-            Read("dashboard", "job_orders", "agents", "reports", "notifications")),
+            Actions("collaborators", "create", "read", "update"),
+            Read("dashboard", "job_orders", "agents", "reports", "notifications"),
+            Messaging()),
 
         [RoleNames.Recruiter] = Combine(
             Actions("leads", "create", "read", "update"),
             Actions("candidates", "create", "read", "update"),
-            Read("dashboard", "job_orders", "agents", "notifications")),
+            Read("dashboard", "job_orders", "agents", "collaborators", "notifications"),
+            Messaging()),
 
         [RoleNames.DocumentStaff] = Combine(
             Actions("candidates", "read", "update"),
-            Read("dashboard", "leads", "job_orders", "visas", "notifications")),
+            Read("dashboard", "leads", "job_orders", "collaborators", "visas", "notifications"),
+            Messaging()),
 
         [RoleNames.VisaStaff] = Combine(
             Actions("candidates", "read", "update"),
             AllActions("visas"),
             AllActions("flights"),
-            Read("dashboard", "job_orders", "notifications")),
+            Read("dashboard", "job_orders", "collaborators", "notifications"),
+            Messaging()),
 
         [RoleNames.Accountant] = Combine(
             AllActions("payments"),
             AllActions("expenses"),
             AllActions("receipts"),
             AllActions("commissions"),
-            Read("dashboard", "candidates", "job_orders", "agents", "reports", "notifications")),
+            Read("dashboard", "candidates", "job_orders", "agents", "collaborators", "reports", "notifications"),
+            Messaging()),
 
         [RoleNames.Agent] = Combine(
-            Read("candidates", "commissions", "notifications")),
+            Read("candidates", "collaborators", "commissions", "notifications"),
+            Messaging()),
     };
+
+    /// <summary>Quyền nhắn tin nội bộ: ai cũng đọc + gửi được (phân quyền người-nhận xử lý ở tầng service/UI).</summary>
+    private static string[] Messaging() => new[] { "messages:read", "messages:create" };
 
     public static async Task SeedAsync(IServiceProvider sp)
     {

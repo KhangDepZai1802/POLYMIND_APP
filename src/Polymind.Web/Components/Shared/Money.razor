@@ -1,0 +1,19 @@
+@* Hiển thị số tiền VNĐ kiểu "bling bling" (gradient vàng lấp lánh). *@
+@if (Amount is null)
+{
+    <span class="mud-text-secondary">@Empty</span>
+}
+else
+{
+    <span class="money-wrap" style="@($"font-size:{Size}")">
+        <span class="money-coin">💰</span><span class="money-bling">@($"{Amount.Value:N0}") @Suffix</span>
+    </span>
+}
+
+@code {
+    [Parameter] public decimal? Amount { get; set; }
+    [Parameter] public string Suffix { get; set; } = "đ";
+    [Parameter] public string Empty { get; set; } = "—";
+    /// <summary>CSS font-size (vd "1.25rem"). Mặc định theo ngữ cảnh.</summary>
+    [Parameter] public string Size { get; set; } = "inherit";
+}

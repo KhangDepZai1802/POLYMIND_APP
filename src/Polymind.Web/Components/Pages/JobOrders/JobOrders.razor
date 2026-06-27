@@ -1,3 +1,4 @@
+@page "/jobs"
 @page "/job-orders"
 @attribute [Authorize(Policy = "job_orders:read")]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
@@ -7,14 +8,14 @@
 @inject IAuthorizationService AuthorizationService
 @inject AuthenticationStateProvider AuthStateProvider
 
-<PageTitle>Đơn hàng — POLYMIND</PageTitle>
+<PageTitle>Jobs — POLYMIND</PageTitle>
 
-<PageHeader Eyebrow="TUYỂN DỤNG" Title="Đơn hàng tuyển dụng" Subtitle="@($"{_rows.Count} đơn hàng")">
+<PageHeader Eyebrow="TUYỂN DỤNG" Title="Jobs" Subtitle="@($"{Filtered.Count}/{_rows.Count} jobs")">
     <Actions>
         <AuthorizeView Policy="job_orders:create">
             <Authorized>
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">
-                    Thêm đơn hàng
+                    Thêm Job
                 </MudButton>
             </Authorized>
         </AuthorizeView>
@@ -23,18 +24,33 @@
 
 @if (_rows.Count == 0)
 {
-    <MudAlert Severity="Severity.Info">Chưa có đơn hàng nào.</MudAlert>
+    <MudAlert Severity="Severity.Info">Chưa có job nào.</MudAlert>
+}
+else
+{
+    @* Bộ lọc/sắp xếp theo nước (có quốc kỳ) *@
+    <div class="d-flex flex-wrap align-center mb-4" style="gap:8px">
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mr-1">Lọc theo nước:</MudText>
+        <MudChip T="string" Size="Size.Small" Variant="@(_country is null ? Variant.Filled : Variant.Outlined)"
+                 Color="Color.Primary" OnClick="@(() => SetCountry(null))">🌐 Tất cả (@_rows.Count)</MudChip>
+        @foreach (var c in _countries)
+        {
+            var st = CountryDisplay.Of(c.Key);
+            <MudChip T="string" Size="Size.Small" Variant="@(_country == c.Key ? Variant.Filled : Variant.Outlined)"
+                     Color="st.Color" OnClick="@(() => SetCountry(c.Key))">@st.Flag @st.Name (@c.Count)</MudChip>
+        }
+    </div>
 }
 
 <MudGrid>
-    @foreach (var j in _rows)
+    @foreach (var j in Filtered)
     {
         var country = CountryDisplay.Of(j.Country);
         var open = Labels.IsOpen(j.Status);
         <MudItem xs="12" sm="6" md="4">
             <MudCard Elevation="0" Class="@(open ? "job-card pm-card job-card--open" : "job-card pm-card")"
                      Style="@($"height:100%;cursor:pointer;border-left:5px solid var(--mud-palette-{ColorVar(open ? Color.Success : country.Color)});")"
-                     @onclick="@(() => Nav.NavigateTo($"/job-orders/{j.Id}"))">
+                     @onclick="@(() => Nav.NavigateTo($"/jobs/{j.Id}"))">
                 <MudCardContent>
                     <div class="d-flex justify-space-between align-center flex-wrap mb-2" style="gap:8px">
                         <div class="d-flex align-center" style="gap:8px;min-width:0">
@@ -63,13 +79,21 @@
                         }
                         <div class="d-flex align-center" style="gap:6px">
                             <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Small" Color="Color.Primary" />
-                            <MudText Typo="Typo.body2"><b>@j.Quantity</b> chỉ tiêu</MudText>
+                            <MudText Typo="Typo.body2"><b>@j.Quantity</b> ứng viên</MudText>
                         </div>
                         @if (!string.IsNullOrWhiteSpace(j.SalaryDescription))
                         {
                             <div class="d-flex align-center" style="gap:6px">
                                 <MudIcon Icon="@Icons.Material.Filled.Payments" Size="Size.Small" Color="Color.Success" />
-                                <MudText Typo="Typo.body2">@j.SalaryDescription</MudText>
+                                <span class="money-bling" style="font-size:1.02rem">@j.SalaryDescription</span>
+                            </div>
+                        }
+                        @if (j.CostAmount is not null)
+                        {
+                            <div class="d-flex align-center" style="gap:6px">
+                                <MudIcon Icon="@Icons.Material.Filled.AccountBalanceWallet" Size="Size.Small" Color="Color.Warning" />
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Tổng chi phí:</MudText>
+                                <Money Amount="j.CostAmount" />
                             </div>
                         }
                     </div>
@@ -84,15 +108,31 @@
 
 @code {
     private List<JobOrder> _rows = new();
+    private List<(string Key, int Count)> _countries = new();
+    private string? _country;
 
     protected override async Task OnInitializedAsync() => await Load();
+
+    private List<JobOrder> Filtered => _country is null
+        ? _rows
+        : _rows.Where(j => string.Equals(j.Country, _country, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    private void SetCountry(string? c) => _country = c;
 
     private async Task Load()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         var rows = await db.JobOrders.OrderByDescending(j => j.CreatedAt).ToListAsync();
-        // Đơn "đang tuyển (mở)" nổi lên đầu danh sách.
-        _rows = rows.OrderByDescending(j => Labels.IsOpen(j.Status)).ToList();
+        // Đơn "đang tuyển (mở)" nổi lên đầu, rồi gom theo quốc gia cho dễ nhìn.
+        _rows = rows
+            .OrderByDescending(j => Labels.IsOpen(j.Status))
+            .ThenBy(j => CountryDisplay.Of(j.Country).Name)
+            .ToList();
+        _countries = _rows
+            .GroupBy(j => j.Country)
+            .Select(g => (Key: g.Key, Count: g.Count()))
+            .OrderByDescending(x => x.Count)
+            .ToList();
     }
 
     private static string ColorVar(Color color) => color switch
@@ -112,15 +152,15 @@
     {
         if (!await HasPermission("job_orders:create"))
         {
-            Snackbar.Add("Bạn không có quyền tạo đơn hàng.", Severity.Warning);
+            Snackbar.Add("Bạn không có quyền tạo job.", Severity.Warning);
             return;
         }
 
-        var dialog = await DialogService.ShowAsync<JobOrderDialog>("Thêm đơn hàng mới");
+        var dialog = await DialogService.ShowAsync<JobOrderDialog>("Thêm Job mới");
         var result = await dialog.Result;
         if (result is not null && !result.Canceled)
         {
-            Snackbar.Add("Đã thêm đơn hàng mới", Severity.Success);
+            Snackbar.Add("Đã thêm job mới", Severity.Success);
             await Load();
         }
     }

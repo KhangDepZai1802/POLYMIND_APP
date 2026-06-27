@@ -54,84 +54,104 @@ else
                 </Authorized>
             </AuthorizeView>
 
-            <MudHidden Breakpoint="Breakpoint.SmAndDown">
-                <div class="table-scroll-x">
-                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
-                        <thead>
-                            <tr>
-                                <th>Email</th>
-                                <th>Họ tên</th>
-                                <th>Vai trò</th>
-                                <th>Trạng thái</th>
-                                <th style="text-align:right">Thao tác</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var user in _users)
-                            {
-                                <tr>
-                                    <td>@user.Email</td>
-                                    <td>@user.FullName</td>
-                                    <td style="min-width:220px">
-                                        <MudSelect T="string" @bind-Value="user.SelectedRole" Dense="true" Margin="Margin.Dense">
-                                            @foreach (var role in _roles)
-                                            {
-                                                <MudSelectItem Value="@(role.Name ?? "")">@RoleDisplay(role)</MudSelectItem>
-                                            }
-                                        </MudSelect>
-                                    </td>
-                                    <td>
-                                        <MudChip T="string" Size="Size.Small" Color="@(user.IsActive ? Color.Success : Color.Error)">
-                                            @(user.IsActive ? "Đang hoạt động" : "Đã khóa")
-                                        </MudChip>
-                                    </td>
-                                    <td style="text-align:right;white-space:nowrap">
-                                        <AuthorizeView Policy="users:update">
-                                            <Authorized>
-                                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => SaveUserRoleAsync(user))">Lưu role</MudButton>
-                                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => ToggleUserAsync(user))">
-                                                    @(user.IsActive ? "Khóa" : "Mở")
-                                                </MudButton>
-                                                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => ResetPasswordAsync(user))">Reset mật khẩu</MudButton>
-                                            </Authorized>
-                                        </AuthorizeView>
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </MudSimpleTable>
-                </div>
-            </MudHidden>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Mỗi vai trò có một bảng riêng để dễ quản lý tài khoản.</MudText>
 
-            <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
-                @foreach (var user in _users)
-                {
-                    <MudPaper Class="mobile-card pa-3" Elevation="0">
-                        <div class="d-flex justify-space-between align-center" style="gap:8px">
-                            <div style="min-width:0">
-                                <MudText Typo="Typo.subtitle2" Style="font-weight:600">@user.FullName</MudText>
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@user.Email</MudText>
+            @foreach (var grp in GroupedUsers())
+            {
+                <MudPaper Class="pa-3 mb-4" Elevation="0" Outlined="true">
+                    <div class="d-flex align-center flex-wrap mb-2" style="gap:8px">
+                        <MudIcon Icon="@grp.Icon" Color="@grp.Color" />
+                        <MudText Typo="Typo.subtitle1"><b>@grp.Label</b></MudText>
+                        <MudChip T="string" Size="Size.Small" Color="@grp.Color">@grp.Users.Count tài khoản</MudChip>
+                    </div>
+
+                    @if (grp.Users.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Chưa có tài khoản nào ở vai trò này.</MudText>
+                    }
+                    else
+                    {
+                        <MudHidden Breakpoint="Breakpoint.SmAndDown">
+                            <div class="table-scroll-x">
+                                <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                    <thead>
+                                        <tr>
+                                            <th>Email</th>
+                                            <th>Họ tên</th>
+                                            <th>Chuyển vai trò</th>
+                                            <th>Trạng thái</th>
+                                            <th style="text-align:right">Thao tác</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var user in grp.Users)
+                                        {
+                                            <tr>
+                                                <td>@user.Email</td>
+                                                <td>@user.FullName</td>
+                                                <td style="min-width:220px">
+                                                    <MudSelect T="string" @bind-Value="user.SelectedRole" Dense="true" Margin="Margin.Dense">
+                                                        @foreach (var role in _roles)
+                                                        {
+                                                            <MudSelectItem Value="@(role.Name ?? "")">@RoleDisplay(role)</MudSelectItem>
+                                                        }
+                                                    </MudSelect>
+                                                </td>
+                                                <td>
+                                                    <MudChip T="string" Size="Size.Small" Color="@(user.IsActive ? Color.Success : Color.Error)">
+                                                        @(user.IsActive ? "Đang hoạt động" : "Đã khóa")
+                                                    </MudChip>
+                                                </td>
+                                                <td style="text-align:right;white-space:nowrap">
+                                                    <AuthorizeView Policy="users:update">
+                                                        <Authorized>
+                                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => SaveUserRoleAsync(user))">Lưu role</MudButton>
+                                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => ToggleUserAsync(user))">
+                                                                @(user.IsActive ? "Khóa" : "Mở")
+                                                            </MudButton>
+                                                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => ResetPasswordAsync(user))">Reset mật khẩu</MudButton>
+                                                        </Authorized>
+                                                    </AuthorizeView>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
                             </div>
-                            <MudChip T="string" Size="Size.Small" Color="@(user.IsActive ? Color.Success : Color.Error)">@(user.IsActive ? "Đang hoạt động" : "Đã khóa")</MudChip>
-                        </div>
-                        <MudSelect T="string" @bind-Value="user.SelectedRole" Dense="true" Margin="Margin.Dense" Label="Vai trò" Class="mt-2">
-                            @foreach (var role in _roles)
+                        </MudHidden>
+
+                        <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+                            @foreach (var user in grp.Users)
                             {
-                                <MudSelectItem Value="@(role.Name ?? "")">@RoleDisplay(role)</MudSelectItem>
+                                <MudPaper Class="mobile-card pa-3" Elevation="0">
+                                    <div class="d-flex justify-space-between align-center" style="gap:8px">
+                                        <div style="min-width:0">
+                                            <MudText Typo="Typo.subtitle2" Style="font-weight:600">@user.FullName</MudText>
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@user.Email</MudText>
+                                        </div>
+                                        <MudChip T="string" Size="Size.Small" Color="@(user.IsActive ? Color.Success : Color.Error)">@(user.IsActive ? "Đang hoạt động" : "Đã khóa")</MudChip>
+                                    </div>
+                                    <MudSelect T="string" @bind-Value="user.SelectedRole" Dense="true" Margin="Margin.Dense" Label="Chuyển vai trò" Class="mt-2">
+                                        @foreach (var role in _roles)
+                                        {
+                                            <MudSelectItem Value="@(role.Name ?? "")">@RoleDisplay(role)</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                    <AuthorizeView Policy="users:update">
+                                        <Authorized>
+                                            <div class="d-flex flex-wrap justify-end mt-2" style="gap:4px">
+                                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => SaveUserRoleAsync(user))">Lưu role</MudButton>
+                                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => ToggleUserAsync(user))">@(user.IsActive ? "Khóa" : "Mở")</MudButton>
+                                                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => ResetPasswordAsync(user))">Reset mật khẩu</MudButton>
+                                            </div>
+                                        </Authorized>
+                                    </AuthorizeView>
+                                </MudPaper>
                             }
-                        </MudSelect>
-                        <AuthorizeView Policy="users:update">
-                            <Authorized>
-                                <div class="d-flex flex-wrap justify-end mt-2" style="gap:4px">
-                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => SaveUserRoleAsync(user))">Lưu role</MudButton>
-                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => ToggleUserAsync(user))">@(user.IsActive ? "Khóa" : "Mở")</MudButton>
-                                    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => ResetPasswordAsync(user))">Reset mật khẩu</MudButton>
-                                </div>
-                            </Authorized>
-                        </AuthorizeView>
-                    </MudPaper>
-                }
-            </MudHidden>
+                        </MudHidden>
+                    }
+                </MudPaper>
+            }
         </MudTabPanel>
 
         <MudTabPanel Text="Phân quyền">
@@ -326,6 +346,7 @@ else
                 FullName = user.FullName,
                 IsActive = user.IsActive,
                 Roles = roles.ToList(),
+                PrimaryRole = roles.FirstOrDefault(),
                 SelectedRole = roles.FirstOrDefault() ?? _roles.FirstOrDefault()?.Name,
             });
         }
@@ -505,6 +526,30 @@ else
     private static string RoleDisplay(ApplicationRole role)
         => $"{role.Name} — {RoleNames.All.GetValueOrDefault(role.Name ?? "", role.Description ?? "")}";
 
+    // Thứ tự + nhãn/icon/màu hiển thị cho từng bảng vai trò (cao → thấp).
+    private static readonly (string Role, string Label, string Icon, Color Color)[] RoleOrder =
+    {
+        (RoleNames.SuperAdmin, "Quyền cao nhất (Super Admin)", Icons.Material.Filled.Shield, Color.Error),
+        (RoleNames.Director, "Giám đốc", Icons.Material.Filled.Star, Color.Warning),
+        (RoleNames.RecruitmentManager, "Trưởng phòng tuyển dụng", Icons.Material.Filled.SupervisorAccount, Color.Primary),
+        (RoleNames.Recruiter, "Nhân viên tuyển dụng", Icons.Material.Filled.PersonSearch, Color.Info),
+        (RoleNames.DocumentStaff, "Bộ phận hồ sơ", Icons.Material.Filled.FolderShared, Color.Secondary),
+        (RoleNames.VisaStaff, "Bộ phận visa", Icons.Material.Filled.FlightTakeoff, Color.Tertiary),
+        (RoleNames.Accountant, "Kế toán", Icons.Material.Filled.AccountBalance, Color.Success),
+        (RoleNames.Agent, "Đại lý / CTV", Icons.Material.Filled.Handshake, Color.Dark),
+    };
+
+    private IEnumerable<(string Key, string Label, string Icon, Color Color, List<UserRow> Users)> GroupedUsers()
+    {
+        foreach (var (role, label, icon, color) in RoleOrder)
+            yield return (role, label, icon, color, _users.Where(u => u.PrimaryRole == role).ToList());
+
+        var known = RoleOrder.Select(r => r.Role).ToHashSet();
+        var others = _users.Where(u => u.PrimaryRole is null || !known.Contains(u.PrimaryRole)).ToList();
+        if (others.Count > 0)
+            yield return ("", "Chưa gán vai trò", Icons.Material.Filled.HelpOutline, Color.Default, others);
+    }
+
     private sealed class UserRow
     {
         public Guid Id { get; set; }
@@ -512,6 +557,7 @@ else
         public string FullName { get; set; } = "";
         public bool IsActive { get; set; }
         public List<string> Roles { get; set; } = new();
+        public string? PrimaryRole { get; set; }
         public string? SelectedRole { get; set; }
     }
 

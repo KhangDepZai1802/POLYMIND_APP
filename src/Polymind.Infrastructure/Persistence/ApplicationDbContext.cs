@@ -28,6 +28,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<Receipt> Receipts => Set<Receipt>();
     public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<Agent> Agents => Set<Agent>();
+    public DbSet<Collaborator> Collaborators => Set<Collaborator>();
+    public DbSet<Message> Messages => Set<Message>();
     public DbSet<AgentCommissionConfig> AgentCommissionConfigs => Set<AgentCommissionConfig>();
     public DbSet<AgentCommission> AgentCommissions => Set<AgentCommission>();
     public DbSet<Visa> Visas => Set<Visa>();
@@ -102,6 +104,22 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
         });
 
         b.Entity<Agent>().HasIndex(x => x.Code).IsUnique();
+
+        b.Entity<Collaborator>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();
+            e.HasIndex(x => x.AgentId);
+            e.HasOne(x => x.Agent)
+                .WithMany()
+                .HasForeignKey(x => x.AgentId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<Message>(e =>
+        {
+            e.HasIndex(x => new { x.RecipientId, x.IsRead });
+            e.HasIndex(x => new { x.SenderId, x.RecipientId, x.CreatedAt });
+        });
 
         b.Entity<AgentCommissionConfig>(e =>
         {

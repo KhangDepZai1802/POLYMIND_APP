@@ -15,6 +15,8 @@ public class JobOrder : BaseEntity
     public string? SalaryDescription { get; set; }
     public decimal? CostAmount { get; set; }
     public string? Requirements { get; set; }
+    public string? Benefits { get; set; } // Đãi ngộ của công ty tiếp nhận (ăn ở, bảo hiểm, tăng ca...)
+    public string? Bonus { get; set; }     // Thưởng (thưởng ký HĐ, thưởng năm, thưởng chuyên cần...)
     public DateOnly? RecruitmentStartDate { get; set; }
     public DateOnly? ExpectedDepartureDate { get; set; }
     public JobOrderStatus Status { get; set; } = JobOrderStatus.Recruiting;

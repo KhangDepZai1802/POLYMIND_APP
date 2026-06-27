@@ -27,7 +27,7 @@
                 <MudTextField @bind-Value="_m.Field" Label="Ngành nghề" Variant="Variant.Outlined" Margin="Margin.Dense" />
             </MudItem>
             <MudItem xs="12" sm="6">
-                <MudNumericField @bind-Value="_m.Quantity" Label="Số lượng" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+                <MudNumericField @bind-Value="_m.Quantity" Label="Số lượng ứng viên" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
             </MudItem>
             <MudItem xs="12" sm="6">
                 <MudTextField @bind-Value="_m.SalaryDescription" Label="Mức lương" Variant="Variant.Outlined" Margin="Margin.Dense" />
@@ -43,6 +43,16 @@
             </MudItem>
             <MudItem xs="12">
                 <MudTextField @bind-Value="_m.Requirements" Label="Yêu cầu tuyển dụng" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="3" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_m.Benefits" Label="Đãi ngộ của công ty (ăn ở, bảo hiểm, tăng ca, nghỉ phép...)"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Lines="3"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.CardGiftcard" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_m.Bonus" Label="Thưởng (thưởng ký HĐ, chuyên cần, thưởng năm...)"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.EmojiEvents" />
             </MudItem>
         </MudGrid>
     </DialogContent>
@@ -96,7 +106,7 @@
                 var j = await db.JobOrders.FirstOrDefaultAsync(x => x.Id == JobOrderId);
                 if (j is null)
                 {
-                    Snackbar.Add("Không tìm thấy đơn hàng.", Severity.Error);
+                    Snackbar.Add("Không tìm thấy job.", Severity.Error);
                     return;
                 }
                 _m.ApplyTo(j);
@@ -140,6 +150,8 @@
         public string? SalaryDescription { get; set; }
         public decimal? CostAmount { get; set; }
         public string? Requirements { get; set; }
+        public string? Benefits { get; set; }
+        public string? Bonus { get; set; }
         public DateTime? RecruitmentStartDate { get; set; }
         public DateTime? ExpectedDepartureDate { get; set; }
         public JobOrderStatus Status { get; set; } = JobOrderStatus.Recruiting;
@@ -154,6 +166,8 @@
             SalaryDescription = j.SalaryDescription;
             CostAmount = j.CostAmount;
             Requirements = j.Requirements;
+            Benefits = j.Benefits;
+            Bonus = j.Bonus;
             RecruitmentStartDate = j.RecruitmentStartDate?.ToDateTime(TimeOnly.MinValue);
             ExpectedDepartureDate = j.ExpectedDepartureDate?.ToDateTime(TimeOnly.MinValue);
             Status = j.Status;
@@ -169,6 +183,8 @@
             j.SalaryDescription = SalaryDescription;
             j.CostAmount = CostAmount;
             j.Requirements = Requirements;
+            j.Benefits = Benefits;
+            j.Bonus = Bonus;
             j.RecruitmentStartDate = RecruitmentStartDate is null ? null : DateOnly.FromDateTime(RecruitmentStartDate.Value);
             j.ExpectedDepartureDate = ExpectedDepartureDate is null ? null : DateOnly.FromDateTime(ExpectedDepartureDate.Value);
             j.Status = Status;

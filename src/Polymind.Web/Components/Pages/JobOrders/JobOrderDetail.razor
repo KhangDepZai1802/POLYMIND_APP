@@ -1,3 +1,4 @@
+@page "/jobs/{Id:guid}"
 @page "/job-orders/{Id:guid}"
 @attribute [Authorize(Policy = "job_orders:read")]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
@@ -7,7 +8,7 @@
 @inject IAuthorizationService AuthorizationService
 @inject AuthenticationStateProvider AuthStateProvider
 
-<PageTitle>Chi tiết Đơn hàng — POLYMIND</PageTitle>
+<PageTitle>Chi tiết Job — POLYMIND</PageTitle>
 
 @if (_job is null)
 {
@@ -16,10 +17,10 @@
 else
 {
     <div class="d-flex justify-space-between align-center mb-3">
-        <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/job-orders"))">Quay lại</MudButton>
+        <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/jobs"))">Quay lại</MudButton>
         @if (_canUpdate)
         {
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenEdit">Sửa đơn hàng</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenEdit">Sửa Job</MudButton>
         }
     </div>
 
@@ -42,11 +43,26 @@ else
                     @Field("Ngành nghề", _job.Field)
                     @Field("Nghiệp đoàn", _job.UnionName)
                     @Field("Số lượng", _job.Quantity.ToString())
-                    @Field("Mức lương", _job.SalaryDescription)
-                    @Field("Chi phí", _job.CostAmount is null ? null : $"{_job.CostAmount:N0} đ")
                     @Field("Bắt đầu tuyển", _job.RecruitmentStartDate?.ToString("dd/MM/yyyy"))
                     @Field("Dự kiến xuất cảnh", _job.ExpectedDepartureDate?.ToString("dd/MM/yyyy"))
                 </MudGrid>
+
+                <MudDivider Class="my-3" />
+                <div class="d-flex align-center flex-wrap" style="gap:6px">
+                    <MudIcon Icon="@Icons.Material.Filled.Payments" Size="Size.Small" Color="Color.Success" />
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Mức lương:</MudText>
+                    @if (!string.IsNullOrWhiteSpace(_job.SalaryDescription))
+                    {
+                        <span class="money-bling" style="font-size:1.1rem">@_job.SalaryDescription</span>
+                    }
+                    else { <MudText Typo="Typo.body2">—</MudText> }
+                </div>
+                <div class="d-flex align-center flex-wrap mt-1" style="gap:6px">
+                    <MudIcon Icon="@Icons.Material.Filled.AccountBalanceWallet" Size="Size.Small" Color="Color.Warning" />
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Tổng chi phí:</MudText>
+                    <Money Amount="_job.CostAmount" Size="1.1rem" />
+                </div>
+
                 @if (!string.IsNullOrWhiteSpace(_job.Requirements))
                 {
                     <MudDivider Class="my-3" />
@@ -54,14 +70,42 @@ else
                     <MudText Typo="Typo.body2">@_job.Requirements</MudText>
                 }
             </MudPaper>
+
+            @* Card đãi ngộ & thưởng của công ty tiếp nhận *@
+            <MudPaper Class="pa-4 mt-4" Elevation="1" Style="border-left:5px solid var(--mud-palette-success);">
+                <div class="d-flex align-center mb-2" style="gap:8px">
+                    <MudIcon Icon="@Icons.Material.Filled.CardGiftcard" Color="Color.Success" />
+                    <MudText Typo="Typo.subtitle1"><b>Đãi ngộ &amp; Thưởng</b></MudText>
+                </div>
+                @if (string.IsNullOrWhiteSpace(_job.Benefits) && string.IsNullOrWhiteSpace(_job.Bonus))
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true">Chưa khai báo đãi ngộ/thưởng. Bấm "Sửa Job" để bổ sung.</MudAlert>
+                }
+                else
+                {
+                    @if (!string.IsNullOrWhiteSpace(_job.Benefits))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Chế độ đãi ngộ</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-2" Style="white-space:pre-line">@_job.Benefits</MudText>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_job.Bonus))
+                    {
+                        <div class="d-flex align-center mt-1" style="gap:6px">
+                            <MudIcon Icon="@Icons.Material.Filled.EmojiEvents" Size="Size.Small" Color="Color.Warning" />
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Thưởng</MudText>
+                        </div>
+                        <MudText Typo="Typo.body2" Style="white-space:pre-line">@_job.Bonus</MudText>
+                    }
+                }
+            </MudPaper>
         </MudItem>
 
         <MudItem xs="12" md="7">
             <MudPaper Class="pa-4" Elevation="1">
-                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Ứng viên trong đơn hàng (@_candidates.Count)</b></MudText>
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Ứng viên trong job (@_candidates.Count)</b></MudText>
                 @if (_candidates.Count == 0)
                 {
-                    <MudAlert Severity="Severity.Info">Chưa có ứng viên nào được gắn vào đơn hàng này.</MudAlert>
+                    <MudAlert Severity="Severity.Info">Chưa có ứng viên nào được gắn vào job này.</MudAlert>
                 }
                 else
                 {
@@ -143,11 +187,11 @@ else
     private async Task OpenEdit()
     {
         var parameters = new DialogParameters<JobOrderDialog> { { x => x.JobOrderId, Id } };
-        var dialog = await DialogService.ShowAsync<JobOrderDialog>("Sửa đơn hàng", parameters);
+        var dialog = await DialogService.ShowAsync<JobOrderDialog>("Sửa Job", parameters);
         var result = await dialog.Result;
         if (result is not null && !result.Canceled)
         {
-            Snackbar.Add("Đã cập nhật đơn hàng", Severity.Success);
+            Snackbar.Add("Đã cập nhật job", Severity.Success);
             await Load();
         }
     }

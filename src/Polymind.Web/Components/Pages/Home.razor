@@ -3,6 +3,7 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AgentScope AgentScope
 @inject NavigationManager Nav
+@inject IDialogService DialogService
 
 <PageTitle>Tổng quan — POLYMIND</PageTitle>
 
@@ -14,21 +15,36 @@
 }
 else
 {
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-1 d-block">Bấm vào từng thẻ để xem thống kê sơ lược.</MudText>
     <MudGrid Spacing="2">
-        <StatCard Title="Tổng Lead" Value="@_totalLeads.ToString()" Icon="@Icons.Material.Filled.ContactPhone" Color="Color.Info" />
-        <StatCard Title="Lead mới hôm nay" Value="@_newLeadsToday.ToString()" Icon="@Icons.Material.Filled.FiberNew" Color="Color.Primary" />
-        <StatCard Title="Ứng viên đang xử lý" Value="@_activeCandidates.ToString()" Icon="@Icons.Material.Filled.Groups" Color="Color.Secondary" />
-        <StatCard Title="Đã xuất cảnh" Value="@_departed.ToString()" Icon="@Icons.Material.Filled.FlightTakeoff" Color="Color.Success" />
-        <StatCard Title="Tỷ lệ chuyển đổi" Value="@($"{_conversionRate:0.#}%")" Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Warning" />
-        <StatCard Title="Đơn hàng đang tuyển" Value="@_openJobOrders.ToString()" Icon="@Icons.Material.Filled.WorkOutline" Color="Color.Dark" />
-        <StatCard Title="Công nợ phải thu" Value="@($"{_receivables:N0} đ")" Icon="@Icons.Material.Filled.RequestQuote" Color="Color.Warning" />
-        <StatCard Title="Khoản thu quá hạn" Value="@_overdueCount.ToString()" Icon="@Icons.Material.Filled.RunningWithErrors" Color="@(_overdueCount > 0 ? Color.Error : Color.Success)" />
-        <StatCard Title="Sắp xuất cảnh (30 ngày)" Value="@_upcomingDepartures.ToString()" Icon="@Icons.Material.Filled.FlightTakeoff" Color="Color.Secondary" />
-        <StatCard Title="Doanh thu tháng này" Value="@($"{_monthRevenue:N0} đ")" Icon="@Icons.Material.Filled.Payments" Color="Color.Success" />
-        <StatCard Title="Quốc gia doanh thu cao" Value="@_topRevenueCountry" Icon="@Icons.Material.Filled.Public" Color="Color.Info" />
-        <StatCard Title="Tỷ lệ trúng tuyển" Value="@($"{_selectedRate:0.#}%")" Icon="@Icons.Material.Filled.HowToReg" Color="Color.Primary" />
-        <StatCard Title="Tỷ lệ đậu visa" Value="@($"{_visaApprovedRate:0.#}%")" Icon="@Icons.Material.Filled.AssignmentTurnedIn" Color="Color.Success" />
-        <StatCard Title="Tỷ lệ xuất cảnh" Value="@($"{_departureRate:0.#}%")" Icon="@Icons.Material.Filled.FlightTakeoff" Color="Color.Secondary" />
+        <StatCard Title="Tổng Lead" Value="@_totalLeads.ToString()" Icon="@Icons.Material.Filled.ContactPhone" Color="Color.Info"
+                  OnClick="@(() => ShowStat("Tổng Lead", _totalLeads.ToString(), Icons.Material.Filled.ContactPhone, Color.Info, "Tổng số lead đã thu thập trong hệ thống, phân theo trạng thái.", LeadStatusDetails(), "/leads", "Mở danh sách Lead"))" />
+        <StatCard Title="Lead mới hôm nay" Value="@_newLeadsToday.ToString()" Icon="@Icons.Material.Filled.FiberNew" Color="Color.Primary"
+                  OnClick="@(() => ShowStat("Lead mới hôm nay", _newLeadsToday.ToString(), Icons.Material.Filled.FiberNew, Color.Primary, "Số lead phát sinh trong ngày hôm nay.", NewTodayDetails(), "/leads", "Mở danh sách Lead"))" />
+        <StatCard Title="Ứng viên đang xử lý" Value="@_activeCandidates.ToString()" Icon="@Icons.Material.Filled.Groups" Color="Color.Secondary"
+                  OnClick="@(() => ShowStat("Ứng viên đang xử lý", _activeCandidates.ToString(), Icons.Material.Filled.Groups, Color.Secondary, "Phân bố ứng viên theo bước hiện tại trong quy trình 17 bước.", StepDetails(), "/candidates", "Mở danh sách Ứng viên"))" />
+        <StatCard Title="Đã xuất cảnh" Value="@_departed.ToString()" Icon="@Icons.Material.Filled.FlightTakeoff" Color="Color.Success"
+                  OnClick="@(() => ShowStat("Đã xuất cảnh", _departed.ToString(), Icons.Material.Filled.FlightTakeoff, Color.Success, "Số lượt ứng viên đã đến/qua bước Xuất cảnh. Bảng dưới là phễu tuyển dụng.", FunnelDetails()))" />
+        <StatCard Title="Tỷ lệ chuyển đổi" Value="@($"{_conversionRate:0.#}%")" Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Warning"
+                  OnClick="@(() => ShowStat("Tỷ lệ chuyển đổi", $"{_conversionRate:0.#}%", Icons.Material.Filled.TrendingUp, Color.Warning, "Tỷ lệ lead đã chuyển thành ứng viên.", ConversionDetails()))" />
+        <StatCard Title="Đơn hàng đang tuyển" Value="@_openJobOrders.ToString()" Icon="@Icons.Material.Filled.WorkOutline" Color="Color.Dark"
+                  OnClick="@(() => ShowStat("Đơn hàng đang tuyển", _openJobOrders.ToString(), Icons.Material.Filled.WorkOutline, Color.Dark, "Phân bố tất cả jobs theo trạng thái.", JobsByStatusDetails(), "/jobs", "Mở danh sách Jobs"))" />
+        <StatCard Title="Công nợ phải thu" Value="@($"{_receivables:N0} đ")" Icon="@Icons.Material.Filled.RequestQuote" Color="Color.Warning"
+                  OnClick="@(() => ShowStat("Công nợ phải thu", $"{_receivables:N0} đ", Icons.Material.Filled.RequestQuote, Color.Warning, "Tổng các khoản chưa thu (chưa thanh toán/đang chờ/quá hạn).", ReceivablesDetails(), "/finance", "Mở Tài chính"))" />
+        <StatCard Title="Khoản thu quá hạn" Value="@_overdueCount.ToString()" Icon="@Icons.Material.Filled.RunningWithErrors" Color="@(_overdueCount > 0 ? Color.Error : Color.Success)"
+                  OnClick="@(() => ShowStat("Khoản thu quá hạn", _overdueCount.ToString(), Icons.Material.Filled.RunningWithErrors, _overdueCount > 0 ? Color.Error : Color.Success, "Các khoản thu đã quá hạn thanh toán.", OverdueDetails(), "/finance", "Mở Tài chính"))" />
+        <StatCard Title="Sắp xuất cảnh (30 ngày)" Value="@_upcomingDepartures.ToString()" Icon="@Icons.Material.Filled.FlightTakeoff" Color="Color.Secondary"
+                  OnClick="@(() => ShowStat("Sắp xuất cảnh (30 ngày)", _upcomingDepartures.ToString(), Icons.Material.Filled.FlightTakeoff, Color.Secondary, "Chuyến bay xuất cảnh dự kiến trong 30 ngày tới, theo điểm đến.", UpcomingByCountryDetails(), "/visa", "Mở Visa & Xuất cảnh"))" />
+        <StatCard Title="Doanh thu tháng này" Value="@($"{_monthRevenue:N0} đ")" Icon="@Icons.Material.Filled.Payments" Color="Color.Success"
+                  OnClick="@(() => ShowStat("Doanh thu tháng này", $"{_monthRevenue:N0} đ", Icons.Material.Filled.Payments, Color.Success, "Tổng khoản đã thu trong tháng hiện tại. Bảng dưới là doanh thu theo quốc gia (toàn bộ).", RevenueCountryDetails()))" />
+        <StatCard Title="Quốc gia doanh thu cao" Value="@_topRevenueCountry" Icon="@Icons.Material.Filled.Public" Color="Color.Info"
+                  OnClick="@(() => ShowStat("Quốc gia doanh thu cao", _topRevenueCountry, Icons.Material.Filled.Public, Color.Info, "Xếp hạng doanh thu (đã thu) theo quốc gia.", RevenueCountryDetails()))" />
+        <StatCard Title="Tỷ lệ trúng tuyển" Value="@($"{_selectedRate:0.#}%")" Icon="@Icons.Material.Filled.HowToReg" Color="Color.Primary"
+                  OnClick="@(() => ShowStat("Tỷ lệ trúng tuyển", $"{_selectedRate:0.#}%", Icons.Material.Filled.HowToReg, Color.Primary, "Tỷ lệ ứng viên đạt từ bước Trúng tuyển trở đi.", FunnelDetails()))" />
+        <StatCard Title="Tỷ lệ đậu visa" Value="@($"{_visaApprovedRate:0.#}%")" Icon="@Icons.Material.Filled.AssignmentTurnedIn" Color="Color.Success"
+                  OnClick="@(() => ShowStat("Tỷ lệ đậu visa", $"{_visaApprovedRate:0.#}%", Icons.Material.Filled.AssignmentTurnedIn, Color.Success, "Tỷ lệ ứng viên đã đậu visa trở đi.", FunnelDetails()))" />
+        <StatCard Title="Tỷ lệ xuất cảnh" Value="@($"{_departureRate:0.#}%")" Icon="@Icons.Material.Filled.FlightTakeoff" Color="Color.Secondary"
+                  OnClick="@(() => ShowStat("Tỷ lệ xuất cảnh", $"{_departureRate:0.#}%", Icons.Material.Filled.FlightTakeoff, Color.Secondary, "Tỷ lệ ứng viên đã xuất cảnh trên tổng đang trong quy trình.", FunnelDetails()))" />
     </MudGrid>
 
     <MudGrid Class="mt-2">
@@ -113,9 +129,15 @@ else
     private int _overdueCount, _upcomingDepartures;
     private decimal _receivables, _monthRevenue, _maxCountryRevenue;
     private double _conversionRate, _selectedRate, _visaApprovedRate, _departureRate;
+    private int _convertedLeads, _funnelBase, _selectedCount, _visaApprovedCount, _departedCount;
     private string _topRevenueCountry = "—";
+    private int _openPaymentsCount;
+    private decimal _overdueAmount;
     private Dictionary<LeadStatus, int> _byStatus = new();
     private Dictionary<LeadSource, int> _bySource = new();
+    private Dictionary<WorkflowStep, int> _byStep = new();
+    private Dictionary<JobOrderStatus, int> _jobsByStatus = new();
+    private Dictionary<string, int> _upcomingByCountry = new();
     private record RevenueCountryRow(string Country, decimal Revenue);
     private List<RevenueCountryRow> _revenueByCountry = new();
     private record TopAgentRow(string AgentName, int CandidateCount, int DepartedCount, decimal TotalCommission);
@@ -137,6 +159,7 @@ else
         _totalLeads = await db.Leads.CountAsync();
         _newLeadsToday = await db.Leads.CountAsync(l => l.CreatedAt >= startOfDay);
         var converted = await db.Leads.CountAsync(l => l.Status == LeadStatus.Converted);
+        _convertedLeads = converted;
         _conversionRate = _totalLeads == 0 ? 0 : converted * 100.0 / _totalLeads;
 
         _activeCandidates = await db.CandidateJobOrders.CountAsync(c => c.Status == CandidateJobOrderStatus.Active);
@@ -148,16 +171,30 @@ else
         _bySource = await db.Leads.GroupBy(l => l.Source)
             .Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
 
+        _byStep = await db.CandidateJobOrders.GroupBy(c => c.CurrentStep)
+            .Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
+        _jobsByStatus = await db.JobOrders.GroupBy(j => j.Status)
+            .Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
+
         // --- Công nợ + nhắc việc ---
         var todayDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
         var openPayments = await db.Payments
             .Where(p => p.Status != PaymentStatus.Paid && p.Status != PaymentStatus.Refunded)
             .Select(p => new { p.Amount, p.DueDate, p.Status }).ToListAsync();
         _receivables = openPayments.Sum(p => p.Amount);
-        _overdueCount = openPayments.Count(p => p.Status == PaymentStatus.Overdue || (p.DueDate != null && p.DueDate < todayDate));
+        _openPaymentsCount = openPayments.Count;
+        var overduePayments = openPayments.Where(p => p.Status == PaymentStatus.Overdue || (p.DueDate != null && p.DueDate < todayDate)).ToList();
+        _overdueCount = overduePayments.Count;
+        _overdueAmount = overduePayments.Sum(p => p.Amount);
         var horizon = todayDate.AddDays(30);
-        _upcomingDepartures = await db.Flights.CountAsync(f => f.ActualDepartureAt == null
-            && f.DepartureDate != null && f.DepartureDate >= todayDate && f.DepartureDate <= horizon);
+        var upcomingFlights = await db.Flights
+            .Where(f => f.ActualDepartureAt == null && f.DepartureDate != null
+                && f.DepartureDate >= todayDate && f.DepartureDate <= horizon)
+            .Select(f => f.DestinationCountry).ToListAsync();
+        _upcomingDepartures = upcomingFlights.Count;
+        _upcomingByCountry = upcomingFlights
+            .GroupBy(c => string.IsNullOrWhiteSpace(c) ? "Chưa rõ" : c!)
+            .ToDictionary(g => g.Key, g => g.Count());
 
         // --- Dashboard doanh thu + phễu tuyển dụng ---
         var firstOfMonth = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
@@ -193,6 +230,10 @@ else
             c.CurrentStep >= WorkflowStep.VisaApproved || visaApprovedKeys.Contains((c.CandidateId, c.JobOrderId)));
         var departedCount = candidateJobs.Count(c =>
             c.CurrentStep >= WorkflowStep.Departure || departedKeys.Contains((c.CandidateId, c.JobOrderId)));
+        _funnelBase = funnelBase;
+        _selectedCount = selectedCount;
+        _visaApprovedCount = visaApprovedCount;
+        _departedCount = departedCount;
         _selectedRate = Rate(selectedCount, funnelBase);
         _visaApprovedRate = Rate(visaApprovedCount, funnelBase);
         _departureRate = Rate(departedCount, funnelBase);
@@ -228,4 +269,73 @@ else
 
     private static bool SameMonth(DateOnly d, DateOnly month) => d.Year == month.Year && d.Month == month.Month;
     private static double Rate(int count, int total) => total == 0 ? 0 : count * 100.0 / total;
+
+    private async Task ShowStat(string title, string value, string icon, Color color, string note,
+        List<StatDetailDialog.Row>? details = null, string? link = null, string linkLabel = "Xem chi tiết")
+    {
+        var p = new DialogParameters<StatDetailDialog>
+        {
+            { x => x.Title, title }, { x => x.Value, value }, { x => x.Icon, icon }, { x => x.Color, color },
+            { x => x.Note, note }, { x => x.Details, details }, { x => x.LinkHref, link }, { x => x.LinkLabel, linkLabel },
+        };
+        await DialogService.ShowAsync<StatDetailDialog>(title, p);
+    }
+
+    private List<StatDetailDialog.Row> LeadStatusDetails() =>
+        _byStatus.OrderByDescending(x => x.Value)
+            .Select(x => new StatDetailDialog.Row(Labels.Vi(x.Key), x.Value.ToString())).ToList();
+
+    private List<StatDetailDialog.Row> ConversionDetails() => new()
+    {
+        new("Tổng lead", _totalLeads.ToString("N0")),
+        new("Đã chuyển ứng viên", _convertedLeads.ToString("N0")),
+        new("Tỷ lệ", $"{_conversionRate:0.#}%"),
+    };
+
+    private List<StatDetailDialog.Row> RevenueCountryDetails() =>
+        _revenueByCountry.Select(r => new StatDetailDialog.Row(r.Country, $"{r.Revenue:N0} đ")).ToList();
+
+    private List<StatDetailDialog.Row> FunnelDetails() => new()
+    {
+        new("Đang trong quy trình", _funnelBase.ToString("N0")),
+        new("Trúng tuyển", $"{_selectedCount} ({_selectedRate:0.#}%)"),
+        new("Đậu visa", $"{_visaApprovedCount} ({_visaApprovedRate:0.#}%)"),
+        new("Xuất cảnh", $"{_departedCount} ({_departureRate:0.#}%)"),
+    };
+
+    private List<StatDetailDialog.Row> NewTodayDetails() => new()
+    {
+        new("Lead mới hôm nay", _newLeadsToday.ToString("N0")),
+        new("Tổng lead", _totalLeads.ToString("N0")),
+        new("Tỷ trọng", _totalLeads == 0 ? "0%" : $"{_newLeadsToday * 100.0 / _totalLeads:0.#}%"),
+    };
+
+    private List<StatDetailDialog.Row> StepDetails() =>
+        _byStep.OrderBy(x => (int)x.Key)
+            .Select(x => new StatDetailDialog.Row($"{(int)x.Key}. {Labels.Vi(x.Key)}", x.Value.ToString())).ToList();
+
+    private List<StatDetailDialog.Row> JobsByStatusDetails() =>
+        _jobsByStatus.OrderByDescending(x => x.Value)
+            .Select(x => new StatDetailDialog.Row(Labels.Vi(x.Key), x.Value.ToString())).ToList();
+
+    private List<StatDetailDialog.Row> ReceivablesDetails() => new()
+    {
+        new("Tổng công nợ phải thu", $"{_receivables:N0} đ"),
+        new("Số khoản chưa thu", _openPaymentsCount.ToString("N0")),
+        new("Khoản quá hạn", _overdueCount.ToString("N0")),
+        new("Tiền quá hạn", $"{_overdueAmount:N0} đ"),
+    };
+
+    private List<StatDetailDialog.Row> OverdueDetails() => new()
+    {
+        new("Số khoản quá hạn", _overdueCount.ToString("N0")),
+        new("Tổng tiền quá hạn", $"{_overdueAmount:N0} đ"),
+        new("Tổng công nợ phải thu", $"{_receivables:N0} đ"),
+    };
+
+    private List<StatDetailDialog.Row> UpcomingByCountryDetails() =>
+        _upcomingByCountry.Count == 0
+            ? new() { new("Trong 30 ngày tới", _upcomingDepartures.ToString("N0")) }
+            : _upcomingByCountry.OrderByDescending(x => x.Value)
+                .Select(x => new StatDetailDialog.Row(x.Key, $"{x.Value} chuyến")).ToList();
 }

@@ -118,6 +118,31 @@
                 </MudGrid>
             </MudTabPanel>
 
+            <MudTabPanel Text="Nguồn giới thiệu">
+                <MudGrid>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="Guid?" @bind-Value="_m.AgentId" Label="Đại lý" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                            @foreach (var a in _agents)
+                            {
+                                <MudSelectItem T="Guid?" Value="@a.Id">@a.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="Guid?" @bind-Value="_m.CollaboratorId" Label="Cộng tác viên (CTV)" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true"
+                                   Disabled="@(_m.AgentId is null)">
+                            @foreach (var c in _collaborators.Where(c => c.AgentId == _m.AgentId))
+                            {
+                                <MudSelectItem T="Guid?" Value="@c.Id">@c.FullName (@c.Code)</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Chọn đại lý trước, sau đó chọn CTV trực thuộc đại lý đó.</MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudTabPanel>
+
             @* Thông tin nhạy cảm — chỉ super_admin được xem/sửa *@
             <AuthorizeView Roles="super_admin">
                 <Authorized>
@@ -161,13 +186,19 @@
     private bool _canEditSensitiveProfile;
     private bool IsEdit => CandidateId is not null;
 
+    private List<Agent> _agents = new();
+    private List<Collaborator> _collaborators = new();
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         _canEditSensitiveProfile = authState.User.IsInRole(Polymind.Infrastructure.Persistence.Constants.RoleNames.SuperAdmin);
 
-        if (CandidateId is null) return;
         await using var db = await DbFactory.CreateDbContextAsync();
+        _agents = await db.Agents.OrderBy(a => a.Name).ToListAsync();
+        _collaborators = await db.Collaborators.OrderBy(c => c.FullName).ToListAsync();
+
+        if (CandidateId is null) return;
         var c = await db.Candidates.FirstOrDefaultAsync(x => x.Id == CandidateId);
         if (c is not null) _m.LoadFrom(c);
     }
@@ -272,6 +303,7 @@
         c.WorkExperience,
         c.Languages,
         c.AgentId,
+        c.CollaboratorId,
         c.CreatedBy,
     };
 
@@ -307,6 +339,8 @@
         public string? EducationLevel { get; set; }
         public string? WorkExperience { get; set; }
         public string? Languages { get; set; }
+        public Guid? AgentId { get; set; }
+        public Guid? CollaboratorId { get; set; }
 
         public void LoadFrom(Candidate c)
         {
@@ -339,6 +373,8 @@
             EducationLevel = c.EducationLevel;
             WorkExperience = c.WorkExperience;
             Languages = c.Languages;
+            AgentId = c.AgentId;
+            CollaboratorId = c.CollaboratorId;
         }
 
         public void ApplyTo(Candidate c, bool includeSensitiveProfile)
@@ -367,6 +403,8 @@
             c.BankAccountNumber = BankAccountNumber;
             c.BankName = BankName;
             c.BankAccountName = BankAccountName;
+            c.AgentId = AgentId;
+            c.CollaboratorId = AgentId is null ? null : CollaboratorId;
 
             if (!includeSensitiveProfile) return;
 

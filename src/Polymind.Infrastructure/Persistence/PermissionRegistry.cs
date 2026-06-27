@@ -6,8 +6,8 @@ public static class PermissionRegistry
     public static readonly string[] Resources =
     {
         "leads", "candidates", "job_orders", "payments", "expenses", "receipts",
-        "agents", "commissions", "visas", "flights", "reports", "dashboard",
-        "users", "roles", "notifications", "audit"
+        "agents", "collaborators", "commissions", "visas", "flights", "reports", "dashboard",
+        "users", "roles", "notifications", "messages", "audit"
     };
 
     public static readonly string[] Actions = { "create", "read", "update", "delete", "approve" };

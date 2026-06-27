@@ -159,6 +159,86 @@ public static class DemoDataSeeder
             .ToListAsync();
         if (cjos.Count == 0) return;
 
+        // ---- Bổ sung đại lý để bảng thi đua phong phú (idempotent theo Code) ----
+        var extraAgents = new[]
+        {
+            NewAgent("AG-000004", "Đại lý Miền Trung", "Phan Thị Hồng"),
+            NewAgent("AG-000005", "Đại lý Tây Nguyên", "Ngô Văn Tài"),
+        };
+        foreach (var a in extraAgents)
+        {
+            if (!await db.Agents.AnyAsync(x => x.Code == a.Code))
+                db.Agents.Add(a);
+        }
+        await db.SaveChangesAsync();
+
+        // ---- Cộng tác viên (CTV): mỗi đại lý có vài CTV ----
+        if (!await db.Collaborators.AnyAsync())
+        {
+            var allAgents = await db.Agents.OrderBy(a => a.Code).ToListAsync();
+            string[] ctvFirst = { "Nguyễn", "Trần", "Lê", "Phạm", "Hoàng", "Vũ", "Đặng", "Bùi", "Đỗ", "Hồ", "Dương", "Phan" };
+            string[] ctvMidLast = { "Thị Mai", "Văn Toàn", "Thị Thu", "Quốc Bảo", "Thị Hương", "Hữu Lộc", "Thị Yến", "Đức Anh", "Thị Linh", "Tuấn Kiệt", "Thị Diệu", "Minh Quân" };
+            int n = 1;
+            foreach (var agent in allAgents)
+            {
+                int count = rnd.Next(2, 5); // 2-4 CTV/đại lý
+                for (int i = 0; i < count; i++)
+                {
+                    db.Collaborators.Add(new Collaborator
+                    {
+                        Code = $"CTV-{n:0000}",
+                        FullName = $"{ctvFirst[rnd.Next(ctvFirst.Length)]} {ctvMidLast[rnd.Next(ctvMidLast.Length)]}",
+                        Phone = $"09{rnd.Next(10000000, 99999999)}",
+                        Email = $"ctv{n}@polymind.local",
+                        Address = "Việt Nam",
+                        AgentId = agent.Id,
+                        IsActive = rnd.Next(6) != 0, // ~83% đang hoạt động
+                    });
+                    n++;
+                }
+            }
+            await db.SaveChangesAsync();
+        }
+
+        // ---- Gán mỗi ứng viên vào 1 đại lý + 1 CTV của đại lý đó (ai chưa có thì backfill) ----
+        var agentsForFill = await db.Agents.OrderBy(a => a.Code).ToListAsync();
+        var ctvByAgent = (await db.Collaborators.ToListAsync())
+            .GroupBy(c => c.AgentId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        if (agentsForFill.Count > 0)
+        {
+            var candidates = await db.Candidates.ToListAsync();
+            var fillChanged = false;
+            foreach (var cand in candidates)
+            {
+                if (cand.CollaboratorId is not null) continue; // đã gắn CTV
+                var agent = cand.AgentId is Guid aid && agentsForFill.Any(a => a.Id == aid)
+                    ? agentsForFill.First(a => a.Id == aid)
+                    : agentsForFill[rnd.Next(agentsForFill.Count)];
+                cand.AgentId = agent.Id;
+                if (ctvByAgent.TryGetValue(agent.Id, out var ctvs) && ctvs.Count > 0)
+                    cand.CollaboratorId = ctvs[rnd.Next(ctvs.Count)].Id;
+                cand.UpdatedAt = DateTimeOffset.UtcNow;
+                fillChanged = true;
+            }
+            if (fillChanged) await db.SaveChangesAsync();
+        }
+
+        // ---- Backfill đãi ngộ/thưởng cho các đơn hàng cũ chưa có ----
+        var jobsNeedingPerks = await db.JobOrders
+            .Where(j => j.Benefits == null && j.Bonus == null)
+            .ToListAsync();
+        if (jobsNeedingPerks.Count > 0)
+        {
+            foreach (var j in jobsNeedingPerks)
+            {
+                j.Benefits = "• Bao ăn ở tại ký túc xá\n• Bảo hiểm đầy đủ theo luật nước sở tại\n• Tăng ca thêm thu nhập\n• 1-2 ngày nghỉ/tuần, nghỉ lễ theo công ty";
+                j.Bonus = "Thưởng ký hợp đồng, thưởng chuyên cần hàng tháng, thưởng cuối năm (lương tháng 13).";
+                j.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+            await db.SaveChangesAsync();
+        }
+
         var jobOrders = await db.JobOrders.ToDictionaryAsync(j => j.Id);
         var candAgent = await db.Candidates.ToDictionaryAsync(c => c.Id, c => c.AgentId);
 
@@ -272,6 +352,24 @@ public static class DemoDataSeeder
             }
         }
 
+        // ---- Vài tin nhắn nội bộ demo (để hộp thư không trống) ----
+        if (!await db.Messages.AnyAsync())
+        {
+            var admin = await db.Users.FirstOrDefaultAsync(u => u.NormalizedEmail == "ADMIN@POLYMIND.LOCAL");
+            var director = await db.Users.FirstOrDefaultAsync(u => u.NormalizedEmail == "DIRECTOR@POLYMIND.LOCAL");
+            var recruiter = await db.Users.FirstOrDefaultAsync(u => u.NormalizedEmail == "RECRUITER@POLYMIND.LOCAL");
+            if (admin is not null && director is not null)
+            {
+                db.Messages.Add(new Message { SenderId = admin.Id, RecipientId = director.Id, Body = "Chào sếp, em gửi báo cáo tuyển dụng tuần này nhé.", IsRead = true, ReadAt = DateTimeOffset.UtcNow.AddHours(-20), CreatedAt = DateTimeOffset.UtcNow.AddHours(-22), UpdatedAt = DateTimeOffset.UtcNow.AddHours(-22) });
+                db.Messages.Add(new Message { SenderId = director.Id, RecipientId = admin.Id, Body = "Ok em, số liệu ổn. Đẩy mạnh đơn Đức nhé.", IsRead = false, CreatedAt = DateTimeOffset.UtcNow.AddHours(-19), UpdatedAt = DateTimeOffset.UtcNow.AddHours(-19) });
+            }
+            if (recruiter is not null && admin is not null)
+            {
+                db.Messages.Add(new Message { SenderId = recruiter.Id, RecipientId = admin.Id, Body = "Anh ơi, ứng viên đơn Nhật cần duyệt hồ sơ gấp ạ.", IsRead = false, CreatedAt = DateTimeOffset.UtcNow.AddHours(-3), UpdatedAt = DateTimeOffset.UtcNow.AddHours(-3) });
+            }
+            await db.SaveChangesAsync();
+        }
+
         await db.SaveChangesAsync();
     }
 
@@ -297,6 +395,8 @@ public static class DemoDataSeeder
             Quantity = qty,
             SalaryDescription = "30-40 triệu/tháng",
             CostAmount = 120_000_000,
+            Benefits = "• Bao ăn ở tại ký túc xá\n• Bảo hiểm đầy đủ theo luật nước sở tại\n• Tăng ca thêm thu nhập\n• 1-2 ngày nghỉ/tuần, nghỉ lễ theo công ty",
+            Bonus = "Thưởng ký hợp đồng, thưởng chuyên cần hàng tháng, thưởng cuối năm (lương tháng 13).",
             Status = JobOrderStatus.Recruiting,
             RecruitmentStartDate = DateOnly.FromDateTime(now.DateTime),
             ExpectedDepartureDate = DateOnly.FromDateTime(now.AddMonths(4).DateTime),
