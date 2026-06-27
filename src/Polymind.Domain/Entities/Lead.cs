@@ -23,6 +23,9 @@ public class Lead : BaseEntity
     public Guid? InterestedJobOrderId { get; set; }
     public LeadSource Source { get; set; }
     public Guid? AgentId { get; set; }
+    /// <summary>CTV trực tiếp giới thiệu lead này (chỉ khi Source = Referral). Hiển thị "CTV-&lt;tên&gt;" ở cột Nguồn.</summary>
+    public Guid? CollaboratorId { get; set; }
+    /// <summary>Tư vấn viên phụ trách lead (tài khoản role consultant). Lưu trong AssignedTo.</summary>
     public Guid? AssignedTo { get; set; }
     public DateTimeOffset? AppointmentAt { get; set; } // lịch hẹn tư vấn sắp tới
     public LeadStatus Status { get; set; } = LeadStatus.New;

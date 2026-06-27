@@ -22,6 +22,12 @@ public static class DbSeeder
         new SeedUser("director@polymind.local", "Giám đốc", RoleNames.Director),
         new SeedUser("recruitment.manager@polymind.local", "Trưởng phòng tuyển dụng", RoleNames.RecruitmentManager),
         new SeedUser("recruiter@polymind.local", "Nhân viên tuyển dụng", RoleNames.Recruiter),
+        // 5 tư vấn viên — mỗi người 1 tài khoản, role Tư vấn viên (theo sát ứng viên).
+        new SeedUser("tuvan1@polymind.local", "Nguyễn Thị Thu Trang", RoleNames.Consultant, "0905110001"),
+        new SeedUser("tuvan2@polymind.local", "Trần Minh Đức", RoleNames.Consultant, "0905110002"),
+        new SeedUser("tuvan3@polymind.local", "Lê Thị Ngọc Ánh", RoleNames.Consultant, "0905110003"),
+        new SeedUser("tuvan4@polymind.local", "Phạm Hoàng Nam", RoleNames.Consultant, "0905110004"),
+        new SeedUser("tuvan5@polymind.local", "Vũ Thị Mỹ Linh", RoleNames.Consultant, "0905110005"),
         new SeedUser("document.staff@polymind.local", "Bộ phận hồ sơ", RoleNames.DocumentStaff),
         new SeedUser("visa.staff@polymind.local", "Bộ phận visa", RoleNames.VisaStaff),
         new SeedUser("accountant@polymind.local", "Kế toán", RoleNames.Accountant),
@@ -47,6 +53,13 @@ public static class DbSeeder
             Messaging()),
 
         [RoleNames.Recruiter] = Combine(
+            Actions("leads", "create", "read", "update"),
+            Actions("candidates", "create", "read", "update"),
+            Read("dashboard", "job_orders", "agents", "collaborators", "notifications"),
+            Messaging()),
+
+        // Tư vấn viên: theo sát lead + ứng viên mình phụ trách (quyền tương đương Nhân viên tuyển dụng).
+        [RoleNames.Consultant] = Combine(
             Actions("leads", "create", "read", "update"),
             Actions("candidates", "create", "read", "update"),
             Read("dashboard", "job_orders", "agents", "collaborators", "notifications"),
@@ -208,6 +221,7 @@ public static class DbSeeder
                 Email = seed.Email,
                 EmailConfirmed = true,
                 FullName = seed.FullName,
+                PhoneNumber = seed.Phone,
                 IsActive = true,
             };
 
@@ -240,6 +254,11 @@ public static class DbSeeder
                 user.IsActive = true;
                 changed = true;
             }
+            if (string.IsNullOrWhiteSpace(user.PhoneNumber) && !string.IsNullOrWhiteSpace(seed.Phone))
+            {
+                user.PhoneNumber = seed.Phone;
+                changed = true;
+            }
 
             if (changed)
                 await userManager.UpdateAsync(user);
@@ -264,5 +283,5 @@ public static class DbSeeder
     private static string[] Combine(params IEnumerable<string>[] groups)
         => groups.SelectMany(group => group).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
-    private sealed record SeedUser(string Email, string FullName, string Role);
+    private sealed record SeedUser(string Email, string FullName, string Role, string? Phone = null);
 }

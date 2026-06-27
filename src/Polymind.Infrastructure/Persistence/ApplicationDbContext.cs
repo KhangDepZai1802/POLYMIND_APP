@@ -68,6 +68,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
             e.HasIndex(x => x.Status);
             e.HasIndex(x => x.AssignedTo);
             e.HasIndex(x => x.Source);
+            e.HasIndex(x => x.CollaboratorId);
             e.HasIndex(x => x.CreatedAt);
         });
 
@@ -79,6 +80,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
             e.HasIndex(x => x.Phone);
             e.HasIndex(x => x.CccdNumber);
             e.HasIndex(x => x.PassportNumber);
+            e.HasIndex(x => x.ConsultantId);
         });
 
         b.Entity<Payment>(e =>

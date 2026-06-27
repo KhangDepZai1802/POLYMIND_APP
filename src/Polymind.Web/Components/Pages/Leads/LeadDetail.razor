@@ -69,8 +69,8 @@ else
 
                 <MudDivider Class="my-3" />
                 <MudGrid>
-                    @Field("Nguồn", Labels.Vi(_lead.Source))
-                    @Field("Người phụ trách", _assignedToName)
+                    @Field("Nguồn", _sourceLabel)
+                    @Field("Tư vấn viên", _assignedToName)
                     @Field("Lịch hẹn tư vấn", _lead.AppointmentAt?.ToLocalTime().ToString("dd/MM/yyyy HH:mm"))
                     @Field("Ngày tạo", _lead.CreatedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm"))
                 </MudGrid>
@@ -135,8 +135,8 @@ else
             {
                 @* Lead đã chuyển → khóa Phân công + Lịch hẹn (xám, bấm vào báo không thể đổi). *@
                 <MudPaper Class="pa-4 mb-4" Elevation="1">
-                    <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Phân công phụ trách</b></MudText>
-                    <MudSelect T="Guid?" @bind-Value="_assignTo" Label="Người phụ trách" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" Class="mb-2" Disabled="IsConverted">
+                    <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Phân công tư vấn viên</b></MudText>
+                    <MudSelect T="Guid?" @bind-Value="_assignTo" Label="Tư vấn viên" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" Class="mb-2" Disabled="IsConverted">
                         @foreach (var u in _users)
                         {
                             <MudSelectItem T="Guid?" Value="@u.Id">@u.FullName</MudSelectItem>
@@ -208,6 +208,7 @@ else
     private TimeSpan? _appointmentTime;
     private string? _assignedToName;
     private string? _interestedJobOrder;
+    private string _sourceLabel = "";
     private Guid? _convertedCandidateId;
     private bool IsConverted => _convertedCandidateId is not null;
     private record UserOption(Guid Id, string FullName);
@@ -235,9 +236,22 @@ else
             }
             _activities = await db.LeadActivities.Where(a => a.LeadId == Id)
                 .OrderByDescending(a => a.CreatedAt).ToListAsync();
-            _users = await db.Users.Where(u => u.IsActive)
+            // Người phụ trách lead = tư vấn viên (role consultant).
+            var consultantRoleId = await db.Roles
+                .Where(r => r.Name == Polymind.Infrastructure.Persistence.Constants.RoleNames.Consultant)
+                .Select(r => r.Id).FirstOrDefaultAsync();
+            _users = await db.Users
+                .Where(u => u.IsActive && db.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleId == consultantRoleId))
                 .OrderBy(u => u.FullName)
                 .Select(u => new UserOption(u.Id, u.FullName)).ToListAsync();
+
+            // Nguồn: nếu là "Giới thiệu" + có CTV → hiển thị "CTV-<tên>".
+            _sourceLabel = Labels.Vi(_lead.Source);
+            if (_lead.Source == LeadSource.Referral && _lead.CollaboratorId is Guid ctvId)
+            {
+                var ctvName = await db.Collaborators.Where(c => c.Id == ctvId).Select(c => c.FullName).FirstOrDefaultAsync();
+                if (!string.IsNullOrWhiteSpace(ctvName)) _sourceLabel = $"CTV-{ctvName}";
+            }
 
             _assignedToName = _lead.AssignedTo is null
                 ? null
@@ -493,6 +507,8 @@ else
                 WorkExperience = lead.WorkExperience,
                 Languages = lead.Languages,
                 AgentId = lead.AgentId,
+                CollaboratorId = lead.CollaboratorId, // CTV giới thiệu → tính hoa hồng khi tới bước đặt cọc
+                ConsultantId = lead.AssignedTo,        // tư vấn viên theo sát ứng viên
                 CreatedBy = adminId,
             };
             db.Candidates.Add(candidate);

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Polymind.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Polymind.Infrastructure.Persistence;
 namespace Polymind.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260627061617_AddConsultantAndLeadReferral")]
+    partial class AddConsultantAndLeadReferral
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1442,10 +1445,6 @@ namespace Polymind.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ReceiptId")
                         .HasColumnType("uuid")
                         .HasColumnName("receipt_id");
-
-                    b.Property<string>("Stage")
-                        .HasColumnType("text")
-                        .HasColumnName("stage");
 
                     b.Property<string>("Status")
                         .IsRequired()

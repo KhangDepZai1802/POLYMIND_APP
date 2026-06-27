@@ -126,6 +126,39 @@ html, body {
 .mobile-card + .mobile-card {
     margin-top: 8px;
 }
+/* Lịch đóng tiền 4 bước (trang Tài chính) — stepper ngang, tự xuống dòng trên mobile */
+.pm-stage-track {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+.pm-stage {
+    flex: 1 1 150px;
+    min-width: 150px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 12px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    text-align: center;
+    background: var(--mud-palette-surface);
+}
+.pm-stage--paid {
+    border-color: var(--mud-palette-success);
+    background: rgba(76, 175, 80, .08);
+}
+.pm-stage-label {
+    font-weight: 600;
+    font-size: .78rem;
+    line-height: 1.2;
+}
+.pm-stage-amount {
+    font-size: .85rem;
+    font-weight: 700;
+}
 /* Thẻ đơn hàng (trang /job-orders): hover nâng nhẹ; đơn đang tuyển nổi bật hơn */
 .job-card {
     transition: transform .12s ease, box-shadow .12s ease;

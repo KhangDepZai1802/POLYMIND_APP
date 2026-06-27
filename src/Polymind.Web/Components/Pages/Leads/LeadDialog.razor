@@ -65,6 +65,17 @@
                     }
                 </MudSelect>
             </MudItem>
+            @if (_model.Source == LeadSource.Referral)
+            {
+                <MudItem xs="12" sm="6">
+                    <MudAutocomplete T="Collaborator" Value="_selectedCtv" ValueChanged="OnCtvChanged"
+                                     Label="Cộng tác viên giới thiệu (CTV)" SearchFunc="SearchCtv"
+                                     ToStringFunc="@(c => c is null ? string.Empty : $"{c.FullName} ({c.Code})")"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" ResetValueOnEmptyText="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Diversity3" MaxItems="30" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Gõ tên để tìm CTV. Khi lưu, Nguồn sẽ hiển thị dạng "CTV-&lt;tên&gt;".</MudText>
+                </MudItem>
+            }
             <MudItem xs="12" sm="6">
                 <MudTextField @bind-Value="_model.TargetCountry" Label="Quốc gia mong muốn" Variant="Variant.Outlined" Margin="Margin.Dense" />
             </MudItem>
@@ -77,8 +88,9 @@
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" sm="6">
-                <MudSelect T="Guid?" @bind-Value="_model.AssignedTo" Label="Người phụ trách" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
-                    @foreach (var u in _users)
+                <MudSelect T="Guid?" @bind-Value="_model.AssignedTo" Label="Tư vấn viên" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true"
+                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.SupportAgent">
+                    @foreach (var u in _consultants)
                     {
                         <MudSelectItem T="Guid?" Value="@u.Id">@u.FullName</MudSelectItem>
                     }
@@ -106,7 +118,9 @@
     private record JobOrderOption(Guid Id, string Code, string Country);
     private record UserOption(Guid Id, string FullName);
     private List<JobOrderOption> _jobOrders = new();
-    private List<UserOption> _users = new();
+    private List<UserOption> _consultants = new();
+    private List<Collaborator> _collaborators = new();
+    private Collaborator? _selectedCtv;
 
     protected override async Task OnInitializedAsync()
     {
@@ -118,9 +132,32 @@
             .Where(j => j.Status != JobOrderStatus.Cancelled)
             .OrderByDescending(j => j.CreatedAt)
             .Select(j => new JobOrderOption(j.Id, j.Code, j.Country)).ToListAsync();
-        _users = await db.Users.Where(u => u.IsActive)
+
+        // Người phụ trách lead = tư vấn viên (role consultant).
+        var consultantRoleId = await db.Roles
+            .Where(r => r.Name == Polymind.Infrastructure.Persistence.Constants.RoleNames.Consultant)
+            .Select(r => r.Id).FirstOrDefaultAsync();
+        _consultants = await db.Users
+            .Where(u => u.IsActive && db.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleId == consultantRoleId))
             .OrderBy(u => u.FullName)
             .Select(u => new UserOption(u.Id, u.FullName)).ToListAsync();
+
+        _collaborators = await db.Collaborators.Where(c => c.IsActive).OrderBy(c => c.FullName).ToListAsync();
+    }
+
+    private Task<IEnumerable<Collaborator>> SearchCtv(string value, CancellationToken token)
+    {
+        IEnumerable<Collaborator> result = string.IsNullOrWhiteSpace(value)
+            ? _collaborators
+            : _collaborators.Where(c => c.FullName.Contains(value, StringComparison.OrdinalIgnoreCase)
+                                        || c.Code.Contains(value, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(result);
+    }
+
+    private void OnCtvChanged(Collaborator? c)
+    {
+        _selectedCtv = c;
+        _model.CollaboratorId = c?.Id;
     }
 
     private Task<IEnumerable<string>> SearchProvince(string value, CancellationToken token)
@@ -142,6 +179,12 @@
         await using var db = await DbFactory.CreateDbContextAsync();
         _model.Dob = _dob is null ? null : DateOnly.FromDateTime(_dob.Value);
         if (!_canEditSensitiveProfile) ClearSensitiveProfile(_model);
+
+        // Nguồn ≠ "Giới thiệu" → bỏ liên kết CTV. Nếu là "Giới thiệu" + có CTV → gán luôn đại lý của CTV đó.
+        if (_model.Source != LeadSource.Referral)
+            _model.CollaboratorId = null;
+        else if (_selectedCtv is not null)
+            _model.AgentId = _selectedCtv.AgentId;
 
         _model.Code = $"LD-{DateTime.Now:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}";
         _model.Status = LeadStatus.New;

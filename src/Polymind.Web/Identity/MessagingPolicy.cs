@@ -45,6 +45,6 @@ public static class MessagingPolicy
     private static readonly string[] Priority =
     {
         RoleNames.SuperAdmin, RoleNames.Director, RoleNames.RecruitmentManager, RoleNames.Recruiter,
-        RoleNames.DocumentStaff, RoleNames.VisaStaff, RoleNames.Accountant, RoleNames.Agent
+        RoleNames.Consultant, RoleNames.DocumentStaff, RoleNames.VisaStaff, RoleNames.Accountant, RoleNames.Agent
     };
 }

@@ -1,0 +1,75 @@
+@* Biểu đồ cột (dọc) hoặc thanh ngang — SVG tự dựng. *@
+@using System.Text
+
+<MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+    <div class="d-flex align-center justify-space-between mb-2">
+        <MudText Typo="Typo.subtitle1"><b>@Title</b></MudText>
+        @if (!string.IsNullOrWhiteSpace(Subtitle))
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">@Subtitle</MudText>
+        }
+    </div>
+    @if (Data is null || !Data.Any() || Data.All(d => d.Value == 0))
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Chưa có dữ liệu.</MudText>
+    }
+    else
+    {
+        <svg viewBox="0 0 600 @VbH" width="100%" style="height:auto" preserveAspectRatio="xMidYMid meet" role="img">@((MarkupString)Svg())</svg>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter, EditorRequired] public List<ChartDatum> Data { get; set; } = new();
+    [Parameter] public bool Horizontal { get; set; }
+    [Parameter] public bool Money { get; set; }
+    [Parameter] public string Unit { get; set; } = "";
+
+    private double Max => Data.Count == 0 ? 0 : Math.Max(Data.Max(d => d.Value), 0);
+    private const int LabelW = 130;
+    private const int RowH = 34;
+    private const int Pad = 10;
+    private const double BaseY = 196;
+    private int VbH => Horizontal ? Pad * 2 + Data.Count * RowH : 230;
+
+    private string ValLabel(double v) => Money ? ChartKit.Compact(v) : (v.ToString("0.##") + (string.IsNullOrEmpty(Unit) ? "" : " " + Unit));
+    private static string Trim(string s) => s.Length > 20 ? s[..19] + "…" : s;
+
+    private string Svg()
+    {
+        var sb = new StringBuilder();
+        if (Horizontal)
+        {
+            for (int i = 0; i < Data.Count; i++)
+            {
+                var d = Data[i];
+                var y = Pad + i * RowH;
+                var barH = RowH * 0.6;
+                var w = Max <= 0 ? 0 : d.Value / Max * (600 - LabelW - 70);
+                var color = d.Color ?? ChartKit.Color(i);
+                sb.Append(ChartKit.Text(LabelW - 6, y + barH / 2 + 4, Trim(d.Label), 12, "end", "var(--mud-palette-text-secondary)"));
+                sb.Append(ChartKit.Rect(LabelW, y, w, barH, color, 4, 0.9));
+                sb.Append(ChartKit.Text(LabelW + w + 6, y + barH / 2 + 4, ValLabel(d.Value), 12, "start", "var(--mud-palette-text-primary)", "600"));
+            }
+        }
+        else
+        {
+            sb.Append(ChartKit.Line(40, BaseY, 588, BaseY, "var(--mud-palette-lines-default)"));
+            var slot = (588.0 - 44) / Data.Count;
+            for (int i = 0; i < Data.Count; i++)
+            {
+                var d = Data[i];
+                var bw = slot * 0.6;
+                var x = 44 + i * slot + (slot - bw) / 2;
+                var h = Max <= 0 ? 0 : d.Value / Max * (BaseY - 24);
+                var color = d.Color ?? ChartKit.Color(i);
+                sb.Append(ChartKit.Rect(x, BaseY - h, bw, h, color, 4, 0.9));
+                sb.Append(ChartKit.Text(x + bw / 2, BaseY - h - 5, ValLabel(d.Value), 11, "middle", "var(--mud-palette-text-primary)", "600"));
+                sb.Append(ChartKit.Text(x + bw / 2, BaseY + 16, Trim(d.Label), 10.5, "middle", "var(--mud-palette-text-secondary)"));
+            }
+        }
+        return sb.ToString();
+    }
+}

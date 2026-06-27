@@ -1,0 +1,100 @@
+@* Biểu đồ kết hợp: cột nhóm (BarSeries) + đường phủ lên (LineSeries) — SVG tự dựng. *@
+@using System.Text
+
+<MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+    <div class="d-flex align-center justify-space-between mb-2">
+        <MudText Typo="Typo.subtitle1"><b>@Title</b></MudText>
+        @if (!string.IsNullOrWhiteSpace(Subtitle))
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">@Subtitle</MudText>
+        }
+    </div>
+    @if (XLabels is null || XLabels.Length == 0 || (BarSeries.Count == 0 && LineSeries is null) || Range <= 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Chưa có dữ liệu.</MudText>
+    }
+    else
+    {
+        <svg viewBox="0 0 600 290" width="100%" style="height:auto" preserveAspectRatio="xMidYMid meet" role="img">@((MarkupString)Svg())</svg>
+        <div class="d-flex flex-wrap gap-3 mt-2 justify-center">
+            @foreach (var s in BarSeries)
+            {
+                <span class="d-inline-flex align-center" style="gap:6px">
+                    <span style="width:12px;height:12px;border-radius:3px;background:@s.Color;display:inline-block"></span>
+                    <MudText Typo="Typo.caption">@s.Name</MudText>
+                </span>
+            }
+            @if (LineSeries is not null)
+            {
+                <span class="d-inline-flex align-center" style="gap:6px">
+                    <span style="width:16px;height:3px;border-radius:2px;background:@LineSeries.Color;display:inline-block"></span>
+                    <MudText Typo="Typo.caption">@LineSeries.Name</MudText>
+                </span>
+            }
+        </div>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter, EditorRequired] public string[] XLabels { get; set; } = Array.Empty<string>();
+    [Parameter] public List<ChartLineSeries> BarSeries { get; set; } = new();
+    [Parameter] public ChartLineSeries? LineSeries { get; set; }
+
+    private const double PlotLeft = 46, Top = 14, Bottom = 258;
+
+    private IEnumerable<double> AllValues =>
+        BarSeries.SelectMany(s => s.Values).Concat(LineSeries?.Values ?? Array.Empty<double>());
+    private double MaxV => AllValues.Any() ? Math.Max(1, AllValues.Max()) : 1;
+    private double MinV => AllValues.Any() ? Math.Min(0, AllValues.Min()) : 0;
+    private double Range => MaxV - MinV;
+
+    private double Y(double v) => Bottom - (v - MinV) / Range * (Bottom - Top);
+    private double CenterX(int i)
+    {
+        var slot = (588.0 - PlotLeft) / XLabels.Length;
+        return PlotLeft + i * slot + slot / 2;
+    }
+
+    private string Svg()
+    {
+        var sb = new StringBuilder();
+        for (int t = 0; t <= 4; t++)
+        {
+            var gy = Top + (Bottom - Top) * t / 4.0;
+            var val = MaxV - Range * t / 4.0;
+            sb.Append(ChartKit.Line(PlotLeft, gy, 588, gy, "var(--mud-palette-lines-default)", 0.7, 0.55));
+            sb.Append(ChartKit.Text(PlotLeft - 5, gy + 3, ChartKit.Compact(val), 10, "end", "var(--mud-palette-text-secondary)"));
+        }
+        sb.Append(ChartKit.Line(PlotLeft, Y(0), 588, Y(0), "var(--mud-palette-lines-default)", 1));
+
+        var slot = (588.0 - PlotLeft) / XLabels.Length;
+        for (int i = 0; i < XLabels.Length; i++)
+        {
+            var groupW = slot * 0.62;
+            var bw = BarSeries.Count == 0 ? groupW : groupW / BarSeries.Count;
+            var gx = PlotLeft + i * slot + (slot - groupW) / 2;
+            for (int b = 0; b < BarSeries.Count; b++)
+            {
+                var v = i < BarSeries[b].Values.Length ? BarSeries[b].Values[i] : 0;
+                var x = gx + b * bw;
+                var y0 = Y(0);
+                var y1 = Y(v);
+                sb.Append(ChartKit.Rect(x, Math.Min(y0, y1), bw * 0.86, Math.Abs(y0 - y1), BarSeries[b].Color, 3, 0.9));
+            }
+            sb.Append(ChartKit.Text(gx + groupW / 2, 282, XLabels[i], 10.5, "middle", "var(--mud-palette-text-secondary)"));
+        }
+
+        if (LineSeries is not null)
+        {
+            var pts = new StringBuilder();
+            for (int i = 0; i < LineSeries.Values.Length; i++)
+                pts.Append(ChartKit.F(CenterX(i))).Append(',').Append(ChartKit.F(Y(LineSeries.Values[i]))).Append(' ');
+            sb.Append(ChartKit.Polyline(pts.ToString().Trim(), LineSeries.Color, 2.6));
+            for (int i = 0; i < LineSeries.Values.Length; i++)
+                sb.Append(ChartKit.Circle(CenterX(i), Y(LineSeries.Values[i]), 3.5, LineSeries.Color));
+        }
+        return sb.ToString();
+    }
+}

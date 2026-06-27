@@ -61,6 +61,15 @@ public enum PaymentType
 
 public enum PaymentStatus { Pending, Partial, Paid, Overdue, Refunded }
 
+/// <summary>4 bước đóng tiền của ứng viên theo chi phí đơn hàng (20/30/30/20). Giá trị = thứ tự bước.</summary>
+public enum PaymentStage
+{
+    Deposit = 1,      // Đặt cọc
+    ServiceFee = 2,   // Đóng phí dịch vụ
+    PreDeparture = 3, // Đóng phí trước xuất cảnh
+    Settlement = 4    // Tất toán
+}
+
 public enum PaymentMethod { Cash, BankTransfer, Other }
 
 /// <summary>Loại khoản chi (mục 7.2).</summary>

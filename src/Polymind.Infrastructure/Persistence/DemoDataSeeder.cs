@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Polymind.Domain.Entities;
 using Polymind.Domain.Enums;
+using Polymind.Infrastructure.Persistence.Constants;
 
 namespace Polymind.Infrastructure.Persistence;
 
@@ -224,6 +225,74 @@ public static class DemoDataSeeder
             if (fillChanged) await db.SaveChangesAsync();
         }
 
+        // ---- Tư vấn viên (role consultant): gắn mỗi ứng viên với 1 TVV (1 TVV : nhiều ứng viên) ----
+        var consultantRoleId = await db.Roles.Where(r => r.Name == RoleNames.Consultant).Select(r => r.Id).FirstOrDefaultAsync();
+        var consultantIds = consultantRoleId == default
+            ? new List<Guid>()
+            : await db.UserRoles.Where(ur => ur.RoleId == consultantRoleId).Select(ur => ur.UserId).ToListAsync();
+        if (consultantIds.Count > 0)
+        {
+            var needConsultant = await db.Candidates.Where(c => c.ConsultantId == null).ToListAsync();
+            foreach (var cand in needConsultant)
+            {
+                cand.ConsultantId = consultantIds[rnd.Next(consultantIds.Count)];
+                cand.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+            if (needConsultant.Count > 0) await db.SaveChangesAsync();
+        }
+
+        // ---- Lead có nguồn "Giới thiệu" từ CTV (hiển thị "CTV-<tên>" ở cột Nguồn) ----
+        // Idempotent: chỉ seed nếu chưa có lead nào gắn CollaboratorId.
+        if (!await db.Leads.AnyAsync(l => l.CollaboratorId != null))
+        {
+            var ctvList = await db.Collaborators.Where(c => c.IsActive).OrderBy(c => c.Code).ToListAsync();
+            if (ctvList.Count > 0 && consultantIds.Count > 0)
+            {
+                string[] rFirst = { "Nguyễn", "Trần", "Lê", "Phạm", "Hoàng", "Vũ", "Đặng", "Bùi", "Đỗ", "Hồ", "Ngô", "Dương" };
+                string[] rMidLast = { "Văn Thành", "Thị Hoa", "Minh Tuấn", "Quốc Việt", "Thị Trang", "Hữu Phước", "Thị Kiều", "Đức Huy", "Thị Ngân", "Tuấn Anh", "Thị Hằng", "Bá Lộc" };
+                string[] rProvinces = { "Nghệ An", "Hà Tĩnh", "Thanh Hóa", "Quảng Bình", "Nam Định", "Bắc Giang", "Hải Dương", "Phú Thọ" };
+                string[] rCountries = { "Nhật Bản", "Đài Loan", "Hàn Quốc", "Đức" };
+                var leadStatuses = new[] { LeadStatus.New, LeadStatus.Contacted, LeadStatus.Interested, LeadStatus.Appointment, LeadStatus.Consulting };
+
+                var referralLeads = new List<Lead>();
+                for (int i = 0; i < 12; i++)
+                {
+                    var ctv = ctvList[rnd.Next(ctvList.Count)];
+                    var createdAt = DateTimeOffset.UtcNow.AddDays(-rnd.Next(0, 20)).AddHours(-rnd.Next(0, 24));
+                    referralLeads.Add(new Lead
+                    {
+                        Code = $"LD-{createdAt:yyyyMMdd}-{7000 + i}",
+                        FullName = $"{rFirst[rnd.Next(rFirst.Length)]} {rMidLast[rnd.Next(rMidLast.Length)]}",
+                        Phone = $"09{rnd.Next(10000000, 99999999)}",
+                        Province = rProvinces[rnd.Next(rProvinces.Length)],
+                        TargetCountry = rCountries[rnd.Next(rCountries.Length)],
+                        Source = LeadSource.Referral,
+                        CollaboratorId = ctv.Id,   // CTV giới thiệu → cột Nguồn hiện "CTV-<tên>"
+                        AgentId = ctv.AgentId,
+                        AssignedTo = consultantIds[rnd.Next(consultantIds.Count)], // tư vấn viên phụ trách
+                        Status = leadStatuses[rnd.Next(leadStatuses.Length)],
+                        Gender = rnd.Next(2) == 0 ? Gender.Male : Gender.Female,
+                        CreatedAt = createdAt,
+                        UpdatedAt = createdAt,
+                    });
+                }
+                db.Leads.AddRange(referralLeads);
+                foreach (var l in referralLeads)
+                {
+                    db.LeadActivities.Add(new LeadActivity
+                    {
+                        LeadId = l.Id,
+                        ActivityType = LeadActivityType.Note,
+                        Content = "Tạo lead mới (nguồn: CTV giới thiệu)",
+                        NewStatus = l.Status,
+                        CreatedAt = l.CreatedAt,
+                        UpdatedAt = l.CreatedAt,
+                    });
+                }
+                await db.SaveChangesAsync();
+            }
+        }
+
         // ---- Backfill đãi ngộ/thưởng cho các đơn hàng cũ chưa có ----
         var jobsNeedingPerks = await db.JobOrders
             .Where(j => j.Benefits == null && j.Bonus == null)
@@ -350,6 +419,49 @@ public static class DemoDataSeeder
                     });
                 }
             }
+        }
+
+        // ---- Lịch đóng tiền 4 bước cho ứng viên đã xếp vào đơn hàng (20/30/30/20 chi phí đơn hàng) ----
+        if (!await db.Payments.AnyAsync(p => p.Stage != null))
+        {
+            var stagePlan = new (PaymentStage Stage, double Ratio, PaymentType Type, WorkflowStep PaidFrom)[]
+            {
+                (PaymentStage.Deposit,      0.20, PaymentType.Deposit,     WorkflowStep.Deposit),     // đặt cọc
+                (PaymentStage.ServiceFee,   0.30, PaymentType.ServiceFee,  WorkflowStep.Selected),    // phí dịch vụ
+                (PaymentStage.PreDeparture, 0.30, PaymentType.TrainingFee, WorkflowStep.FullPayment), // phí trước xuất cảnh
+                (PaymentStage.Settlement,   0.20, PaymentType.OtherIncome, WorkflowStep.Departure),   // tất toán
+            };
+            foreach (var x in cjos)
+            {
+                var jo = jobOrders[x.JobOrderId];
+                var total = jo.CostAmount ?? 0m;
+                if (total <= 0) continue;
+                decimal running = 0;
+                for (int i = 0; i < stagePlan.Length; i++)
+                {
+                    var sp = stagePlan[i];
+                    var amount = i == stagePlan.Length - 1
+                        ? total - running
+                        : Math.Round(total * (decimal)sp.Ratio, 0, MidpointRounding.AwayFromZero);
+                    if (i < stagePlan.Length - 1) running += amount;
+                    var paid = (int)x.CurrentStep >= (int)sp.PaidFrom;
+                    db.Payments.Add(new Payment
+                    {
+                        Code = $"PT-{DateTime.UtcNow:yyyyMMdd}-{rnd.Next(1000, 9999)}",
+                        CandidateId = x.CandidateId,
+                        JobOrderId = x.JobOrderId,
+                        PaymentType = sp.Type,
+                        Stage = sp.Stage,
+                        Amount = amount,
+                        Status = paid ? PaymentStatus.Paid : PaymentStatus.Pending,
+                        PaidDate = paid ? DateOnly.FromDateTime(DateTime.UtcNow) : null,
+                        Notes = $"Bước {(int)sp.Stage} — lịch đóng tiền theo chi phí đơn hàng",
+                        CreatedBy = adminId,
+                        ApprovedBy = paid ? adminId : null,
+                    });
+                }
+            }
+            await db.SaveChangesAsync();
         }
 
         // ---- Vài tin nhắn nội bộ demo (để hộp thư không trống) ----

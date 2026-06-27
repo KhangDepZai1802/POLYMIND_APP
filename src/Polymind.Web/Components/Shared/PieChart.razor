@@ -1,0 +1,61 @@
+@* Biểu đồ tròn (Donut=false) hoặc vành khuyên (Donut=true) — SVG tự dựng + chú giải. *@
+@using System.Text
+
+<MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+    <MudText Typo="Typo.subtitle1" Class="mb-2"><b>@Title</b></MudText>
+    @if (Data is null || !Data.Any() || Total <= 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Chưa có dữ liệu.</MudText>
+    }
+    else
+    {
+        <svg viewBox="0 0 560 250" width="100%" style="height:auto" preserveAspectRatio="xMidYMid meet" role="img">@((MarkupString)Svg())</svg>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public List<ChartDatum> Data { get; set; } = new();
+    [Parameter] public bool Donut { get; set; }
+
+    private double Total => Data?.Sum(d => Math.Max(0, d.Value)) ?? 0;
+    private string Pct(double v) => Total <= 0 ? "0%" : (v / Total * 100).ToString("0.#") + "%";
+    private static string Trim(string s) => s.Length > 22 ? s[..21] + "…" : s;
+
+    private string Svg()
+    {
+        var sb = new StringBuilder();
+        double acc = 0;
+        for (int i = 0; i < Data.Count; i++)
+        {
+            var d = Data[i];
+            if (d.Value <= 0) continue;
+            var frac = d.Value / Total;
+            var start = acc * 360;
+            var end = (acc + frac) * 360;
+            acc += frac;
+            var color = d.Color ?? ChartKit.Color(i);
+            if (frac >= 0.9999)
+            {
+                sb.Append(ChartKit.Circle(125, 125, 100, color));
+                if (Donut) sb.Append(ChartKit.Circle(125, 125, 55, "var(--mud-palette-surface)"));
+            }
+            else
+            {
+                sb.Append($"<path d=\"{ChartKit.Arc(125, 125, 100, Donut ? 55 : 0, start, end)}\" fill=\"{color}\" stroke=\"var(--mud-palette-surface)\" stroke-width=\"1.5\" />");
+            }
+        }
+        // chú giải bên phải
+        var legend = Data.Where(d => d.Value > 0).Take(8).ToList();
+        for (int i = 0; i < legend.Count; i++)
+        {
+            var d = legend[i];
+            var ly = 26 + i * 26;
+            var color = d.Color ?? ChartKit.Color(Data.IndexOf(d));
+            sb.Append(ChartKit.Rect(270, ly - 11, 13, 13, color, 3));
+            sb.Append(ChartKit.Text(290, ly, Trim(d.Label), 12.5, "start", "var(--mud-palette-text-primary)"));
+            sb.Append(ChartKit.Text(556, ly, $"{d.Value:0.##} ({Pct(d.Value)})", 12.5, "end", "var(--mud-palette-text-secondary)", "600"));
+        }
+        return sb.ToString();
+    }
+}

@@ -1,0 +1,86 @@
+@* Biểu đồ đường (Area=false) hoặc biểu đồ miền (Area=true) — đa chuỗi, SVG tự dựng. *@
+@using System.Text
+
+<MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+    <div class="d-flex align-center justify-space-between mb-2">
+        <MudText Typo="Typo.subtitle1"><b>@Title</b></MudText>
+        @if (!string.IsNullOrWhiteSpace(Subtitle))
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">@Subtitle</MudText>
+        }
+    </div>
+    @if (Series is null || !Series.Any() || XLabels is null || XLabels.Length == 0 || Max <= 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Chưa có dữ liệu.</MudText>
+    }
+    else
+    {
+        <svg viewBox="0 0 600 280" width="100%" style="height:auto" preserveAspectRatio="xMidYMid meet" role="img">@((MarkupString)Svg())</svg>
+        <div class="d-flex flex-wrap gap-3 mt-2 justify-center">
+            @foreach (var s in Series)
+            {
+                <span class="d-inline-flex align-center" style="gap:6px">
+                    <span style="width:12px;height:12px;border-radius:3px;background:@s.Color;display:inline-block"></span>
+                    <MudText Typo="Typo.caption">@s.Name</MudText>
+                </span>
+            }
+        </div>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter, EditorRequired] public string[] XLabels { get; set; } = Array.Empty<string>();
+    [Parameter, EditorRequired] public List<ChartLineSeries> Series { get; set; } = new();
+    [Parameter] public bool Area { get; set; }
+
+    private const double PlotLeft = 46, PlotRight = 588, Top = 14, Bottom = 250;
+    private double Max => Series.Count == 0 ? 0 : Math.Max(1, Series.Max(s => s.Values.DefaultIfEmpty(0).Max()));
+    private int N => XLabels.Length;
+
+    private double X(int i) => N <= 1 ? (PlotLeft + PlotRight) / 2 : PlotLeft + (PlotRight - PlotLeft) * i / (N - 1);
+    private double Y(double v) => Bottom - (Max <= 0 ? 0 : v / Max * (Bottom - Top));
+
+    private string Svg()
+    {
+        var sb = new StringBuilder();
+        for (int t = 0; t <= 4; t++)
+        {
+            var gy = Top + (Bottom - Top) * t / 4.0;
+            var val = Max * (4 - t) / 4.0;
+            sb.Append(ChartKit.Line(PlotLeft, gy, 588, gy, "var(--mud-palette-lines-default)", 0.7, 0.6));
+            sb.Append(ChartKit.Text(PlotLeft - 5, gy + 3, ChartKit.Compact(val), 10, "end", "var(--mud-palette-text-secondary)"));
+        }
+        for (int i = 0; i < XLabels.Length; i++)
+            sb.Append(ChartKit.Text(X(i), 272, XLabels[i], 10.5, "middle", "var(--mud-palette-text-secondary)"));
+
+        foreach (var s in Series)
+        {
+            if (Area) sb.Append(ChartKit.Path(AreaPath(s), s.Color, "none", 0, 0.16));
+            sb.Append(ChartKit.Polyline(Points(s), s.Color, 2.5));
+            for (int i = 0; i < s.Values.Length; i++)
+                sb.Append(ChartKit.Circle(X(i), Y(s.Values[i]), 3, s.Color));
+        }
+        return sb.ToString();
+    }
+
+    private string Points(ChartLineSeries s)
+    {
+        var sb = new StringBuilder();
+        for (int i = 0; i < s.Values.Length; i++)
+            sb.Append(ChartKit.F(X(i))).Append(',').Append(ChartKit.F(Y(s.Values[i]))).Append(' ');
+        return sb.ToString().Trim();
+    }
+
+    private string AreaPath(ChartLineSeries s)
+    {
+        if (s.Values.Length == 0) return "";
+        var sb = new StringBuilder();
+        sb.Append("M ").Append(ChartKit.F(X(0))).Append(' ').Append(ChartKit.F(Bottom)).Append(' ');
+        for (int i = 0; i < s.Values.Length; i++)
+            sb.Append("L ").Append(ChartKit.F(X(i))).Append(' ').Append(ChartKit.F(Y(s.Values[i]))).Append(' ');
+        sb.Append("L ").Append(ChartKit.F(X(s.Values.Length - 1))).Append(' ').Append(ChartKit.F(Bottom)).Append(" Z");
+        return sb.ToString();
+    }
+}

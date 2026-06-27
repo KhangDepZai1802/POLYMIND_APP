@@ -118,10 +118,23 @@
                 </MudGrid>
             </MudTabPanel>
 
-            <MudTabPanel Text="Nguồn giới thiệu">
+            <MudTabPanel Text="Tư vấn & Nguồn">
                 <MudGrid>
                     <MudItem xs="12" sm="6">
-                        <MudSelect T="Guid?" @bind-Value="_m.AgentId" Label="Đại lý" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                        <MudSelect T="Guid?" @bind-Value="_m.ConsultantId" Label="Tư vấn viên phụ trách" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true"
+                                   Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.SupportAgent">
+                            @foreach (var u in _consultants)
+                            {
+                                <MudSelectItem T="Guid?" Value="@u.Id">@u.FullName</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Tư vấn viên theo sát ứng viên trong suốt quy trình (1 tư vấn viên phụ trách nhiều ứng viên).</MudText>
+                    </MudItem>
+                    <MudItem xs="12"><MudDivider Class="my-1" /></MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="Guid?" @bind-Value="_m.AgentId" Label="Đại lý (nguồn giới thiệu)" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
                             @foreach (var a in _agents)
                             {
                                 <MudSelectItem T="Guid?" Value="@a.Id">@a.Name</MudSelectItem>
@@ -129,7 +142,7 @@
                         </MudSelect>
                     </MudItem>
                     <MudItem xs="12" sm="6">
-                        <MudSelect T="Guid?" @bind-Value="_m.CollaboratorId" Label="Cộng tác viên (CTV)" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true"
+                        <MudSelect T="Guid?" @bind-Value="_m.CollaboratorId" Label="Cộng tác viên (CTV) giới thiệu" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true"
                                    Disabled="@(_m.AgentId is null)">
                             @foreach (var c in _collaborators.Where(c => c.AgentId == _m.AgentId))
                             {
@@ -138,7 +151,7 @@
                         </MudSelect>
                     </MudItem>
                     <MudItem xs="12">
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Chọn đại lý trước, sau đó chọn CTV trực thuộc đại lý đó.</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">CTV giới thiệu (nếu có): chọn đại lý trước, sau đó chọn CTV trực thuộc. Chỉ điền khi ứng viên do CTV giới thiệu.</MudText>
                     </MudItem>
                 </MudGrid>
             </MudTabPanel>
@@ -188,6 +201,8 @@
 
     private List<Agent> _agents = new();
     private List<Collaborator> _collaborators = new();
+    private record UserOption(Guid Id, string FullName);
+    private List<UserOption> _consultants = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -197,6 +212,14 @@
         await using var db = await DbFactory.CreateDbContextAsync();
         _agents = await db.Agents.OrderBy(a => a.Name).ToListAsync();
         _collaborators = await db.Collaborators.OrderBy(c => c.FullName).ToListAsync();
+
+        var consultantRoleId = await db.Roles
+            .Where(r => r.Name == Polymind.Infrastructure.Persistence.Constants.RoleNames.Consultant)
+            .Select(r => r.Id).FirstOrDefaultAsync();
+        _consultants = await db.Users
+            .Where(u => u.IsActive && db.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleId == consultantRoleId))
+            .OrderBy(u => u.FullName)
+            .Select(u => new UserOption(u.Id, u.FullName)).ToListAsync();
 
         if (CandidateId is null) return;
         var c = await db.Candidates.FirstOrDefaultAsync(x => x.Id == CandidateId);
@@ -304,6 +327,7 @@
         c.Languages,
         c.AgentId,
         c.CollaboratorId,
+        c.ConsultantId,
         c.CreatedBy,
     };
 
@@ -341,6 +365,7 @@
         public string? Languages { get; set; }
         public Guid? AgentId { get; set; }
         public Guid? CollaboratorId { get; set; }
+        public Guid? ConsultantId { get; set; }
 
         public void LoadFrom(Candidate c)
         {
@@ -375,6 +400,7 @@
             Languages = c.Languages;
             AgentId = c.AgentId;
             CollaboratorId = c.CollaboratorId;
+            ConsultantId = c.ConsultantId;
         }
 
         public void ApplyTo(Candidate c, bool includeSensitiveProfile)
@@ -405,6 +431,7 @@
             c.BankAccountName = BankAccountName;
             c.AgentId = AgentId;
             c.CollaboratorId = AgentId is null ? null : CollaboratorId;
+            c.ConsultantId = ConsultantId;
 
             if (!includeSensitiveProfile) return;
 

@@ -1,0 +1,71 @@
+@* Biểu đồ phân tán (scatter) — SVG tự dựng, hover điểm hiện nhãn. *@
+@using System.Text
+
+<MudPaper Class="pa-4" Elevation="1" Style="height:100%">
+    <div class="d-flex align-center justify-space-between mb-2">
+        <MudText Typo="Typo.subtitle1"><b>@Title</b></MudText>
+        @if (!string.IsNullOrWhiteSpace(Subtitle))
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">@Subtitle</MudText>
+        }
+    </div>
+    @if (Points is null || !Points.Any())
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Chưa có dữ liệu.</MudText>
+    }
+    else
+    {
+        <svg viewBox="0 0 600 300" width="100%" style="height:auto" preserveAspectRatio="xMidYMid meet" role="img">@((MarkupString)Svg())</svg>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">Trục dọc: @YAxisLabel • Trục ngang: @XAxisLabel • Rê chuột vào điểm để xem chi tiết.</MudText>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter, EditorRequired] public List<ChartScatterPoint> Points { get; set; } = new();
+    [Parameter] public string XAxisLabel { get; set; } = "X";
+    [Parameter] public string YAxisLabel { get; set; } = "Y";
+    [Parameter] public bool XPercent { get; set; }
+    [Parameter] public bool YPercent { get; set; }
+
+    private const double PlotLeft = 46, Top = 14, Bottom = 264;
+    private double MinX => Points.Count == 0 ? 0 : Math.Min(0, Points.Min(p => p.X));
+    private double RawMaxX => Points.Count == 0 ? 1 : Points.Max(p => p.X);
+    private double MaxX => RawMaxX <= MinX ? MinX + 1 : RawMaxX;
+    private double MinY => Points.Count == 0 ? 0 : Math.Min(0, Points.Min(p => p.Y));
+    private double RawMaxY => Points.Count == 0 ? 1 : Points.Max(p => p.Y);
+    private double MaxY => RawMaxY <= MinY ? MinY + 1 : RawMaxY;
+
+    private double PX(double x) => PlotLeft + (x - MinX) / (MaxX - MinX) * (588 - PlotLeft);
+    private double PY(double y) => Bottom - (y - MinY) / (MaxY - MinY) * (Bottom - Top);
+    private static string Fmt(double v, bool pct) => pct ? v.ToString("0.#") + "%" : ChartKit.Compact(v);
+
+    private string Svg()
+    {
+        var sb = new StringBuilder();
+        sb.Append(ChartKit.Line(PlotLeft, Bottom, 588, Bottom, "var(--mud-palette-lines-default)"));
+        sb.Append(ChartKit.Line(PlotLeft, Top, PlotLeft, Bottom, "var(--mud-palette-lines-default)"));
+        for (int t = 0; t <= 4; t++)
+        {
+            var gy = Top + (Bottom - Top) * t / 4.0;
+            var yv = MinY + (MaxY - MinY) * (4 - t) / 4.0;
+            sb.Append(ChartKit.Line(PlotLeft, gy, 588, gy, "var(--mud-palette-lines-default)", 0.6, 0.5));
+            sb.Append(ChartKit.Text(PlotLeft - 5, gy + 3, Fmt(yv, YPercent), 10, "end", "var(--mud-palette-text-secondary)"));
+        }
+        for (int t = 0; t <= 4; t++)
+        {
+            var gx = PlotLeft + (588 - PlotLeft) * t / 4.0;
+            var xv = MinX + (MaxX - MinX) * t / 4.0;
+            sb.Append(ChartKit.Text(gx, 286, Fmt(xv, XPercent), 10, "middle", "var(--mud-palette-text-secondary)"));
+        }
+        for (int i = 0; i < Points.Count; i++)
+        {
+            var p = Points[i];
+            var color = p.Color ?? ChartKit.Color(i);
+            sb.Append(ChartKit.Circle(PX(p.X), PY(p.Y), 6, color, $"{p.Label}: {Fmt(p.X, XPercent)} / {Fmt(p.Y, YPercent)}", 0.75));
+        }
+        sb.Append(ChartKit.Text((PlotLeft + 588) / 2, 299, XAxisLabel, 10.5, "middle", "var(--mud-palette-text-secondary)"));
+        return sb.ToString();
+    }
+}

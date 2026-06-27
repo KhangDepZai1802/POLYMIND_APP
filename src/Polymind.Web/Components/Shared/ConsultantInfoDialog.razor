@@ -1,0 +1,79 @@
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+@* Bảng thông tin nhanh về 1 tư vấn viên (tài khoản role consultant) — để liên lạc. *@
+<MudDialog>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_name is null)
+        {
+            <MudAlert Severity="Severity.Warning">Không tìm thấy tư vấn viên.</MudAlert>
+        }
+        else
+        {
+            <div class="d-flex align-center mb-3" style="gap:12px">
+                <MudAvatar Color="Color.Secondary" Size="Size.Large">@Initials(_name)</MudAvatar>
+                <div style="min-width:0">
+                    <MudText Typo="Typo.h6"><b>@_name</b></MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined">Tư vấn viên</MudChip>
+                </div>
+            </div>
+            <MudDivider Class="mb-3" />
+            <MudList T="string" Dense="true">
+                <MudListItem T="string" Icon="@Icons.Material.Filled.Phone">
+                    @if (!string.IsNullOrWhiteSpace(_phone))
+                    {
+                        <MudLink Href="@($"tel:{_phone}")">@_phone</MudLink>
+                    }
+                    else { <span>—</span> }
+                </MudListItem>
+                <MudListItem T="string" Icon="@Icons.Material.Filled.Email">
+                    @if (!string.IsNullOrWhiteSpace(_email))
+                    {
+                        <MudLink Href="@($"mailto:{_email}")">@_email</MudLink>
+                    }
+                    else { <span>—</span> }
+                </MudListItem>
+                <MudListItem T="string" Icon="@Icons.Material.Filled.Groups">Ứng viên đang tư vấn: <b>@_candidateCount</b></MudListItem>
+            </MudList>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Close())">Đóng</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid ConsultantId { get; set; }
+
+    private string? _name;
+    private string? _phone;
+    private string? _email;
+    private int _candidateCount;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var user = await db.Users.Where(u => u.Id == ConsultantId)
+            .Select(u => new { u.FullName, u.Email, u.PhoneNumber }).FirstOrDefaultAsync();
+        if (user is not null)
+        {
+            _name = string.IsNullOrWhiteSpace(user.FullName) ? user.Email : user.FullName;
+            _phone = user.PhoneNumber;
+            _email = user.Email;
+            _candidateCount = await db.Candidates.CountAsync(c => c.ConsultantId == ConsultantId);
+        }
+        _loading = false;
+    }
+
+    private static string Initials(string name)
+    {
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return "?";
+        return parts.Length == 1 ? parts[0][..1].ToUpper() : $"{parts[^2][0]}{parts[^1][0]}".ToUpper();
+    }
+}

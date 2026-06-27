@@ -10,6 +10,8 @@ public class Payment : BaseEntity
     public Guid CandidateId { get; set; }
     public Guid? JobOrderId { get; set; }
     public PaymentType PaymentType { get; set; }
+    // Bước trong lịch đóng tiền 4 bước (Đặt cọc→Tất toán) tính theo chi phí đơn hàng. Null = khoản thu lẻ ngoài lịch.
+    public PaymentStage? Stage { get; set; }
     public decimal Amount { get; set; }
     public DateOnly? DueDate { get; set; }
     public DateOnly? PaidDate { get; set; }

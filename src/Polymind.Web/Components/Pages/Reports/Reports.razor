@@ -42,6 +42,28 @@
     </Actions>
 </PageHeader>
 
+<MudPaper Elevation="0" Class="pa-3 mb-3" Style="border:1px solid var(--mud-palette-lines-default);border-radius:12px">
+    <div class="d-flex flex-wrap align-center" style="gap:10px">
+        <MudIcon Icon="@Icons.Material.Filled.DateRange" Color="Color.Primary" />
+        <MudText Typo="Typo.body2"><b>Khoảng thời gian</b></MudText>
+        <MudSelect T="string" Value="_rangeKey" ValueChanged="OnRangeChanged" Dense="true" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:150px">
+            <MudSelectItem T="string" Value="@("all")">Tất cả</MudSelectItem>
+            <MudSelectItem T="string" Value="@("month")">Tháng này</MudSelectItem>
+            <MudSelectItem T="string" Value="@("quarter")">Quý này</MudSelectItem>
+            <MudSelectItem T="string" Value="@("year")">Năm nay</MudSelectItem>
+            <MudSelectItem T="string" Value="@("custom")">Tùy chọn…</MudSelectItem>
+        </MudSelect>
+        @if (_rangeKey == "custom")
+        {
+            <MudDatePicker @bind-Date="_customFrom" Label="Từ ngày" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:140px" />
+            <MudDatePicker @bind-Date="_customTo" Label="Đến ngày" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:140px" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Check" OnClick="ApplyCustom">Áp dụng</MudButton>
+        }
+        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">@RangeLabel</MudChip>
+    </div>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">Bộ lọc áp dụng cho Lead, doanh thu, chi phí, hoa hồng. Các chỉ số trạng thái (bước hồ sơ, sắp xuất cảnh, công nợ) phản ánh thời điểm hiện tại.</MudText>
+</MudPaper>
+
 @if (_loading)
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
@@ -76,39 +98,33 @@ else
                   OnClick="@(() => ShowStat("Tỷ lệ xuất cảnh", $"{_departureRate:0.#}%", Icons.Material.Filled.FlightTakeoff, Color.Secondary, "Tỷ lệ ứng viên đã xuất cảnh trên tổng đang trong quy trình.", FunnelDetails()))" />
     </MudGrid>
 
-    <MudGrid Class="mt-2">
-        <MudItem xs="12" md="7">
-            <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
-                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Lead theo trạng thái</b></MudText>
-                @foreach (var kv in _byStatus.OrderByDescending(x => x.Value))
-                {
-                    <div class="d-flex align-center mb-2">
-                        <div style="width:160px"><MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(kv.Key)">@Labels.Vi(kv.Key)</MudChip></div>
-                        <MudProgressLinear Color="Labels.ColorOf(kv.Key)" Value="@(_totalLeads == 0 ? 0 : kv.Value * 100.0 / _totalLeads)" Class="flex-grow-1 mx-3" Style="height:10px" Rounded="true" />
-                        <b>@kv.Value</b>
-                    </div>
-                }
-            </MudPaper>
-        </MudItem>
+    <MudText Typo="Typo.h6" Class="mt-4 mb-1"><b>Biểu đồ trực quan</b></MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2 d-block">Đầy đủ 7 loại biểu đồ — số liệu theo @RangeLabel.</MudText>
+    <MudGrid>
         <MudItem xs="12" md="5">
-            <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
-                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Lead theo nguồn</b></MudText>
-                @if (_bySource.Any())
-                {
-                    @foreach (var kv in _bySource)
-                    {
-                        <div class="d-flex align-center mb-2">
-                            <div style="width:120px">@Labels.Vi(kv.Key)</div>
-                            <MudProgressLinear Color="Color.Info" Value="@(_totalLeads == 0 ? 0 : kv.Value * 100.0 / _totalLeads)" Class="flex-grow-1 mx-3" Style="height:10px" Rounded="true" />
-                            <b>@kv.Value</b>
-                        </div>
-                    }
-                }
-                else
-                {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Chưa có dữ liệu lead.</MudText>
-                }
-            </MudPaper>
+            <PieChart Donut="true" Title="Lead theo trạng thái (tròn)" Data="@StatusData()" />
+        </MudItem>
+        <MudItem xs="12" md="7">
+            <BarChart Title="Lead theo nguồn (cột)" Data="@SourceData()" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <LineChart Title="Doanh thu vs Chi phí theo tháng (đường)" XLabels="@MonthLabels()" Series="@MonthRevExpSeries()" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <ComboChart Title="Doanh thu/Chi phí + Lợi nhuận theo tháng (kết hợp)" XLabels="@MonthLabels()" BarSeries="@MonthBarSeries()" LineSeries="@ProfitLine()" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <LineChart Area="true" Title="Doanh thu theo tháng (miền)" XLabels="@MonthLabels()" Series="@RevenueAreaSeries()" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <BarChart Horizontal="true" Money="true" Title="Doanh thu theo quốc gia (thanh ngang)" Data="@CountryRevenueData()" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <ScatterChart Title="Tỉnh/thành: Lead vs Chuyển đổi (phân tán)" Points="@ProvinceScatter()"
+                          XAxisLabel="Tổng lead" YAxisLabel="Tỷ lệ chuyển đổi" YPercent="true" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <BarChart Title="Ứng viên theo bước workflow (cột)" Data="@StepData()" />
         </MudItem>
     </MudGrid>
 
@@ -486,6 +502,11 @@ else
 @code {
     private bool _loading = true;
 
+    // ---- Bộ lọc thời gian ----
+    private string _rangeKey = "all";
+    private DateOnly? _from, _to;
+    private DateTime? _customFrom, _customTo;
+
     private int _totalLeads, _activeCandidates;
     private double _conversionRate;
     private decimal _totalRevenue, _totalExpense;
@@ -541,24 +562,71 @@ else
             Nav.NavigateTo("/my-commissions", replace: true);
             return;
         }
+        await LoadData();
+    }
+
+    private async Task OnRangeChanged(string key)
+    {
+        _rangeKey = key;
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        switch (key)
+        {
+            case "month": _from = new DateOnly(today.Year, today.Month, 1); _to = _from.Value.AddMonths(1).AddDays(-1); break;
+            case "quarter":
+                var q = (today.Month - 1) / 3;
+                _from = new DateOnly(today.Year, q * 3 + 1, 1); _to = _from.Value.AddMonths(3).AddDays(-1); break;
+            case "year": _from = new DateOnly(today.Year, 1, 1); _to = new DateOnly(today.Year, 12, 31); break;
+            case "custom":
+                _from = _customFrom is null ? null : DateOnly.FromDateTime(_customFrom.Value);
+                _to = _customTo is null ? null : DateOnly.FromDateTime(_customTo.Value);
+                break;
+            default: _from = null; _to = null; break; // "all"
+        }
+        await LoadData();
+    }
+
+    private async Task ApplyCustom()
+    {
+        _rangeKey = "custom";
+        await OnRangeChanged("custom");
+    }
+
+    private string RangeLabel => (_from, _to) switch
+    {
+        (null, null) => "Toàn bộ thời gian",
+        (not null, null) => $"Từ {_from:dd/MM/yyyy}",
+        (null, not null) => $"Đến {_to:dd/MM/yyyy}",
+        _ => $"{_from:dd/MM/yyyy} – {_to:dd/MM/yyyy}",
+    };
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        // Mốc lọc theo CreatedAt (DateTimeOffset, UTC) và theo ngày (DateOnly)
+        var fromDto = _from is null ? (DateTimeOffset?)null : new DateTimeOffset(_from.Value.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var toDto = _to is null ? (DateTimeOffset?)null : new DateTimeOffset(_to.Value.ToDateTime(new TimeOnly(23, 59, 59)), TimeSpan.Zero);
+        bool InDay(DateOnly d) => (_from is null || d >= _from.Value) && (_to is null || d <= _to.Value);
 
         await using var db = await DbFactory.CreateDbContextAsync();
 
-        // --- Lead ---
-        _totalLeads = await db.Leads.CountAsync();
-        var converted = await db.Leads.CountAsync(l => l.Status == LeadStatus.Converted);
+        // --- Lead (lọc theo ngày tạo) ---
+        var leadsQ = db.Leads.Where(l => (fromDto == null || l.CreatedAt >= fromDto) && (toDto == null || l.CreatedAt <= toDto));
+        _totalLeads = await leadsQ.CountAsync();
+        var converted = await leadsQ.CountAsync(l => l.Status == LeadStatus.Converted);
         _conversionRate = _totalLeads == 0 ? 0 : converted * 100.0 / _totalLeads;
 
-        _byStatus = await db.Leads.GroupBy(l => l.Status)
+        _byStatus = await leadsQ.GroupBy(l => l.Status)
             .Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count);
 
-        var bySource = await db.Leads.GroupBy(l => l.Source)
+        var bySource = await leadsQ.GroupBy(l => l.Source)
             .Select(g => new { g.Key, Count = g.Count() }).ToListAsync();
         _bySource = bySource.OrderByDescending(x => x.Count)
             .Select(x => new KeyValuePair<LeadSource, int>(x.Key, x.Count)).ToList();
 
         // --- KPI nhân viên: lead theo người phụ trách + tỷ lệ chuyển đổi ---
-        var staffAgg = await db.Leads.Where(l => l.AssignedTo != null)
+        var staffAgg = await leadsQ.Where(l => l.AssignedTo != null)
             .GroupBy(l => l.AssignedTo!.Value)
             .Select(g => new { UserId = g.Key, Total = g.Count(), Converted = g.Count(l => l.Status == LeadStatus.Converted) })
             .ToListAsync();
@@ -570,7 +638,7 @@ else
                 s.Total == 0 ? 0 : s.Converted * 100.0 / s.Total)).ToList();
         }
 
-        var provinceAgg = await db.Leads
+        var provinceAgg = await leadsQ
             .GroupBy(l => string.IsNullOrWhiteSpace(l.Province) ? "Chưa rõ" : l.Province!.Trim())
             .Select(g => new { Province = g.Key, Total = g.Count(), Converted = g.Count(l => l.Status == LeadStatus.Converted) })
             .ToListAsync();
@@ -619,10 +687,12 @@ else
             new("Xuất cảnh", departedCount, _departureRate, Color.Secondary)
         };
 
-        // --- Tài chính theo tháng (6 tháng gần nhất) ---
-        var payments = await db.Payments.Where(p => p.Status == PaymentStatus.Paid)
-            .Select(p => new { p.CandidateId, p.JobOrderId, p.Amount, p.PaidDate, p.CreatedAt }).ToListAsync();
-        var expenses = await db.Expenses.Select(e => new { e.Amount, e.ExpenseDate }).ToListAsync();
+        // --- Tài chính (lọc theo ngày thu/chi) ---
+        var payments = (await db.Payments.Where(p => p.Status == PaymentStatus.Paid)
+            .Select(p => new { p.CandidateId, p.JobOrderId, p.Amount, p.PaidDate, p.CreatedAt }).ToListAsync())
+            .Where(p => InDay(p.PaidDate ?? DateOnly.FromDateTime(p.CreatedAt.UtcDateTime))).ToList();
+        var expenses = (await db.Expenses.Select(e => new { e.Amount, e.ExpenseDate }).ToListAsync())
+            .Where(e => InDay(e.ExpenseDate)).ToList();
 
         _totalRevenue = payments.Sum(p => p.Amount);
         _totalExpense = expenses.Sum(e => e.Amount);
@@ -679,10 +749,11 @@ else
             .Take(10)
             .ToList();
 
-        // --- Hoa hồng theo đại lý ---
+        // --- Hoa hồng theo đại lý (lọc theo ngày phát sinh) ---
         var agentNames = await db.Agents.ToDictionaryAsync(a => a.Id, a => a.Name);
-        var commissions = await db.AgentCommissions
-            .Select(c => new { c.AgentId, c.CommissionAmount, c.Status }).ToListAsync();
+        var commissions = (await db.AgentCommissions
+            .Select(c => new { c.AgentId, c.CommissionAmount, c.Status, c.CreatedAt }).ToListAsync())
+            .Where(c => InDay(DateOnly.FromDateTime(c.CreatedAt.UtcDateTime))).ToList();
         _commissionByAgent = commissions
             .GroupBy(c => c.AgentId)
             .Select(g => new CommissionRow(
@@ -842,4 +913,43 @@ else
                 .GroupBy(f => string.IsNullOrWhiteSpace(f.Destination) ? "Chưa rõ" : f.Destination!)
                 .OrderByDescending(g => g.Count())
                 .Select(g => new StatDetailDialog.Row(g.Key, $"{g.Count()} chuyến")).ToList();
+
+    // ---- Dữ liệu cho các biểu đồ SVG ----
+    private List<ChartDatum> StatusData() =>
+        _byStatus.OrderByDescending(x => x.Value).Select(x => new ChartDatum(Labels.Vi(x.Key), x.Value)).ToList();
+
+    private List<ChartDatum> SourceData() =>
+        _bySource.Select(x => new ChartDatum(Labels.Vi(x.Key), x.Value)).ToList();
+
+    private string[] MonthLabels() => _months.Select(m => m.Label).ToArray();
+
+    private List<ChartLineSeries> MonthRevExpSeries() => new()
+    {
+        new("Doanh thu", "#4CAF50", _months.Select(m => (double)m.Revenue).ToArray()),
+        new("Chi phí", "#D32F2F", _months.Select(m => (double)m.Expense).ToArray()),
+    };
+
+    private List<ChartLineSeries> MonthBarSeries() => new()
+    {
+        new("Doanh thu", "#1A5FA8", _months.Select(m => (double)m.Revenue).ToArray()),
+        new("Chi phí", "#FF9800", _months.Select(m => (double)m.Expense).ToArray()),
+    };
+
+    private ChartLineSeries ProfitLine() =>
+        new("Lợi nhuận", "#9C27B0", _months.Select(m => (double)(m.Revenue - m.Expense)).ToArray());
+
+    private List<ChartLineSeries> RevenueAreaSeries() => new()
+    {
+        new("Doanh thu", "#1A5FA8", _months.Select(m => (double)m.Revenue).ToArray()),
+    };
+
+    private List<ChartDatum> CountryRevenueData() =>
+        _revenueByCountry.Take(8).Select(r => new ChartDatum(r.Country, (double)r.Revenue)).ToList();
+
+    private List<ChartScatterPoint> ProvinceScatter() =>
+        _leadByProvince.Select(p => new ChartScatterPoint(p.Total, p.ConversionRate, p.Province)).ToList();
+
+    private List<ChartDatum> StepData() =>
+        _byStep.OrderBy(x => (int)x.Key)
+            .Select(x => new ChartDatum($"B{(int)x.Key}", x.Value, ChartKit.Color((int)x.Key - 1))).ToList();
 }

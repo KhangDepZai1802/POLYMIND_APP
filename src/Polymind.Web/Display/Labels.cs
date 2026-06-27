@@ -154,6 +154,44 @@ public static class Labels
         _ => t.ToString()
     };
 
+    public static string Vi(PaymentStage s) => s switch
+    {
+        PaymentStage.Deposit => "Đặt cọc",
+        PaymentStage.ServiceFee => "Đóng phí dịch vụ",
+        PaymentStage.PreDeparture => "Đóng phí trước xuất cảnh",
+        PaymentStage.Settlement => "Tất toán",
+        _ => s.ToString()
+    };
+
+    /// <summary>Nhãn ngắn cho stepper 4 bước.</summary>
+    public static string ShortVi(PaymentStage s) => s switch
+    {
+        PaymentStage.Deposit => "Đặt cọc",
+        PaymentStage.ServiceFee => "Phí dịch vụ",
+        PaymentStage.PreDeparture => "Phí trước bay",
+        PaymentStage.Settlement => "Tất toán",
+        _ => s.ToString()
+    };
+
+    public static string IconOf(PaymentStage s) => s switch
+    {
+        PaymentStage.Deposit => Icons.Material.Filled.Savings,
+        PaymentStage.ServiceFee => Icons.Material.Filled.Handshake,
+        PaymentStage.PreDeparture => Icons.Material.Filled.FlightTakeoff,
+        PaymentStage.Settlement => Icons.Material.Filled.TaskAlt,
+        _ => Icons.Material.Filled.Payments
+    };
+
+    /// <summary>Loại khoản thu tương ứng khi tạo Payment cho từng bước.</summary>
+    public static PaymentType TypeOf(PaymentStage s) => s switch
+    {
+        PaymentStage.Deposit => PaymentType.Deposit,
+        PaymentStage.ServiceFee => PaymentType.ServiceFee,
+        PaymentStage.PreDeparture => PaymentType.TrainingFee,
+        PaymentStage.Settlement => PaymentType.OtherIncome,
+        _ => PaymentType.OtherIncome
+    };
+
     public static string Vi(PaymentStatus s) => s switch
     {
         PaymentStatus.Pending => "Chờ thu",
