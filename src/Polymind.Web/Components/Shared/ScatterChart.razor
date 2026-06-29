@@ -63,7 +63,22 @@
         {
             var p = Points[i];
             var color = p.Color ?? ChartKit.Color(i);
-            sb.Append(ChartKit.Circle(PX(p.X), PY(p.Y), 6, color, $"{p.Label}: {Fmt(p.X, XPercent)} / {Fmt(p.Y, YPercent)}", 0.75));
+            var x = PX(p.X);
+            var y = PY(p.Y);
+            var tipX = x > 410 ? x - 178 : x + 12;
+            var tipY = y < 58 ? y + 12 : y - 48;
+            var detail = $"{p.Label}: {XAxisLabel} {Fmt(p.X, XPercent)} • {YAxisLabel} {Fmt(p.Y, YPercent)}";
+            sb.Append("<g class=\"scatter-point\" tabindex=\"0\">");
+            sb.Append($"<title>{System.Net.WebUtility.HtmlEncode(detail)}</title>");
+            sb.Append(ChartKit.Circle(x, y, 7, color, null, 0.85));
+            sb.Append(ChartKit.Circle(x, y, 13, "transparent", null, 1));
+            sb.Append("<g class=\"chart-tooltip\">");
+            sb.Append(ChartKit.Rect(tipX, tipY, 166, 39, "var(--mud-palette-surface)", 6, 0.98));
+            sb.Append(ChartKit.Rect(tipX, tipY, 166, 39, "transparent", 6, 1));
+            sb.Append(ChartKit.Text(tipX + 9, tipY + 15, p.Label, 10.5, "start", "var(--mud-palette-text-primary)", "700"));
+            sb.Append(ChartKit.Text(tipX + 9, tipY + 30, $"{XAxisLabel}: {Fmt(p.X, XPercent)} • {YAxisLabel}: {Fmt(p.Y, YPercent)}", 9.5, "start", "var(--mud-palette-text-secondary)"));
+            sb.Append("</g>");
+            sb.Append("</g>");
         }
         sb.Append(ChartKit.Text((PlotLeft + 588) / 2, 299, XAxisLabel, 10.5, "middle", "var(--mud-palette-text-secondary)"));
         return sb.ToString();

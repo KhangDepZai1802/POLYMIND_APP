@@ -43,7 +43,7 @@
                           AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
             @if (!FilteredProgress.Any())
             {
-                <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Chưa có ứng viên nào được xếp vào đơn hàng.</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Chưa có ứng viên nào đã đến bước đặt cọc.</MudText>
             }
             else
             {
@@ -507,8 +507,12 @@
     private async Task Load()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
+        var eligibleCandidateIds = await FinanceEligibility.CandidateIdsAsync(db);
         var names = await db.Candidates.ToDictionaryAsync(c => c.Id, c => c.FullName);
-        var payments = await db.Payments.OrderByDescending(p => p.CreatedAt).ToListAsync();
+        var payments = await db.Payments
+            .Where(p => eligibleCandidateIds.Contains(p.CandidateId))
+            .OrderByDescending(p => p.CreatedAt)
+            .ToListAsync();
         _payments = payments.Select(p => new PaymentRow(
             p.Id, p.Code, names.GetValueOrDefault(p.CandidateId, "—"),
             p.PaymentType, p.Amount, p.Status, p.DueDate)).ToList();
@@ -518,7 +522,11 @@
         _totalPending = payments.Where(p => p.Status is PaymentStatus.Pending or PaymentStatus.Partial or PaymentStatus.Overdue).Sum(p => p.Amount);
         _totalExpense = _expenses.Sum(e => e.Amount);
 
-        var receipts = await db.Receipts.OrderByDescending(r => r.ReceiptDate).ThenByDescending(r => r.CreatedAt).ToListAsync();
+        var receipts = await db.Receipts
+            .Where(r => r.CandidateId == null || eligibleCandidateIds.Contains(r.CandidateId.Value))
+            .OrderByDescending(r => r.ReceiptDate)
+            .ThenByDescending(r => r.CreatedAt)
+            .ToListAsync();
         _receipts = receipts.Select(r => new ReceiptRow(
             r.Id, r.Code, r.ReceiptType,
             r.CandidateId is not null ? names.GetValueOrDefault(r.CandidateId.Value, "—") : "—",
@@ -544,6 +552,7 @@
         var assignments = latestByCandidate
             .GroupBy(a => a.CandidateId)
             .Select(g => g.First())
+            .Where(a => a.CurrentStep >= WorkflowStep.Deposit)
             .ToList();
 
         var stageByCandidate = allPayments
@@ -692,4 +701,5 @@
         var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
         return result.Succeeded;
     }
+
 }

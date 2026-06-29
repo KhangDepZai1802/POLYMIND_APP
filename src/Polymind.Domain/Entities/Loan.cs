@@ -8,7 +8,7 @@ public class Loan : BaseEntity
 {
     public string Code { get; set; } = default!; // VAY-XXXX
     public Guid CandidateId { get; set; }
-    public LoanStatus Status { get; set; } = LoanStatus.NotBorrowed;
+    public LoanStatus Status { get; set; } = LoanStatus.Borrowing;
     public decimal? Amount { get; set; }          // số tiền vay
     public int? TermMonths { get; set; }          // thời hạn vay (tháng)
     public string? BankName { get; set; }         // ngân hàng cho vay

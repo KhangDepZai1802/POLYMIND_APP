@@ -588,6 +588,7 @@ else
         bool InDay(DateOnly d) => (_from is null || d >= _from.Value) && (_to is null || d <= _to.Value);
 
         await using var db = await DbFactory.CreateDbContextAsync();
+        var financeCandidateIds = await FinanceEligibility.CandidateIdsAsync(db);
 
         // --- Lead (lọc theo ngày tạo) ---
         var leadsQ = db.Leads.Where(l => (fromDto == null || l.CreatedAt >= fromDto) && (toDto == null || l.CreatedAt <= toDto));
@@ -666,7 +667,7 @@ else
         };
 
         // --- Tài chính (lọc theo ngày thu/chi) ---
-        var payments = (await db.Payments.Where(p => p.Status == PaymentStatus.Paid)
+        var payments = (await db.Payments.Where(p => financeCandidateIds.Contains(p.CandidateId) && p.Status == PaymentStatus.Paid)
             .Select(p => new { p.CandidateId, p.JobOrderId, p.Amount, p.PaidDate, p.CreatedAt }).ToListAsync())
             .Where(p => InDay(p.PaidDate ?? DateOnly.FromDateTime(p.CreatedAt.UtcDateTime))).ToList();
         var expenses = (await db.Expenses.Select(e => new { e.Amount, e.ExpenseDate }).ToListAsync())
@@ -775,7 +776,7 @@ else
         var todayDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
         var candidateNames = await db.Candidates.ToDictionaryAsync(c => c.Id, c => c.FullName);
         var openPayments = await db.Payments
-            .Where(p => p.Status != PaymentStatus.Paid && p.Status != PaymentStatus.Refunded)
+            .Where(p => financeCandidateIds.Contains(p.CandidateId) && p.Status != PaymentStatus.Paid && p.Status != PaymentStatus.Refunded)
             .Select(p => new { p.CandidateId, p.PaymentType, p.Amount, p.DueDate, p.Status })
             .ToListAsync();
         _receivables = openPayments.Sum(p => p.Amount);

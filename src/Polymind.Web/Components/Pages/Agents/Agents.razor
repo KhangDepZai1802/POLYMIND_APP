@@ -118,7 +118,9 @@
                         <tr>
                             <td>@RankBadge(rank)</td>
                             <td>
-                                <MudLink Class="cursor-pointer" Style="text-decoration:underline;font-weight:600" @onclick="@(() => ShowCtv(c.Id))">@c.FullName</MudLink>
+                                <span class="chip-clickable" @onclick="@(() => ShowCtv(c.Id))" @onclick:stopPropagation="true">
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Diversity3">CTV-@c.FullName</MudChip>
+                                </span>
                                 <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@c.Code</MudText>
                             </td>
                             <td>@c.AgentName</td>
@@ -142,7 +144,9 @@
                     <div class="d-flex align-center" style="gap:10px">
                         @RankBadge(rank)
                         <div style="min-width:0;flex:1">
-                            <MudLink Style="text-decoration:underline;font-weight:600" @onclick="@(() => ShowCtv(c.Id))">@c.FullName</MudLink>
+                            <span class="chip-clickable" @onclick="@(() => ShowCtv(c.Id))">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Diversity3">CTV-@c.FullName</MudChip>
+                            </span>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@c.AgentName • @c.CandidateCount ứng viên</MudText>
                         </div>
                         <Money Amount="c.Revenue" />

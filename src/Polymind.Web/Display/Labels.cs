@@ -104,7 +104,7 @@ public static class Labels
 
     public static string Vi(LoanStatus s) => s switch
     {
-        LoanStatus.NotBorrowed => "Chưa vay",
+        LoanStatus.NotBorrowed => "Đang vay",
         LoanStatus.Borrowing => "Đang vay",
         LoanStatus.Disbursed => "Đã giải ngân",
         _ => s.ToString()
@@ -112,7 +112,7 @@ public static class Labels
 
     public static Color ColorOf(LoanStatus s) => s switch
     {
-        LoanStatus.NotBorrowed => Color.Default,
+        LoanStatus.NotBorrowed => Color.Warning,
         LoanStatus.Borrowing => Color.Warning,
         LoanStatus.Disbursed => Color.Success,
         _ => Color.Default
@@ -120,7 +120,7 @@ public static class Labels
 
     public static string IconOf(LoanStatus s) => s switch
     {
-        LoanStatus.NotBorrowed => Icons.Material.Filled.MoneyOff,
+        LoanStatus.NotBorrowed => Icons.Material.Filled.HourglassBottom,
         LoanStatus.Borrowing => Icons.Material.Filled.HourglassBottom,
         LoanStatus.Disbursed => Icons.Material.Filled.AccountBalanceWallet,
         _ => Icons.Material.Filled.AccountBalance

@@ -105,7 +105,7 @@ public enum Gender { Male, Female, Other }
 /// <summary>Tình trạng vay vốn của ứng viên (module Hỗ trợ vay).</summary>
 public enum LoanStatus
 {
-    NotBorrowed, // Chưa vay
+    NotBorrowed, // Legacy: không dùng trên UI; không có record Loan nghĩa là chưa có khoản vay
     Borrowing,   // Đang vay (đã đăng ký/đang làm thủ tục, chưa giải ngân)
     Disbursed    // Đã giải ngân
 }

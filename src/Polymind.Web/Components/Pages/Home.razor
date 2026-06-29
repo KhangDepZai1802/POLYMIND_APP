@@ -154,6 +154,7 @@ else
         }
 
         await using var db = await DbFactory.CreateDbContextAsync();
+        var financeCandidateIds = await FinanceEligibility.CandidateIdsAsync(db);
         var startOfDay = new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero);
 
         _totalLeads = await db.Leads.CountAsync();
@@ -179,7 +180,7 @@ else
         // --- Công nợ + nhắc việc ---
         var todayDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
         var openPayments = await db.Payments
-            .Where(p => p.Status != PaymentStatus.Paid && p.Status != PaymentStatus.Refunded)
+            .Where(p => financeCandidateIds.Contains(p.CandidateId) && p.Status != PaymentStatus.Paid && p.Status != PaymentStatus.Refunded)
             .Select(p => new { p.Amount, p.DueDate, p.Status }).ToListAsync();
         _receivables = openPayments.Sum(p => p.Amount);
         _openPaymentsCount = openPayments.Count;
@@ -198,7 +199,7 @@ else
 
         // --- Dashboard doanh thu + phễu tuyển dụng ---
         var firstOfMonth = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
-        var paidPayments = await db.Payments.Where(p => p.Status == PaymentStatus.Paid)
+        var paidPayments = await db.Payments.Where(p => financeCandidateIds.Contains(p.CandidateId) && p.Status == PaymentStatus.Paid)
             .Select(p => new { p.CandidateId, p.JobOrderId, p.Amount, p.PaidDate, p.CreatedAt })
             .ToListAsync();
         _monthRevenue = paidPayments

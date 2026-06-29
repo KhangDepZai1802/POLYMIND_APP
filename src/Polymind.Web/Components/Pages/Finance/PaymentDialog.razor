@@ -64,7 +64,7 @@
     /// <summary>Null = tạo mới; có giá trị = sửa khoản thu hiện có.</summary>
     [Parameter] public Guid? PaymentId { get; set; }
 
-    private record CandidateOption(Guid Id, string Code, string FullName);
+    private record CandidateOption(Guid Id, string Code, string FullName, Guid JobOrderId);
 
     private readonly FormModel _m = new();
     private List<CandidateOption> _candidates = new();
@@ -74,13 +74,22 @@
     protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        _candidates = await db.Candidates.OrderBy(c => c.FullName)
-            .Select(c => new CandidateOption(c.Id, c.Code, c.FullName)).ToListAsync();
+        var currentPayment = PaymentId is null ? null : await db.Payments.FirstOrDefaultAsync(x => x.Id == PaymentId);
+        var currentPaymentCandidateId = currentPayment?.CandidateId;
+        var eligible = await FinanceEligibility.CandidateJobOrderIdsAsync(db, currentPaymentCandidateId);
+        var eligibleIds = eligible.Keys.ToList();
+
+        var candidateRows = await db.Candidates
+            .Where(c => eligibleIds.Contains(c.Id))
+            .OrderBy(c => c.FullName)
+            .ToListAsync();
+        _candidates = candidateRows
+            .Select(c => new CandidateOption(c.Id, c.Code, c.FullName, eligible[c.Id]))
+            .ToList();
 
         if (PaymentId is not null)
         {
-            var p = await db.Payments.FirstOrDefaultAsync(x => x.Id == PaymentId);
-            if (p is not null) _m.LoadFrom(p);
+            if (currentPayment is not null) _m.LoadFrom(currentPayment);
         }
     }
 
@@ -96,6 +105,12 @@
         if (_m.Amount <= 0)
         {
             Snackbar.Add("Số tiền phải lớn hơn 0.", Severity.Warning);
+            return;
+        }
+        var selectedCandidate = _candidates.FirstOrDefault(c => c.Id == _m.CandidateId.Value);
+        if (selectedCandidate is null)
+        {
+            Snackbar.Add("Chỉ được tạo khoản thu cho ứng viên đã đến bước đặt cọc.", Severity.Warning);
             return;
         }
 
@@ -120,7 +135,7 @@
                 }
                 var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
                 var oldValue = Snapshot(p);
-                _m.ApplyTo(p);
+                _m.ApplyTo(p, selectedCandidate.JobOrderId);
                 p.UpdatedAt = DateTimeOffset.UtcNow;
                 db.AddAudit(actorId, "update", "payments", p.Id, oldValue, Snapshot(p));
             }
@@ -132,7 +147,7 @@
                     Code = $"PT-{DateTime.Now:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}",
                     CreatedBy = actorId,
                 };
-                _m.ApplyTo(p);
+                _m.ApplyTo(p, selectedCandidate.JobOrderId);
                 db.Payments.Add(p);
                 db.AddAudit(actorId, "create", "payments", p.Id, null, Snapshot(p));
             }
@@ -192,9 +207,10 @@
             Notes = p.Notes;
         }
 
-        public void ApplyTo(Payment p)
+        public void ApplyTo(Payment p, Guid jobOrderId)
         {
             p.CandidateId = CandidateId!.Value;
+            p.JobOrderId = jobOrderId;
             p.PaymentType = PaymentType;
             p.Amount = Amount;
             p.Status = Status;

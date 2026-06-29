@@ -1,6 +1,7 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ISnackbar Snackbar
+@inject AgentScope AgentScope
 
 @* Tạo/sửa hồ sơ hỗ trợ vay của 1 ứng viên (mỗi ứng viên 1 hồ sơ vay). *@
 <MudDialog>
@@ -11,11 +12,26 @@
         }
         else
         {
-            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Ứng viên: <b>@_candidateName</b></MudText>
             <MudGrid>
                 <MudItem xs="12">
+                    @if (_candidateLocked)
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-1">Ứng viên</MudText>
+                        <MudText Typo="Typo.subtitle2" Class="mb-2"><b>@_candidateName</b></MudText>
+                    }
+                    else
+                    {
+                        <MudAutocomplete T="CandidateChoice" Value="_selectedCandidate" ValueChanged="OnCandidateChanged"
+                                         Label="Chọn ứng viên" SearchFunc="SearchCandidates"
+                                         ToStringFunc="@(c => c is null ? string.Empty : $"{c.Name} ({c.Code})")"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" ResetValueOnEmptyText="true"
+                                         Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.PersonSearch" MaxItems="30" />
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Chỉ hiển thị ứng viên chưa có khoản vay.</MudText>
+                    }
+                </MudItem>
+                <MudItem xs="12">
                     <MudSelect T="LoanStatus" @bind-Value="_status" Label="Tình trạng vay" Variant="Variant.Outlined" Margin="Margin.Dense">
-                        @foreach (var s in Enum.GetValues<LoanStatus>())
+                        @foreach (var s in LoanStatusOptions)
                         {
                             <MudSelectItem T="LoanStatus" Value="@s">@Labels.Vi(s)</MudSelectItem>
                         }
@@ -52,10 +68,14 @@
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
     [Parameter] public Guid CandidateId { get; set; }
 
+    private static readonly LoanStatus[] LoanStatusOptions = { LoanStatus.Borrowing, LoanStatus.Disbursed };
+
     private bool _loading = true;
     private bool _saving;
+    private bool _candidateLocked;
+    private CandidateChoice? _selectedCandidate;
     private string _candidateName = "—";
-    private LoanStatus _status = LoanStatus.NotBorrowed;
+    private LoanStatus _status = LoanStatus.Borrowing;
     private decimal? _amount;
     private int? _termMonths;
     private string? _bankName;
@@ -66,11 +86,23 @@
     protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        _candidateName = await db.Candidates.Where(c => c.Id == CandidateId).Select(c => c.FullName).FirstOrDefaultAsync() ?? "—";
+        _candidateLocked = CandidateId != Guid.Empty;
+        if (!_candidateLocked)
+        {
+            _loading = false;
+            return;
+        }
+
+        var candidate = await db.Candidates.Where(c => c.Id == CandidateId)
+            .Select(c => new CandidateChoice(c.Id, c.FullName, c.Code))
+            .FirstOrDefaultAsync();
+        _selectedCandidate = candidate;
+        _candidateName = candidate?.Name ?? "—";
+
         var loan = await db.Loans.OrderByDescending(l => l.CreatedAt).FirstOrDefaultAsync(l => l.CandidateId == CandidateId);
         if (loan is not null)
         {
-            _status = loan.Status;
+            _status = loan.Status == LoanStatus.NotBorrowed ? LoanStatus.Borrowing : loan.Status;
             _amount = loan.Amount;
             _termMonths = loan.TermMonths;
             _bankName = loan.BankName;
@@ -88,13 +120,20 @@
         {
             await using var db = await DbFactory.CreateDbContextAsync();
             var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
-            var loan = await db.Loans.OrderByDescending(l => l.CreatedAt).FirstOrDefaultAsync(l => l.CandidateId == CandidateId);
+            var candidateId = _candidateLocked ? CandidateId : _selectedCandidate?.Id ?? Guid.Empty;
+            if (candidateId == Guid.Empty)
+            {
+                Snackbar.Add("Vui lòng chọn ứng viên cần thêm khoản vay.", Severity.Warning);
+                return;
+            }
+
+            var loan = await db.Loans.OrderByDescending(l => l.CreatedAt).FirstOrDefaultAsync(l => l.CandidateId == candidateId);
             var isNew = loan is null;
             if (loan is null)
             {
                 loan = new Loan
                 {
-                    CandidateId = CandidateId,
+                    CandidateId = candidateId,
                     Code = $"VAY-{DateTime.UtcNow:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}",
                     CreatedBy = actorId,
                 };
@@ -127,4 +166,37 @@
             _saving = false;
         }
     }
+
+    private void OnCandidateChanged(CandidateChoice? candidate)
+    {
+        _selectedCandidate = candidate;
+        CandidateId = candidate?.Id ?? Guid.Empty;
+        _candidateName = candidate?.Name ?? "—";
+    }
+
+    private async Task<IEnumerable<CandidateChoice>> SearchCandidates(string value, CancellationToken token)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var scope = await AgentScope.GetAsync();
+        var query = db.Candidates.AsNoTracking();
+        if (scope.IsAgentOnly)
+            query = query.Where(c => c.AgentId == scope.AgentId);
+
+        var usedCandidateIds = db.Loans.Select(l => l.CandidateId);
+        query = query.Where(c => !usedCandidateIds.Contains(c.Id));
+
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            var keyword = value.Trim().ToLower();
+            query = query.Where(c => c.FullName.ToLower().Contains(keyword) || c.Code.ToLower().Contains(keyword));
+        }
+
+        return await query
+            .OrderBy(c => c.FullName)
+            .Take(30)
+            .Select(c => new CandidateChoice(c.Id, c.FullName, c.Code))
+            .ToListAsync(token);
+    }
+
+    private record CandidateChoice(Guid Id, string Name, string Code);
 }

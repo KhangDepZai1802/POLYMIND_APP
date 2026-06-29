@@ -29,15 +29,15 @@
 else
 {
     @* Bộ lọc/sắp xếp theo nước (có quốc kỳ) *@
-    <div class="d-flex flex-wrap align-center mb-4" style="gap:8px">
+    <div class="job-country-filter d-flex flex-wrap align-center mb-4" style="gap:8px">
         <MudText Typo="Typo.body2" Class="mud-text-secondary mr-1">Lọc theo nước:</MudText>
         <MudChip T="string" Size="Size.Small" Variant="@(_country is null ? Variant.Filled : Variant.Outlined)"
-                 Color="Color.Primary" OnClick="@(() => SetCountry(null))">🌐 Tất cả (@_rows.Count)</MudChip>
+                 Color="Color.Primary" Class="country-filter-chip" OnClick="@(() => SetCountry(null))">🌐 Tất cả (@_rows.Count)</MudChip>
         @foreach (var c in _countries)
         {
             var st = CountryDisplay.Of(c.Key);
             <MudChip T="string" Size="Size.Small" Variant="@(_country == c.Key ? Variant.Filled : Variant.Outlined)"
-                     Color="st.Color" OnClick="@(() => SetCountry(c.Key))">@st.Flag @st.Name (@c.Count)</MudChip>
+                     Color="st.Color" Class="country-filter-chip" OnClick="@(() => SetCountry(c.Key))">@st.Flag @st.Name (@c.Count)</MudChip>
         }
     </div>
 }
@@ -132,6 +132,7 @@ else
             .GroupBy(j => j.Country)
             .Select(g => (Key: g.Key, Count: g.Count()))
             .OrderByDescending(x => x.Count)
+            .ThenBy(x => CountryDisplay.Of(x.Key).Name)
             .ToList();
     }
 

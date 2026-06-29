@@ -20,27 +20,29 @@
             }
             else
             {
-                <MudList T="Guid" Dense="true" Class="pa-0">
-                    @foreach (var c in FilteredContacts)
-                    {
-                        <MudListItem T="Guid" OnClick="@(() => SelectContact(c.Id))"
-                                     Style="@(c.Id == _selectedId ? "background:var(--mud-palette-action-default-hover);border-radius:10px" : "border-radius:10px")">
-                            <div class="d-flex align-center" style="gap:10px">
-                                <MudBadge Content="c.Unread" Color="Color.Error" Overlap="true" Visible="c.Unread > 0">
-                                    <MudAvatar Color="Color.Primary" Size="Size.Small">@Initials(c.Name)</MudAvatar>
-                                </MudBadge>
-                                <div style="min-width:0;flex:1">
-                                    <div class="d-flex align-center" style="gap:6px">
-                                        <MudText Typo="Typo.body2" Style="font-weight:600">@c.Name</MudText>
+                <div class="message-contact-list-scroll">
+                    <MudList T="Guid" Dense="true" Class="pa-0">
+                        @foreach (var c in FilteredContacts)
+                        {
+                            <MudListItem T="Guid" OnClick="@(() => SelectContact(c.Id))"
+                                         Style="@(c.Id == _selectedId ? "background:var(--mud-palette-action-default-hover);border-radius:10px" : "border-radius:10px")">
+                                <div class="d-flex align-center" style="gap:10px">
+                                    <MudBadge Content="c.Unread" Color="Color.Error" Overlap="true" Visible="c.Unread > 0">
+                                        <MudAvatar Color="Color.Primary" Size="Size.Small">@Initials(c.Name)</MudAvatar>
+                                    </MudBadge>
+                                    <div style="min-width:0;flex:1">
+                                        <div class="d-flex align-center" style="gap:6px">
+                                            <MudText Typo="Typo.body2" Style="font-weight:600">@c.Name</MudText>
+                                        </div>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">
+                                            @c.RoleLabel@(string.IsNullOrEmpty(c.LastBody) ? "" : $" • {c.LastBody}")
+                                        </MudText>
                                     </div>
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">
-                                        @c.RoleLabel@(string.IsNullOrEmpty(c.LastBody) ? "" : $" • {c.LastBody}")
-                                    </MudText>
                                 </div>
-                            </div>
-                        </MudListItem>
-                    }
-                </MudList>
+                            </MudListItem>
+                        }
+                    </MudList>
+                </div>
             }
         </MudPaper>
     </MudItem>

@@ -18,7 +18,7 @@ public static class CountryDisplay
         (new[] { "han quoc", "han", "korea", "kr" }, new CountryStyle("🇰🇷", "Hàn Quốc", Color.Info)),
         (new[] { "dai loan", "dai", "taiwan", "tw" },new CountryStyle("🇹🇼", "Đài Loan", Color.Success)),
         (new[] { "singapore", "sing", "sg" },        new CountryStyle("🇸🇬", "Singapore", Color.Warning)),
-        (new[] { "duc", "german", "de" },            new CountryStyle("🇩🇪", "Đức", Color.Dark)),
+        (new[] { "duc", "german", "de" },            new CountryStyle("🇩🇪", "Đức", Color.Warning)),
         (new[] { "uc", "australia", "au" },          new CountryStyle("🇦🇺", "Úc", Color.Secondary)),
         (new[] { "rumani", "romania", "ro" },        new CountryStyle("🇷🇴", "Rumani", Color.Primary)),
         (new[] { "ba lan", "poland", "pl" },         new CountryStyle("🇵🇱", "Ba Lan", Color.Tertiary)),
@@ -27,7 +27,7 @@ public static class CountryDisplay
         (new[] { "canada", "ca" },                   new CountryStyle("🇨🇦", "Canada", Color.Error)),
     };
 
-    private static readonly CountryStyle Fallback = new("🌐", "", Color.Default);
+    private static readonly CountryStyle Fallback = new("🌐", "", Color.Primary);
 
     public static CountryStyle Of(string? country)
     {

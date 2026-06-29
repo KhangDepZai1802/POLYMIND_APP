@@ -318,7 +318,10 @@ else
                             <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Color="Color.Primary" />
                             <MudText Typo="Typo.subtitle1"><b>Hỗ trợ vay vốn</b></MudText>
                         </div>
-                        <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(_loanStatus)" Icon="@Labels.IconOf(_loanStatus)">@Labels.Vi(_loanStatus)</MudChip>
+                        @if (_hasLoan)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(_loanStatus)" Icon="@Labels.IconOf(_loanStatus)">@Labels.Vi(_loanStatus)</MudChip>
+                        }
                     </div>
                     @if (_hasLoan)
                     {
@@ -336,13 +339,13 @@ else
                     }
                     else
                     {
-                        <MudAlert Severity="Severity.Info" Dense="true">Ứng viên chưa có hồ sơ vay (chưa vay).</MudAlert>
+                        <MudAlert Severity="Severity.Info" Dense="true">Ứng viên chưa có khoản vay. Bấm thêm khoản vay khi cần hỗ trợ vay vốn.</MudAlert>
                     }
                     @if (_canUpdateLoan)
                     {
                         <MudButton Class="mt-3" Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true"
                                    StartIcon="@(_hasLoan ? Icons.Material.Filled.Edit : Icons.Material.Filled.Add)" OnClick="OpenLoanEdit">
-                            @(_hasLoan ? "Cập nhật hồ sơ vay" : "Tạo hồ sơ vay")
+                            @(_hasLoan ? "Cập nhật khoản vay" : "Thêm khoản vay")
                         </MudButton>
                     }
                 </MudPaper>
@@ -581,7 +584,7 @@ else
     private bool _canUpdateLoan;
 
     private bool _hasLoan;
-    private LoanStatus _loanStatus = LoanStatus.NotBorrowed;
+    private LoanStatus _loanStatus = LoanStatus.Borrowing;
     private decimal? _loanAmount;
     private int? _loanTermMonths;
     private string? _loanBankName;
@@ -669,7 +672,7 @@ else
             var loan = await db.Loans.Where(l => l.CandidateId == Id)
                 .OrderByDescending(l => l.CreatedAt).FirstOrDefaultAsync();
             _hasLoan = loan is not null;
-            _loanStatus = loan?.Status ?? LoanStatus.NotBorrowed;
+            _loanStatus = loan?.Status == LoanStatus.NotBorrowed ? LoanStatus.Borrowing : loan?.Status ?? LoanStatus.Borrowing;
             _loanAmount = loan?.Amount;
             _loanTermMonths = loan?.TermMonths;
             _loanBankName = loan?.BankName;

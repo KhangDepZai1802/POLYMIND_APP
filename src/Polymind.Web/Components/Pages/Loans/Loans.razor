@@ -9,7 +9,16 @@
 
 <PageTitle>Hỗ trợ vay — POLYMIND</PageTitle>
 
-<PageHeader Eyebrow="TÀI CHÍNH" Title="Hỗ trợ vay vốn ứng viên" Subtitle="@($"{_rows.Count} ứng viên • {_disbursedCount} đã giải ngân")" />
+<PageHeader Eyebrow="TÀI CHÍNH" Title="Hỗ trợ vay vốn ứng viên" Subtitle="@($"{_rows.Count} khoản vay • {_disbursedCount} đã giải ngân")">
+    <Actions>
+        @if (_canUpdate)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">
+                Thêm khoản vay
+            </MudButton>
+        }
+    </Actions>
+</PageHeader>
 
 @if (_loading)
 {
@@ -19,12 +28,6 @@ else
 {
     @* Thẻ tổng quan theo tình trạng *@
     <MudGrid Class="mb-4">
-        <MudItem xs="6" md="3">
-            <MudPaper Class="pa-3" Elevation="1">
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">Chưa vay</MudText>
-                <MudText Typo="Typo.h5"><b>@_notBorrowedCount</b></MudText>
-            </MudPaper>
-        </MudItem>
         <MudItem xs="6" md="3">
             <MudPaper Class="pa-3" Elevation="1">
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">Đang vay</MudText>
@@ -54,7 +57,7 @@ else
             <MudItem xs="12" md="4">
                 <MudSelect T="LoanStatus?" @bind-Value="_statusFilter" Label="Lọc theo tình trạng" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
                     <MudSelectItem T="LoanStatus?" Value="@((LoanStatus?)null)">Tất cả</MudSelectItem>
-                    @foreach (var s in Enum.GetValues<LoanStatus>())
+                    @foreach (var s in LoanStatusOptions)
                     {
                         <MudSelectItem T="LoanStatus?" Value="@s">@Labels.Vi(s)</MudSelectItem>
                     }
@@ -64,7 +67,9 @@ else
 
         @if (!Filtered.Any())
         {
-            <MudAlert Severity="Severity.Info" Dense="true">Không có ứng viên phù hợp.</MudAlert>
+            <MudAlert Severity="Severity.Info" Dense="true">
+                Chưa có khoản vay phù hợp. Bấm <b>Thêm khoản vay</b> để tạo hồ sơ vay cho ứng viên hiện có.
+            </MudAlert>
         }
         else
         {
@@ -98,7 +103,7 @@ else
                                         @if (_canUpdate)
                                         {
                                             <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit"
-                                                       OnClick="@(() => OpenEdit(r.CandidateId))">@(r.HasLoan ? "Sửa" : "Tạo")</MudButton>
+                                                       OnClick="@(() => OpenEdit(r.CandidateId))">Sửa</MudButton>
                                         }
                                     </td>
                                 </tr>
@@ -126,7 +131,7 @@ else
                             </MudText>
                             @if (_canUpdate)
                             {
-                                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenEdit(r.CandidateId))">@(r.HasLoan ? "Sửa" : "Tạo")</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenEdit(r.CandidateId))">Sửa</MudButton>
                             }
                         </div>
                         @if (!string.IsNullOrWhiteSpace(r.BankName))
@@ -142,7 +147,9 @@ else
 
 @code {
     private record LoanRow(Guid CandidateId, string CandidateName, string Code, LoanStatus Status,
-        decimal? Amount, int? TermMonths, string? BankName, DateOnly? DisbursedDate, bool HasLoan);
+        decimal? Amount, int? TermMonths, string? BankName, DateOnly? DisbursedDate);
+
+    private static readonly LoanStatus[] LoanStatusOptions = { LoanStatus.Borrowing, LoanStatus.Disbursed };
 
     private List<LoanRow> _rows = new();
     private bool _loading = true;
@@ -150,7 +157,6 @@ else
     private string _search = "";
     private LoanStatus? _statusFilter;
 
-    private int _notBorrowedCount;
     private int _borrowingCount;
     private int _disbursedCount;
     private decimal _disbursedAmount;
@@ -174,33 +180,53 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         var scope = await AgentScope.GetAsync();
 
-        var candQuery = db.Candidates.AsQueryable();
+        var loanQuery = db.Loans.AsNoTracking();
         if (scope.IsAgentOnly)
-            candQuery = candQuery.Where(c => c.AgentId == scope.AgentId);
+            loanQuery = loanQuery.Where(l => db.Candidates.Any(c => c.Id == l.CandidateId && c.AgentId == scope.AgentId));
 
-        var candidates = await candQuery
-            .OrderBy(c => c.FullName)
-            .Select(c => new { c.Id, c.FullName, c.Code })
-            .ToListAsync();
-
-        var loans = await db.Loans.ToListAsync();
-        var loanByCandidate = loans
+        var loans = await loanQuery.ToListAsync();
+        var latestLoans = loans
             .GroupBy(l => l.CandidateId)
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.CreatedAt).First());
+            .Select(g => g.OrderByDescending(l => l.CreatedAt).First())
+            .ToList();
+        var candidateIds = latestLoans.Select(l => l.CandidateId).ToList();
+        var candidates = await db.Candidates.AsNoTracking()
+            .Where(c => candidateIds.Contains(c.Id))
+            .Select(c => new { c.Id, c.FullName, c.Code })
+            .ToDictionaryAsync(c => c.Id);
 
-        _rows = candidates.Select(c =>
-        {
-            if (loanByCandidate.TryGetValue(c.Id, out var loan))
-                return new LoanRow(c.Id, c.FullName, c.Code, loan.Status, loan.Amount, loan.TermMonths, loan.BankName, loan.DisbursedDate, true);
-            return new LoanRow(c.Id, c.FullName, c.Code, LoanStatus.NotBorrowed, null, null, null, null, false);
-        }).ToList();
+        _rows = latestLoans
+            .Where(l => candidates.ContainsKey(l.CandidateId))
+            .Select(l =>
+            {
+                var c = candidates[l.CandidateId];
+                return new LoanRow(
+                    c.Id,
+                    c.FullName,
+                    c.Code,
+                    l.Status == LoanStatus.NotBorrowed ? LoanStatus.Borrowing : l.Status,
+                    l.Amount,
+                    l.TermMonths,
+                    l.BankName,
+                    l.DisbursedDate);
+            })
+            .OrderBy(r => r.CandidateName)
+            .ToList();
 
-        _notBorrowedCount = _rows.Count(r => r.Status == LoanStatus.NotBorrowed);
         _borrowingCount = _rows.Count(r => r.Status == LoanStatus.Borrowing);
         _disbursedCount = _rows.Count(r => r.Status == LoanStatus.Disbursed);
         _disbursedAmount = _rows.Where(r => r.Status == LoanStatus.Disbursed).Sum(r => r.Amount ?? 0m);
 
         _loading = false;
+    }
+
+    private async Task OpenCreate()
+    {
+        if (!_canUpdate) return;
+        var dialog = await DialogService.ShowAsync<LoanDialog>("Thêm khoản vay");
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+            await Load();
     }
 
     private async Task OpenEdit(Guid candidateId)

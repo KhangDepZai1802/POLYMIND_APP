@@ -11,7 +11,7 @@
 <MudDialogProvider FullWidth="true" MaxWidth="MaxWidth.Medium" CloseButton="true" CloseOnEscapeKey="true" />
 <MudSnackbarProvider />
 
-<MudLayout>
+<MudLayout Class="@($"theme-shell {(_isDarkMode ? "theme-dark" : "theme-light")}")">
     <MudAppBar Elevation="1" Color="Color.Primary">
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
                        OnClick="@(() => _drawerOpen = !_drawerOpen)" />
