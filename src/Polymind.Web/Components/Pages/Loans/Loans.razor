@@ -1,0 +1,222 @@
+@page "/loans"
+@attribute [Authorize(Policy = "loans:read")]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject AgentScope AgentScope
+
+<PageTitle>Hỗ trợ vay — POLYMIND</PageTitle>
+
+<PageHeader Eyebrow="TÀI CHÍNH" Title="Hỗ trợ vay vốn ứng viên" Subtitle="@($"{_rows.Count} ứng viên • {_disbursedCount} đã giải ngân")" />
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    @* Thẻ tổng quan theo tình trạng *@
+    <MudGrid Class="mb-4">
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Chưa vay</MudText>
+                <MudText Typo="Typo.h5"><b>@_notBorrowedCount</b></MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Đang vay</MudText>
+                <MudText Typo="Typo.h5" Color="Color.Warning"><b>@_borrowingCount</b></MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Đã giải ngân</MudText>
+                <MudText Typo="Typo.h5" Color="Color.Success"><b>@_disbursedCount</b></MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Tổng đã giải ngân</MudText>
+                <MudText Typo="Typo.h6" Color="Color.Success"><b>@($"{_disbursedAmount:N0} đ")</b></MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudPaper Class="pa-4" Elevation="1">
+        <MudGrid Class="mb-3 align-center">
+            <MudItem xs="12" md="5">
+                <MudTextField @bind-Value="_search" Placeholder="Tìm tên, mã, ngân hàng..." Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudSelect T="LoanStatus?" @bind-Value="_statusFilter" Label="Lọc theo tình trạng" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                    <MudSelectItem T="LoanStatus?" Value="@((LoanStatus?)null)">Tất cả</MudSelectItem>
+                    @foreach (var s in Enum.GetValues<LoanStatus>())
+                    {
+                        <MudSelectItem T="LoanStatus?" Value="@s">@Labels.Vi(s)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+
+        @if (!Filtered.Any())
+        {
+            <MudAlert Severity="Severity.Info" Dense="true">Không có ứng viên phù hợp.</MudAlert>
+        }
+        else
+        {
+            <MudHidden Breakpoint="Breakpoint.SmAndDown">
+                <div class="table-scroll-x">
+                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                        <thead>
+                            <tr>
+                                <th>Ứng viên</th>
+                                <th>Tình trạng</th>
+                                <th style="text-align:right">Số tiền</th>
+                                <th style="text-align:center">Thời hạn</th>
+                                <th>Ngân hàng</th>
+                                <th>Ngày giải ngân</th>
+                                <th style="text-align:right">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in Filtered)
+                            {
+                                <tr style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/candidates/{r.CandidateId}"))">
+                                    <td><b>@r.CandidateName</b><MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@r.Code</MudText></td>
+                                    <td>
+                                        <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(r.Status)" Icon="@Labels.IconOf(r.Status)">@Labels.Vi(r.Status)</MudChip>
+                                    </td>
+                                    <td style="text-align:right">@(r.Amount is null ? "—" : $"{r.Amount:N0} đ")</td>
+                                    <td style="text-align:center">@(r.TermMonths is null ? "—" : $"{r.TermMonths} tháng")</td>
+                                    <td>@(string.IsNullOrWhiteSpace(r.BankName) ? "—" : r.BankName)</td>
+                                    <td>@(r.DisbursedDate?.ToString("dd/MM/yyyy") ?? "—")</td>
+                                    <td style="text-align:right" @onclick:stopPropagation="true">
+                                        @if (_canUpdate)
+                                        {
+                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit"
+                                                       OnClick="@(() => OpenEdit(r.CandidateId))">@(r.HasLoan ? "Sửa" : "Tạo")</MudButton>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </div>
+            </MudHidden>
+
+            <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+                @foreach (var r in Filtered)
+                {
+                    <MudPaper Class="mobile-card pa-3" Elevation="0">
+                        <div class="d-flex justify-space-between align-center" style="gap:8px">
+                            <div style="min-width:0;cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/candidates/{r.CandidateId}"))">
+                                <MudText Typo="Typo.subtitle2" Style="font-weight:600">@r.CandidateName</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@r.Code</MudText>
+                            </div>
+                            <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(r.Status)" Icon="@Labels.IconOf(r.Status)">@Labels.Vi(r.Status)</MudChip>
+                        </div>
+                        <div class="d-flex justify-space-between align-center mt-1" style="gap:8px">
+                            <MudText Typo="Typo.body2">
+                                @(r.Amount is null ? "—" : $"{r.Amount:N0} đ")
+                                @if (r.TermMonths is not null) { <span class="mud-text-secondary"> • @r.TermMonths tháng</span> }
+                            </MudText>
+                            @if (_canUpdate)
+                            {
+                                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenEdit(r.CandidateId))">@(r.HasLoan ? "Sửa" : "Tạo")</MudButton>
+                            }
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(r.BankName))
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@r.BankName</MudText>
+                        }
+                    </MudPaper>
+                }
+            </MudHidden>
+        }
+    </MudPaper>
+}
+
+@code {
+    private record LoanRow(Guid CandidateId, string CandidateName, string Code, LoanStatus Status,
+        decimal? Amount, int? TermMonths, string? BankName, DateOnly? DisbursedDate, bool HasLoan);
+
+    private List<LoanRow> _rows = new();
+    private bool _loading = true;
+    private bool _canUpdate;
+    private string _search = "";
+    private LoanStatus? _statusFilter;
+
+    private int _notBorrowedCount;
+    private int _borrowingCount;
+    private int _disbursedCount;
+    private decimal _disbursedAmount;
+
+    private IEnumerable<LoanRow> Filtered => _rows.Where(r =>
+        (_statusFilter is null || r.Status == _statusFilter)
+        && (string.IsNullOrWhiteSpace(_search)
+            || r.CandidateName.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || r.Code.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || (r.BankName?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false)));
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canUpdate = await HasPermission("loans:update");
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        _loading = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var scope = await AgentScope.GetAsync();
+
+        var candQuery = db.Candidates.AsQueryable();
+        if (scope.IsAgentOnly)
+            candQuery = candQuery.Where(c => c.AgentId == scope.AgentId);
+
+        var candidates = await candQuery
+            .OrderBy(c => c.FullName)
+            .Select(c => new { c.Id, c.FullName, c.Code })
+            .ToListAsync();
+
+        var loans = await db.Loans.ToListAsync();
+        var loanByCandidate = loans
+            .GroupBy(l => l.CandidateId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.CreatedAt).First());
+
+        _rows = candidates.Select(c =>
+        {
+            if (loanByCandidate.TryGetValue(c.Id, out var loan))
+                return new LoanRow(c.Id, c.FullName, c.Code, loan.Status, loan.Amount, loan.TermMonths, loan.BankName, loan.DisbursedDate, true);
+            return new LoanRow(c.Id, c.FullName, c.Code, LoanStatus.NotBorrowed, null, null, null, null, false);
+        }).ToList();
+
+        _notBorrowedCount = _rows.Count(r => r.Status == LoanStatus.NotBorrowed);
+        _borrowingCount = _rows.Count(r => r.Status == LoanStatus.Borrowing);
+        _disbursedCount = _rows.Count(r => r.Status == LoanStatus.Disbursed);
+        _disbursedAmount = _rows.Where(r => r.Status == LoanStatus.Disbursed).Sum(r => r.Amount ?? 0m);
+
+        _loading = false;
+    }
+
+    private async Task OpenEdit(Guid candidateId)
+    {
+        if (!_canUpdate) return;
+        var parameters = new DialogParameters<LoanDialog> { { x => x.CandidateId, candidateId } };
+        var dialog = await DialogService.ShowAsync<LoanDialog>("Hồ sơ hỗ trợ vay", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+            await Load();
+    }
+
+    private async Task<bool> HasPermission(string permission)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        return result.Succeeded;
+    }
+}

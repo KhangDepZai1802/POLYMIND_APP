@@ -9,7 +9,7 @@
 
 <PageTitle>Đại lý &amp; Cộng tác viên — POLYMIND</PageTitle>
 
-<PageHeader Eyebrow="HOA HỒNG" Title="Đại lý và Cộng tác viên" Subtitle="@($"{_agents.Count} đại lý • {_ctvBoard.Count} cộng tác viên")">
+<PageHeader Eyebrow="HOA HỒNG" Title="Đại lý và Cộng tác viên" Subtitle="@($"{_agentTotal} đại lý • {_ctvTotal} cộng tác viên")">
     <Actions>
         <AuthorizeView Policy="agents:create">
             <Authorized>
@@ -25,7 +25,7 @@
 <MudPaper Elevation="1" Class="pa-4 mb-4">
     <div class="d-flex align-center mb-3" style="gap:8px">
         <MudIcon Icon="@Icons.Material.Filled.EmojiEvents" Color="Color.Warning" />
-        <MudText Typo="Typo.subtitle1"><b>Bảng thi đua — Doanh số Đại lý</b></MudText>
+        <MudText Typo="Typo.subtitle1"><b>Bảng thi đua — Top 3 Đại lý doanh thu cao nhất</b></MudText>
     </div>
     @if (_agentBoard.Count == 0)
     {
@@ -88,7 +88,7 @@
 <MudPaper Elevation="1" Class="pa-4 mb-4">
     <div class="d-flex align-center mb-3" style="gap:8px">
         <MudIcon Icon="@Icons.Material.Filled.MilitaryTech" Color="Color.Secondary" />
-        <MudText Typo="Typo.subtitle1"><b>Bảng thi đua — Doanh số Cộng tác viên</b></MudText>
+        <MudText Typo="Typo.subtitle1"><b>Bảng thi đua — Top 5 Cộng tác viên doanh thu cao nhất</b></MudText>
         <MudText Typo="Typo.caption" Class="mud-text-secondary">(bấm tên CTV để xem thông tin liên lạc)</MudText>
     </div>
     @if (_ctvBoard.Count == 0)
@@ -209,6 +209,8 @@
     private List<Agent> _agents = new();
     private List<AgentBoardRow> _agentBoard = new();
     private List<CtvBoardRow> _ctvBoard = new();
+    private int _agentTotal;
+    private int _ctvTotal;
     private string _search = "";
 
     private IEnumerable<Agent> Filtered => _agents.Where(a =>
@@ -249,6 +251,7 @@
                 agentCands.Sum(c => RevenueOfCandidate(c.Id)));
         })
         .OrderByDescending(x => x.Revenue).ThenByDescending(x => x.CandidateCount)
+        .Take(3) // chỉ hiển thị 3 đại lý doanh thu cao nhất
         .ToList();
 
         // Bảng CTV
@@ -264,7 +267,11 @@
                 ctvCands.Sum(x => RevenueOfCandidate(x.Id)));
         })
         .OrderByDescending(x => x.Revenue).ThenByDescending(x => x.CandidateCount)
+        .Take(5) // chỉ hiển thị 5 cộng tác viên doanh thu cao nhất
         .ToList();
+
+        _agentTotal = _agents.Count;
+        _ctvTotal = ctvs.Count;
     }
 
     private async Task ShowCtv(Guid id)

@@ -46,7 +46,9 @@
         <MudDataGrid T="Lead" Items="Filtered" Hover="true" Dense="true" Striped="true"
                      RowClick="@(args => Nav.NavigateTo($"/leads/{args.Item.Id}"))" Class="cursor-pointer">
             <Columns>
-                <PropertyColumn Property="x => x.Code" Title="Mã" />
+                <TemplateColumn Title="Mã">
+                    <CellTemplate>@Short(context.Item.Code)</CellTemplate>
+                </TemplateColumn>
                 <PropertyColumn Property="x => x.FullName" Title="Họ tên" />
                 <TemplateColumn Title="Giới tính">
                     <CellTemplate>
@@ -66,7 +68,9 @@
                         @{ var ctv = CtvLabel(context.Item); }
                         @if (ctv is not null)
                         {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Diversity3">@ctv</MudChip>
+                            <span class="chip-clickable" @onclick="@(() => ShowCollaborator(context.Item.CollaboratorId!.Value))" @onclick:stopPropagation="true">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Diversity3">@ctv</MudChip>
+                            </span>
                         }
                         else
                         {
@@ -103,7 +107,7 @@
                     <div class="d-flex justify-space-between align-center" style="gap:8px">
                         <div style="min-width:0">
                             <MudText Typo="Typo.subtitle2" Style="font-weight:600">@l.FullName</MudText>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@l.Code • @(l.Gender is Gender g ? Labels.Vi(g) : "—") • @(string.IsNullOrWhiteSpace(l.Phone) ? "—" : l.Phone)</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@Short(l.Code) • @(l.Gender is Gender g ? Labels.Vi(g) : "—") • @(string.IsNullOrWhiteSpace(l.Phone) ? "—" : l.Phone)</MudText>
                         </div>
                         <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(l.Status)">@Labels.Vi(l.Status)</MudChip>
                     </div>
@@ -112,7 +116,9 @@
                         @{ var ctvm = CtvLabel(l); }
                         @if (ctvm is not null)
                         {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled">@ctvm</MudChip>
+                            <span class="chip-clickable" @onclick="@(() => ShowCollaborator(l.CollaboratorId!.Value))" @onclick:stopPropagation="true">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Diversity3">@ctvm</MudChip>
+                            </span>
                         }
                         else
                         {
@@ -143,6 +149,19 @@
     private string? CtvLabel(Lead l)
         => l.Source == LeadSource.Referral && l.CollaboratorId is Guid cid && _ctvNames.TryGetValue(cid, out var n)
             ? $"CTV-{n}" : null;
+
+    // Rút gọn mã lead "LD-YYYYMMDD-XXXX" → "#XXXX" cho gọn bảng.
+    private static string Short(string code)
+    {
+        var i = code.LastIndexOf('-');
+        return i >= 0 && i < code.Length - 1 ? "#" + code[(i + 1)..] : code;
+    }
+
+    private async Task ShowCollaborator(Guid id)
+    {
+        var parameters = new DialogParameters<CollaboratorInfoDialog> { { x => x.CollaboratorId, id } };
+        await DialogService.ShowAsync<CollaboratorInfoDialog>("Thông tin cộng tác viên", parameters);
+    }
 
     private IEnumerable<Lead> Filtered => _leads.Where(l =>
         (string.IsNullOrWhiteSpace(_search)

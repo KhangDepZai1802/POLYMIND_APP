@@ -2,6 +2,7 @@
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject IBrowserViewportService Viewport
+@inject AgentScope AgentScope
 @implements IDisposable
 
 <MudThemeProvider @ref="_themeProvider" Theme="Polymind.Web.Theme.PolymindTheme.Default" @bind-IsDarkMode="_isDarkMode" />
@@ -14,10 +15,18 @@
     <MudAppBar Elevation="1" Color="Color.Primary">
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
                        OnClick="@(() => _drawerOpen = !_drawerOpen)" />
-        <span class="appbar-logo ml-1"><img src="img/logo-polymind.png" alt="POLYMIND" /></span>
+        <span class="appbar-logo ml-1"><img src="img/logo-polymind.png?v=20260629-logo2" alt="POLYMIND" /></span>
         <MudText Typo="Typo.h6" Class="ml-2 d-none d-sm-flex" Style="font-weight:800;letter-spacing:.02em">POLYMIND OLMS</MudText>
         <MudText Typo="Typo.caption" Class="ml-2 d-none d-lg-flex" Style="opacity:.85">Quản lý Xuất khẩu Lao động</MudText>
         <MudSpacer />
+        @if (!_isAgentOnly)
+        {
+            <AuthorizeView>
+                <MudTooltip Text="Trợ lý AI">
+                    <MudIconButton Icon="@Icons.Material.Filled.AutoAwesome" Color="Color.Inherit" Href="/ai" />
+                </MudTooltip>
+            </AuthorizeView>
+        }
         <MudTooltip Text="@(_isDarkMode ? "Chế độ sáng" : "Chế độ tối")">
             <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
                            Color="Color.Inherit" OnClick="ToggleDarkModeAsync" />
@@ -62,9 +71,16 @@
 @code {
     private bool _drawerOpen = true;
     private bool _isDarkMode;
+    private bool _isAgentOnly;
     private MudThemeProvider _themeProvider = default!;
 
     protected override void OnInitialized() => Nav.LocationChanged += OnLocationChanged;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var scope = await AgentScope.GetAsync();
+        _isAgentOnly = scope.IsAgentOnly;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

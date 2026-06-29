@@ -1,0 +1,345 @@
+@page "/ai"
+@attribute [Authorize]
+@using Polymind.Web.Ai
+@inject GeminiClient Gemini
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<PageTitle>Trợ lý AI — POLYMIND</PageTitle>
+
+<PageHeader Eyebrow="AI" Title="Trợ lý AI (Gemini)" Subtitle="Hỏi-đáp nghiệp vụ • Trích xuất hồ sơ từ CV/ảnh" />
+
+@if (!Gemini.IsConfigured)
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4">
+        Chưa cấu hình Gemini API key. Dán key vào <b>Ai:Gemini:ApiKey</b> trong appsettings.Development.json rồi khởi động lại ứng dụng.
+    </MudAlert>
+}
+
+<MudPaper Class="ai-shell" Elevation="0">
+    <div class="ai-shell-top">
+        <div>
+            <MudText Typo="Typo.h6" Class="ai-shell-title">Trợ lý nghiệp vụ POLYMIND</MudText>
+            <MudText Typo="Typo.body2" Class="ai-shell-subtitle">Dữ liệu ứng viên, lead và hồ sơ được nạp trong phiên làm việc hiện tại.</MudText>
+        </div>
+        <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled" Icon="@Icons.Material.Filled.AutoAwesome">
+            Gemini 2.5 Flash
+        </MudChip>
+    </div>
+
+    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" Class="ai-tabs">
+        <MudTabPanel Text="Hỏi đáp" Icon="@Icons.Material.Filled.Forum">
+            <section class="ai-panel">
+                <div class="ai-chat-window">
+                    @if (_history.Count == 0)
+                    {
+                        <div class="ai-chat-empty">
+                            <span class="ai-empty-icon"><MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Size="Size.Large" /></span>
+                            <MudText Typo="Typo.h6" Class="mt-3">Hỏi nhanh dữ liệu tuyển dụng</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">
+                                Ví dụ: ứng viên nào tiềm năng nhất, lead nào cần chăm sóc, kế hoạch tuần này.
+                            </MudText>
+                        </div>
+                    }
+                    @foreach (var m in _history)
+                    {
+                        <div class="ai-bubble-row @(m.FromUser ? "from-user" : "from-ai")">
+                            <div class="ai-bubble @(m.FromUser ? "ai-bubble-user" : "ai-bubble-ai")" style="white-space:pre-wrap">@m.Text</div>
+                        </div>
+                    }
+                    @if (_chatBusy)
+                    {
+                        <div class="ai-bubble-row from-ai">
+                            <div class="ai-bubble ai-bubble-ai">
+                                <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                                <span class="ml-2">Đang trả lời...</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+                <div class="ai-chat-compose">
+                    <MudTextField @bind-Value="_input" Placeholder="Nhập câu hỏi..." Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  Lines="1" Immediate="true" OnKeyDown="OnKeyDown" Disabled="_chatBusy || !Gemini.IsConfigured" Class="ai-chat-input" />
+                    <MudButton Color="Color.Secondary" Variant="Variant.Filled" EndIcon="@Icons.Material.Filled.Send"
+                               OnClick="SendAsync" Disabled="_chatBusy || !Gemini.IsConfigured || string.IsNullOrWhiteSpace(_input)">Gửi</MudButton>
+                </div>
+                @if (_history.Count > 0)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.DeleteSweep" Class="mt-2" OnClick="ClearChat">Xóa hội thoại</MudButton>
+                }
+            </section>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Trích xuất CV / ảnh" Icon="@Icons.Material.Filled.DocumentScanner">
+            <section class="ai-panel">
+                <div class="ai-extract-grid">
+                    <div class="ai-upload-card">
+                        <label class="ai-upload-zone">
+                            <InputFile OnChange="OnCvSelected" accept="image/*,application/pdf" class="ai-upload-input" />
+                            <span class="ai-upload-icon"><MudIcon Icon="@Icons.Material.Filled.CloudUpload" Size="Size.Large" /></span>
+                            <span class="ai-upload-title">Chọn CV hoặc ảnh hồ sơ</span>
+                            <span class="ai-upload-caption">PDF, JPG, PNG - tối đa 8 MB</span>
+                        </label>
+
+                        @if (_cvFile is not null)
+                        {
+                            <div class="ai-file-chip">
+                                <span class="ai-file-icon"><MudIcon Icon="@FileIcon(_cvFile)" /></span>
+                                <span class="ai-file-main">
+                                    <span class="ai-file-name">@_cvFile.Name</span>
+                                    <span class="ai-file-meta">@FormatBytes(_cvFile.Size)</span>
+                                </span>
+                                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Default" OnClick="ClearCvFile" />
+                            </div>
+                        }
+
+                        <MudButton Color="Color.Secondary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.AutoAwesome"
+                                   Class="ai-extract-button" FullWidth="true"
+                                   OnClick="ExtractAsync" Disabled="_cvBusy || _cvFile is null || !Gemini.IsConfigured">
+                            Trích xuất thông tin
+                        </MudButton>
+                    </div>
+
+                    <div class="ai-result-card">
+                        @if (_cvBusy)
+                        {
+                            <div class="ai-result-empty">
+                                <MudProgressCircular Indeterminate="true" Color="Color.Secondary" Size="Size.Medium" />
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">AI đang đọc hồ sơ...</MudText>
+                            </div>
+                        }
+                        else if (_cvResult is null)
+                        {
+                            <div class="ai-result-empty">
+                                <span class="ai-result-icon"><MudIcon Icon="@Icons.Material.Filled.Article" Size="Size.Large" /></span>
+                                <MudText Typo="Typo.subtitle2" Class="mt-2">Kết quả trích xuất</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">Thông tin hồ sơ sẽ hiển thị tại đây.</MudText>
+                            </div>
+                        }
+                        else if (!_cvResult.Ok)
+                        {
+                            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">@_cvResult.Error</MudAlert>
+                        }
+                        else
+                        {
+                            <div class="ai-result-header">
+                                <MudIcon Icon="@Icons.Material.Filled.TaskAlt" Color="Color.Success" />
+                                <MudText Typo="Typo.subtitle2">Đã trích xuất</MudText>
+                            </div>
+                            <div class="ai-result-content">@_cvResult.Text</div>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-2">Vui lòng đối chiếu lại với bản gốc trước khi lưu vào hồ sơ.</MudText>
+                        }
+                    </div>
+                </div>
+            </section>
+        </MudTabPanel>
+    </MudTabs>
+</MudPaper>
+
+@code {
+    private readonly List<AiChatMessage> _history = new();
+    private string _input = "";
+    private bool _chatBusy;
+
+    private IBrowserFile? _cvFile;
+    private bool _cvBusy;
+    private AiResult? _cvResult;
+
+    private const long MaxCvBytes = 8 * 1024 * 1024; // 8 MB
+
+    private const string ChatSystemBase =
+        "Bạn là trợ lý AI nội bộ của công ty xuất khẩu lao động (XKLĐ) POLYMIND. " +
+        "Bạn ĐANG được cấp quyền truy cập dữ liệu nội bộ thật của hệ thống (xem phần 'DỮ LIỆU HỆ THỐNG' bên dưới) — " +
+        "đây là công cụ quản trị nội bộ, KHÔNG phải dữ liệu công khai, nên bạn ĐƯỢC PHÉP dùng tên ứng viên và số liệu trong đó để trả lời. " +
+        "TUYỆT ĐỐI KHÔNG trả lời rằng 'tôi không có quyền truy cập dữ liệu' — hãy dùng dữ liệu được cung cấp. " +
+        "Nhiệm vụ: trả lời nghiệp vụ XKLĐ, phân tích/xếp hạng ứng viên tiềm năng dựa trên tiến độ trong quy trình 17 bước " +
+        "(ứng viên ở bước càng cao, tiến độ % càng lớn thì càng gần xuất cảnh → càng tiềm năng/ưu tiên), " +
+        "lập kế hoạch hành động, gợi ý bước tiếp theo cho từng ứng viên, và tư vấn thị trường Nhật/Hàn/Đài Loan/Đức. " +
+        "Trả lời bằng tiếng Việt, chính xác, thực tế. Khi liệt kê ứng viên hãy nêu tên + bước hiện tại + tiến độ. " +
+        "Nếu dữ liệu không đủ để kết luận, nói rõ phần còn thiếu thay vì từ chối.";
+
+    // System prompt thực tế = ChatSystemBase + ảnh chụp dữ liệu hệ thống (nạp 1 lần khi mở trang).
+    private string _systemPrompt = ChatSystemBase;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var data = await BuildDataContextAsync();
+            _systemPrompt = ChatSystemBase + "\n\n===== DỮ LIỆU HỆ THỐNG (ảnh chụp hiện tại) =====\n" + data;
+        }
+        catch
+        {
+            // Không nạp được dữ liệu thì vẫn cho chat (chỉ thiếu ngữ cảnh) — không chặn trang.
+        }
+    }
+
+    /// <summary>Dựng tóm tắt dữ liệu thật (ứng viên/lead/đơn hàng) để AI dùng làm ngữ cảnh trả lời.</summary>
+    private async Task<string> BuildDataContextAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var jobInfo = await db.JobOrders.ToDictionaryAsync(j => j.Id, j => new { j.Country, j.Field });
+
+        var cands = await db.Candidates
+            .Select(c => new
+            {
+                c.FullName,
+                c.Gender,
+                c.Province,
+                Cjo = c.JobOrders.OrderByDescending(j => j.CreatedAt).FirstOrDefault()
+            })
+            .ToListAsync();
+
+        var rows = cands.Select(c =>
+        {
+            var job = c.Cjo is null ? null : jobInfo.GetValueOrDefault(c.Cjo.JobOrderId);
+            var step = c.Cjo?.CurrentStep;
+            var progress = c.Cjo is null ? 0 : (int)c.Cjo.CurrentStep * 100 / 17;
+            return new
+            {
+                c.FullName,
+                Gender = c.Gender is Gender g ? Labels.Vi(g) : "—",
+                Province = string.IsNullOrWhiteSpace(c.Province) ? "—" : c.Province,
+                Country = job?.Country ?? "—",
+                Field = string.IsNullOrWhiteSpace(job?.Field) ? "—" : job!.Field!,
+                Step = step is null ? "Chưa vào đơn hàng" : Labels.Vi(step.Value),
+                StepNo = step is null ? 0 : (int)step.Value,
+                Progress = progress
+            };
+        })
+        .OrderByDescending(r => r.StepNo)
+        .ToList();
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"Tổng số ứng viên: {rows.Count}.");
+
+        // Phân bố theo bước (gọn).
+        var byStep = rows.Where(r => r.StepNo > 0)
+            .GroupBy(r => r.Step)
+            .Select(g => $"{g.Key}: {g.Count()}")
+            .ToList();
+        if (byStep.Count > 0)
+            sb.AppendLine("Phân bố theo bước hiện tại — " + string.Join("; ", byStep) + ".");
+
+        // Lead theo trạng thái.
+        var leadCount = await db.Leads.CountAsync();
+        var leadsByStatus = await db.Leads.GroupBy(l => l.Status)
+            .Select(g => new { g.Key, Count = g.Count() }).ToListAsync();
+        sb.AppendLine($"Tổng số lead: {leadCount} — " +
+            string.Join("; ", leadsByStatus.Select(x => $"{Labels.Vi(x.Key)}: {x.Count}")) + ".");
+
+        var jobCount = await db.JobOrders.CountAsync();
+        sb.AppendLine($"Tổng số đơn hàng (job order): {jobCount}.");
+
+        sb.AppendLine();
+        sb.AppendLine("DANH SÁCH ỨNG VIÊN (sắp xếp tiến độ cao → thấp; định dạng: Tên | Giới tính | Tỉnh | Quốc gia | Nghề | Bước hiện tại | Tiến độ):");
+        var i = 1;
+        foreach (var r in rows.Take(100))
+            sb.AppendLine($"{i++}. {r.FullName} | {r.Gender} | {r.Province} | {r.Country} | {r.Field} | {r.Step} | {r.Progress}%");
+
+        return sb.ToString();
+    }
+
+    private const string CvPrompt =
+        "Đây là CV/hồ sơ của một ứng viên XKLĐ. Hãy trích xuất các thông tin sau nếu có, " +
+        "trình bày dạng danh sách 'Trường: giá trị' bằng tiếng Việt: Họ tên, Ngày sinh, Giới tính, " +
+        "Số CCCD/CMND, Số điện thoại, Email, Quê quán/Địa chỉ, Trình độ học vấn, Nghề nghiệp, " +
+        "Kinh nghiệm làm việc, Ngoại ngữ. Trường nào không tìm thấy thì ghi 'không rõ'.";
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+            await SendAsync();
+    }
+
+    private async Task SendAsync()
+    {
+        var text = _input?.Trim();
+        if (string.IsNullOrWhiteSpace(text) || _chatBusy || !Gemini.IsConfigured) return;
+
+        _history.Add(new AiChatMessage { FromUser = true, Text = text });
+        _input = "";
+        _chatBusy = true;
+        StateHasChanged();
+
+        var result = await Gemini.ChatAsync(_history, _systemPrompt);
+        _history.Add(new AiChatMessage { FromUser = false, Text = result.Ok ? result.Text : $"⚠️ {result.Error}" });
+        _chatBusy = false;
+    }
+
+    private void ClearChat() => _history.Clear();
+
+    private void OnCvSelected(InputFileChangeEventArgs args)
+    {
+        _cvFile = args.File;
+        _cvResult = null;
+    }
+
+    private void ClearCvFile()
+    {
+        _cvFile = null;
+        _cvResult = null;
+    }
+
+    private async Task ExtractAsync()
+    {
+        if (_cvFile is null || !Gemini.IsConfigured) return;
+        _cvBusy = true;
+        _cvResult = null;
+        try
+        {
+            if (_cvFile.Size > MaxCvBytes)
+            {
+                _cvResult = AiResult.Fail("File quá lớn (tối đa 8 MB).");
+                return;
+            }
+            using var ms = new MemoryStream();
+            await _cvFile.OpenReadStream(MaxCvBytes).CopyToAsync(ms);
+            var mime = ResolveMime(_cvFile);
+            _cvResult = await Gemini.ExtractFromFileAsync(ms.ToArray(), mime, CvPrompt);
+        }
+        catch (Exception ex)
+        {
+            _cvResult = AiResult.Fail($"Không đọc được file: {ex.Message}");
+        }
+        finally
+        {
+            _cvBusy = false;
+        }
+    }
+
+    private static string ResolveMime(IBrowserFile file)
+    {
+        if (!string.IsNullOrWhiteSpace(file.ContentType) && file.ContentType != "application/octet-stream")
+            return file.ContentType;
+        var ext = Path.GetExtension(file.Name).ToLowerInvariant();
+        return ext switch
+        {
+            ".pdf" => "application/pdf",
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".webp" => "image/webp",
+            _ => "image/jpeg",
+        };
+    }
+
+    private static string FileIcon(IBrowserFile file)
+    {
+        var ext = Path.GetExtension(file.Name).ToLowerInvariant();
+        return ext switch
+        {
+            ".pdf" => Icons.Material.Filled.PictureAsPdf,
+            ".png" or ".jpg" or ".jpeg" or ".webp" => Icons.Material.Filled.Image,
+            _ => Icons.Material.Filled.Description,
+        };
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes >= 1024 * 1024)
+            return $"{bytes / 1024d / 1024d:0.#} MB";
+        if (bytes >= 1024)
+            return $"{bytes / 1024d:0.#} KB";
+        return $"{bytes} B";
+    }
+}

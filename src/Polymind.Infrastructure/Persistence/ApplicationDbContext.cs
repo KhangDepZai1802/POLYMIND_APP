@@ -25,6 +25,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<CandidateJobOrder> CandidateJobOrders => Set<CandidateJobOrder>();
     public DbSet<WorkflowStepRecord> WorkflowStepRecords => Set<WorkflowStepRecord>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<Loan> Loans => Set<Loan>();
     public DbSet<Receipt> Receipts => Set<Receipt>();
     public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<Agent> Agents => Set<Agent>();
@@ -89,6 +90,15 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
             e.HasIndex(x => x.CandidateId);
             e.HasIndex(x => x.Status);
             e.Property(x => x.Amount).HasPrecision(15, 2);
+        });
+
+        b.Entity<Loan>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();
+            e.HasIndex(x => x.CandidateId);
+            e.HasIndex(x => x.Status);
+            e.Property(x => x.Amount).HasPrecision(15, 2);
+            e.Property(x => x.InterestRate).HasPrecision(5, 2);
         });
 
         b.Entity<Receipt>(e =>

@@ -53,6 +53,10 @@ builder.Services.AddMudServices();
 builder.Services.Configure<MinioStorageOptions>(builder.Configuration.GetSection("Minio"));
 builder.Services.AddScoped<IDocumentStorage, MinioDocumentStorage>();
 
+// AI (Gemini) — trợ lý hỏi-đáp, phân tích hồ sơ, trích xuất CV. Key tạm thời (free) ở Ai:Gemini.
+builder.Services.Configure<Polymind.Web.Ai.GeminiOptions>(builder.Configuration.GetSection("Ai:Gemini"));
+builder.Services.AddHttpClient<Polymind.Web.Ai.GeminiClient>(c => c.Timeout = TimeSpan.FromSeconds(60));
+
 // Thông báo đa kênh + job nền
 builder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection("Notifications"));
 builder.Services.AddScoped<NotificationService>();

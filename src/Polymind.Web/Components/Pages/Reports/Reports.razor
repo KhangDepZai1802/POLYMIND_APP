@@ -99,32 +99,29 @@ else
     </MudGrid>
 
     <MudText Typo="Typo.h6" Class="mt-4 mb-1"><b>Biểu đồ trực quan</b></MudText>
-    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2 d-block">Đầy đủ 7 loại biểu đồ — số liệu theo @RangeLabel.</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2 d-block">Số liệu theo @RangeLabel.</MudText>
     <MudGrid>
         <MudItem xs="12" md="5">
-            <PieChart Donut="true" Title="Lead theo trạng thái (tròn)" Data="@StatusData()" />
+            <PieChart Donut="true" Title="Lead theo trạng thái" Data="@StatusData()" />
         </MudItem>
         <MudItem xs="12" md="7">
-            <BarChart Title="Lead theo nguồn (cột)" Data="@SourceData()" />
+            <BarChart Title="Lead theo nguồn" Data="@SourceData()" />
         </MudItem>
         <MudItem xs="12" md="6">
-            <LineChart Title="Doanh thu vs Chi phí theo tháng (đường)" XLabels="@MonthLabels()" Series="@MonthRevExpSeries()" />
+            <LineChart Title="Doanh thu vs Chi phí theo tháng" XLabels="@MonthLabels()" Series="@MonthRevExpSeries()" />
         </MudItem>
         <MudItem xs="12" md="6">
-            <ComboChart Title="Doanh thu/Chi phí + Lợi nhuận theo tháng (kết hợp)" XLabels="@MonthLabels()" BarSeries="@MonthBarSeries()" LineSeries="@ProfitLine()" />
+            <ComboChart Title="Doanh thu/Chi phí + Lợi nhuận theo tháng" XLabels="@MonthLabels()" BarSeries="@MonthBarSeries()" LineSeries="@ProfitLine()" />
         </MudItem>
         <MudItem xs="12" md="6">
-            <LineChart Area="true" Title="Doanh thu theo tháng (miền)" XLabels="@MonthLabels()" Series="@RevenueAreaSeries()" />
+            <LineChart Area="true" Title="Doanh thu theo tháng" XLabels="@MonthLabels()" Series="@RevenueAreaSeries()" />
         </MudItem>
         <MudItem xs="12" md="6">
-            <BarChart Horizontal="true" Money="true" Title="Doanh thu theo quốc gia (thanh ngang)" Data="@CountryRevenueData()" />
+            <BarChart Horizontal="true" Money="true" Title="Doanh thu theo quốc gia" Data="@CountryRevenueData()" />
         </MudItem>
-        <MudItem xs="12" md="6">
-            <ScatterChart Title="Tỉnh/thành: Lead vs Chuyển đổi (phân tán)" Points="@ProvinceScatter()"
+        <MudItem xs="12" md="12">
+            <ScatterChart Title="Tỉnh/thành: Lead và Tỷ lệ chuyển đổi" Points="@ProvinceScatter()"
                           XAxisLabel="Tổng lead" YAxisLabel="Tỷ lệ chuyển đổi" YPercent="true" />
-        </MudItem>
-        <MudItem xs="12" md="6">
-            <BarChart Title="Ứng viên theo bước workflow (cột)" Data="@StepData()" />
         </MudItem>
     </MudGrid>
 
@@ -176,9 +173,9 @@ else
     </MudGrid>
 
     <MudGrid Class="mt-2">
-        <MudItem xs="12" md="7">
+        <MudItem xs="12">
             <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
-                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Doanh thu vs Chi phí theo tháng</b></MudText>
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Doanh thu vs Chi phí theo tháng (chi tiết)</b></MudText>
                 @if (_months.Any(m => m.Revenue > 0 || m.Expense > 0))
                 {
                     @foreach (var m in _months)
@@ -204,25 +201,6 @@ else
                 else
                 {
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">Chưa có dữ liệu thu/chi.</MudText>
-                }
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" md="5">
-            <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
-                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Ứng viên theo bước workflow</b></MudText>
-                @if (_byStep.Any())
-                {
-                    @foreach (var kv in _byStep.OrderBy(x => x.Key))
-                    {
-                        <div class="d-flex justify-space-between align-center mb-2">
-                            <span>@Labels.Vi(kv.Key)</span>
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@kv.Value</MudChip>
-                        </div>
-                    }
-                }
-                else
-                {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Chưa có ứng viên gắn đơn hàng.</MudText>
                 }
             </MudPaper>
         </MudItem>
@@ -699,6 +677,7 @@ else
 
         var today = DateTime.UtcNow.Date;
         var firstOfThisMonth = new DateOnly(today.Year, today.Month, 1);
+        _months = new(); // reset mỗi lần load (OnInitialized chạy 2 lần + đổi bộ lọc) — tránh cộng dồn tháng
         for (int i = 5; i >= 0; i--)
         {
             var m = firstOfThisMonth.AddMonths(-i);
@@ -948,8 +927,4 @@ else
 
     private List<ChartScatterPoint> ProvinceScatter() =>
         _leadByProvince.Select(p => new ChartScatterPoint(p.Total, p.ConversionRate, p.Province)).ToList();
-
-    private List<ChartDatum> StepData() =>
-        _byStep.OrderBy(x => (int)x.Key)
-            .Select(x => new ChartDatum($"B{(int)x.Key}", x.Value, ChartKit.Color((int)x.Key - 1))).ToList();
 }

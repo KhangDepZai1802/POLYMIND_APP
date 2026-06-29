@@ -464,6 +464,34 @@ public static class DemoDataSeeder
             await db.SaveChangesAsync();
         }
 
+        // ---- Hồ sơ hỗ trợ vay demo (xen kẽ Đang vay / Đã giải ngân; ~1/3 ứng viên chưa vay) ----
+        if (!await db.Loans.AnyAsync())
+        {
+            var banks = new[] { "Vietcombank", "BIDV", "VietinBank", "Agribank", "Sacombank", "MB Bank" };
+            var loanCands = cjos.Select(x => x.CandidateId).Distinct().ToList();
+            var idx = 0;
+            foreach (var cid in loanCands)
+            {
+                idx++;
+                if (idx % 3 == 0) continue; // ~1/3 ứng viên chưa vay (không tạo hồ sơ)
+                var disbursed = idx % 2 == 0;
+                db.Loans.Add(new Loan
+                {
+                    Code = $"VAY-{DateTime.UtcNow:yyyyMMdd}-{2000 + idx}",
+                    CandidateId = cid,
+                    Status = disbursed ? LoanStatus.Disbursed : LoanStatus.Borrowing,
+                    Amount = (decimal)rnd.Next(80, 220) * 1_000_000m,
+                    TermMonths = new[] { 12, 24, 36, 48 }[rnd.Next(4)],
+                    BankName = banks[rnd.Next(banks.Length)],
+                    InterestRate = (decimal)(rnd.Next(60, 120) / 10.0),
+                    DisbursedDate = disbursed ? DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-rnd.Next(10, 120))) : null,
+                    Note = disbursed ? "Đã giải ngân, đang trả góp" : "Đang hoàn thiện hồ sơ vay",
+                    CreatedBy = adminId,
+                });
+            }
+            await db.SaveChangesAsync();
+        }
+
         // ---- Vài tin nhắn nội bộ demo (để hộp thư không trống) ----
         if (!await db.Messages.AnyAsync())
         {

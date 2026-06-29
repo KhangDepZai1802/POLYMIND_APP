@@ -102,6 +102,30 @@ public static class Labels
         _ => s.ToString()
     };
 
+    public static string Vi(LoanStatus s) => s switch
+    {
+        LoanStatus.NotBorrowed => "Chưa vay",
+        LoanStatus.Borrowing => "Đang vay",
+        LoanStatus.Disbursed => "Đã giải ngân",
+        _ => s.ToString()
+    };
+
+    public static Color ColorOf(LoanStatus s) => s switch
+    {
+        LoanStatus.NotBorrowed => Color.Default,
+        LoanStatus.Borrowing => Color.Warning,
+        LoanStatus.Disbursed => Color.Success,
+        _ => Color.Default
+    };
+
+    public static string IconOf(LoanStatus s) => s switch
+    {
+        LoanStatus.NotBorrowed => Icons.Material.Filled.MoneyOff,
+        LoanStatus.Borrowing => Icons.Material.Filled.HourglassBottom,
+        LoanStatus.Disbursed => Icons.Material.Filled.AccountBalanceWallet,
+        _ => Icons.Material.Filled.AccountBalance
+    };
+
     public static string Vi(Gender g) => g switch
     {
         Gender.Male => "Nam",

@@ -17,6 +17,7 @@ public static class PermissionLabels
         ("receipts", "Phiếu thu / chi"),
         ("agents", "Đại lý / Cộng tác viên"),
         ("commissions", "Hoa hồng đại lý"),
+        ("loans", "Hỗ trợ vay vốn"),
         ("visas", "Hồ sơ Visa"),
         ("flights", "Vé máy bay / Xuất cảnh"),
         ("reports", "Báo cáo & Thống kê"),

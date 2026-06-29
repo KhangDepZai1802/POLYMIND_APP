@@ -38,7 +38,7 @@ public static class DbSeeder
     {
         [RoleNames.Director] = Combine(
             Read("dashboard", "leads", "candidates", "job_orders", "payments", "expenses", "receipts",
-                "agents", "collaborators", "commissions", "visas", "flights", "reports", "users", "roles", "notifications", "audit"),
+                "agents", "collaborators", "commissions", "loans", "visas", "flights", "reports", "users", "roles", "notifications", "audit"),
             Actions("payments", "approve"),
             Actions("expenses", "approve"),
             Actions("commissions", "approve"),
@@ -49,12 +49,14 @@ public static class DbSeeder
             Crud("leads"),
             Actions("candidates", "create", "read", "update"),
             Actions("collaborators", "create", "read", "update"),
+            Actions("loans", "create", "read", "update"),
             Read("dashboard", "job_orders", "agents", "reports", "notifications"),
             Messaging()),
 
         [RoleNames.Recruiter] = Combine(
             Actions("leads", "create", "read", "update"),
             Actions("candidates", "create", "read", "update"),
+            Actions("loans", "create", "read", "update"),
             Read("dashboard", "job_orders", "agents", "collaborators", "notifications"),
             Messaging()),
 
@@ -62,19 +64,20 @@ public static class DbSeeder
         [RoleNames.Consultant] = Combine(
             Actions("leads", "create", "read", "update"),
             Actions("candidates", "create", "read", "update"),
+            Actions("loans", "create", "read", "update"),
             Read("dashboard", "job_orders", "agents", "collaborators", "notifications"),
             Messaging()),
 
         [RoleNames.DocumentStaff] = Combine(
             Actions("candidates", "read", "update"),
-            Read("dashboard", "leads", "job_orders", "collaborators", "visas", "notifications"),
+            Read("dashboard", "leads", "job_orders", "collaborators", "loans", "visas", "notifications"),
             Messaging()),
 
         [RoleNames.VisaStaff] = Combine(
             Actions("candidates", "read", "update"),
             AllActions("visas"),
             AllActions("flights"),
-            Read("dashboard", "job_orders", "collaborators", "notifications"),
+            Read("dashboard", "job_orders", "collaborators", "loans", "notifications"),
             Messaging()),
 
         [RoleNames.Accountant] = Combine(
@@ -82,11 +85,12 @@ public static class DbSeeder
             AllActions("expenses"),
             AllActions("receipts"),
             AllActions("commissions"),
+            AllActions("loans"),
             Read("dashboard", "candidates", "job_orders", "agents", "collaborators", "reports", "notifications"),
             Messaging()),
 
         [RoleNames.Agent] = Combine(
-            Read("candidates", "collaborators", "commissions", "notifications"),
+            Read("candidates", "collaborators", "commissions", "loans", "notifications"),
             Messaging()),
     };
 

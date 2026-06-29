@@ -7,6 +7,7 @@
 @inject UserManager<ApplicationUser> UserManager
 @inject AuthenticationStateProvider AuthState
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
 <PageTitle>Quản trị hệ thống — POLYMIND</PageTitle>
 
@@ -103,6 +104,11 @@ else
                                                     </MudChip>
                                                 </td>
                                                 <td style="text-align:right;white-space:nowrap">
+                                                    <AuthorizeView Roles="super_admin">
+                                                        <Authorized>
+                                                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="@(() => OpenEditUserAsync(user))">Sửa</MudButton>
+                                                        </Authorized>
+                                                    </AuthorizeView>
                                                     <AuthorizeView Policy="users:update">
                                                         <Authorized>
                                                             <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => SaveUserRoleAsync(user))">Lưu role</MudButton>
@@ -137,15 +143,20 @@ else
                                             <MudSelectItem Value="@(role.Name ?? "")">@RoleDisplay(role)</MudSelectItem>
                                         }
                                     </MudSelect>
-                                    <AuthorizeView Policy="users:update">
-                                        <Authorized>
-                                            <div class="d-flex flex-wrap justify-end mt-2" style="gap:4px">
+                                    <div class="d-flex flex-wrap justify-end mt-2" style="gap:4px">
+                                        <AuthorizeView Roles="super_admin">
+                                            <Authorized>
+                                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="@(() => OpenEditUserAsync(user))">Sửa</MudButton>
+                                            </Authorized>
+                                        </AuthorizeView>
+                                        <AuthorizeView Policy="users:update">
+                                            <Authorized>
                                                 <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => SaveUserRoleAsync(user))">Lưu role</MudButton>
                                                 <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => ToggleUserAsync(user))">@(user.IsActive ? "Khóa" : "Mở")</MudButton>
                                                 <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => ResetPasswordAsync(user))">Reset mật khẩu</MudButton>
-                                            </div>
-                                        </Authorized>
-                                    </AuthorizeView>
+                                            </Authorized>
+                                        </AuthorizeView>
+                                    </div>
                                 </MudPaper>
                             }
                         </MudHidden>
@@ -384,6 +395,15 @@ else
         _newPassword = DbSeeder.DefaultAdminPassword;
         await LoadUsersAsync();
         Snackbar.Add("Đã tạo tài khoản.", Severity.Success);
+    }
+
+    private async Task OpenEditUserAsync(UserRow row)
+    {
+        var parameters = new DialogParameters<UserEditDialog> { { x => x.UserId, row.Id } };
+        var dialog = await DialogService.ShowAsync<UserEditDialog>($"Sửa tài khoản — {row.FullName}", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+            await LoadUsersAsync();
     }
 
     private async Task SaveUserRoleAsync(UserRow row)

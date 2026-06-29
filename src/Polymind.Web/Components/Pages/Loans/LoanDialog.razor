@@ -1,0 +1,130 @@
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
+
+@* Tạo/sửa hồ sơ hỗ trợ vay của 1 ứng viên (mỗi ứng viên 1 hồ sơ vay). *@
+<MudDialog>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Ứng viên: <b>@_candidateName</b></MudText>
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudSelect T="LoanStatus" @bind-Value="_status" Label="Tình trạng vay" Variant="Variant.Outlined" Margin="Margin.Dense">
+                        @foreach (var s in Enum.GetValues<LoanStatus>())
+                        {
+                            <MudSelectItem T="LoanStatus" Value="@s">@Labels.Vi(s)</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField T="decimal?" @bind-Value="_amount" Label="Số tiền vay (đ)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Format="N0" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField T="int?" @bind-Value="_termMonths" Label="Thời hạn vay (tháng)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_bankName" Label="Ngân hàng cho vay" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField T="decimal?" @bind-Value="_interestRate" Label="Lãi suất (%/năm)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker @bind-Date="_disbursedDate" Label="Ngày giải ngân" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_note" Label="Ghi chú" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+                </MudItem>
+            </MudGrid>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Hủy</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="_saving || _loading" OnClick="SaveAsync">Lưu</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid CandidateId { get; set; }
+
+    private bool _loading = true;
+    private bool _saving;
+    private string _candidateName = "—";
+    private LoanStatus _status = LoanStatus.NotBorrowed;
+    private decimal? _amount;
+    private int? _termMonths;
+    private string? _bankName;
+    private decimal? _interestRate;
+    private DateTime? _disbursedDate;
+    private string? _note;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _candidateName = await db.Candidates.Where(c => c.Id == CandidateId).Select(c => c.FullName).FirstOrDefaultAsync() ?? "—";
+        var loan = await db.Loans.OrderByDescending(l => l.CreatedAt).FirstOrDefaultAsync(l => l.CandidateId == CandidateId);
+        if (loan is not null)
+        {
+            _status = loan.Status;
+            _amount = loan.Amount;
+            _termMonths = loan.TermMonths;
+            _bankName = loan.BankName;
+            _interestRate = loan.InterestRate;
+            _disbursedDate = loan.DisbursedDate?.ToDateTime(TimeOnly.MinValue);
+            _note = loan.Note;
+        }
+        _loading = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+            var loan = await db.Loans.OrderByDescending(l => l.CreatedAt).FirstOrDefaultAsync(l => l.CandidateId == CandidateId);
+            var isNew = loan is null;
+            if (loan is null)
+            {
+                loan = new Loan
+                {
+                    CandidateId = CandidateId,
+                    Code = $"VAY-{DateTime.UtcNow:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}",
+                    CreatedBy = actorId,
+                };
+                db.Loans.Add(loan);
+            }
+
+            loan.Status = _status;
+            loan.Amount = _amount;
+            loan.TermMonths = _termMonths;
+            loan.BankName = string.IsNullOrWhiteSpace(_bankName) ? null : _bankName.Trim();
+            loan.InterestRate = _interestRate;
+            loan.DisbursedDate = _disbursedDate is null ? null : DateOnly.FromDateTime(_disbursedDate.Value);
+            loan.Note = string.IsNullOrWhiteSpace(_note) ? null : _note.Trim();
+            loan.UpdatedAt = DateTimeOffset.UtcNow;
+
+            db.AddAudit(actorId, isNew ? "create" : "update", "loans", loan.Id, null, new
+            {
+                loan.CandidateId,
+                loan.Status,
+                loan.Amount,
+                loan.TermMonths,
+                loan.BankName,
+            });
+            await db.SaveChangesAsync();
+            Snackbar.Add("Đã lưu hồ sơ vay.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

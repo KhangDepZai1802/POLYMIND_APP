@@ -1,5 +1,7 @@
 @page "/candidates/{Id:guid}"
 @attribute [Authorize(Policy = "candidates:read")]
+@using Polymind.Web.Components.Pages.Loans
+@using Polymind.Web.Components.Pages.Ai
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
 @inject IDialogService DialogService
@@ -24,11 +26,70 @@ else
 {
     <div class="d-flex justify-space-between align-center mb-3">
         <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/candidates"))">Quay lại</MudButton>
-        @if (_canUpdateCandidate)
-        {
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenEdit">Sửa thông tin</MudButton>
-        }
+        <div class="d-flex flex-wrap" style="gap:8px">
+            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.AutoAwesome" OnClick="OpenAiAnalysis">Phân tích AI</MudButton>
+            @if (_canUpdateCandidate)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenEdit">Sửa thông tin</MudButton>
+            }
+        </div>
     </div>
+
+    @* ===== Card nổi bật: Người phụ trách ứng viên (TVV + CTV) — bấm để xem chi tiết ===== *@
+    <MudPaper Class="pa-4 mb-4 people-card" Elevation="3">
+        <div class="d-flex align-center mb-3" style="gap:8px">
+            <MudIcon Icon="@Icons.Material.Filled.SupportAgent" Color="Color.Secondary" />
+            <MudText Typo="Typo.subtitle1"><b>Người phụ trách ứng viên</b></MudText>
+        </div>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                @if (_consultantId is not null)
+                {
+                    <div class="person-tile" @onclick="@(() => ShowConsultant(_consultantId.Value))">
+                        <MudAvatar Color="Color.Secondary" Size="Size.Large">@Initials(_consultantName)</MudAvatar>
+                        <div style="min-width:0">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined" Class="mb-1">Tư vấn viên</MudChip>
+                            <MudText Typo="Typo.h6" Class="person-name"><b>@_consultantName</b></MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Bấm để xem thông tin liên lạc</MudText>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="person-tile person-empty">
+                        <MudAvatar Color="Color.Default" Size="Size.Large"><MudIcon Icon="@Icons.Material.Filled.PersonOff" /></MudAvatar>
+                        <div>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined" Class="mb-1">Tư vấn viên</MudChip>
+                            <MudText Typo="Typo.body1" Class="mud-text-secondary">Chưa gắn tư vấn viên</MudText>
+                        </div>
+                    </div>
+                }
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                @if (_collaboratorId is not null)
+                {
+                    <div class="person-tile" @onclick="@(() => ShowCollaborator(_collaboratorId.Value))">
+                        <MudAvatar Color="Color.Primary" Size="Size.Large">@Initials(_collaboratorName)</MudAvatar>
+                        <div style="min-width:0">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined" Class="mb-1">Cộng tác viên (nguồn giới thiệu)</MudChip>
+                            <MudText Typo="Typo.h6" Class="person-name"><b>@_collaboratorName</b></MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Bấm để xem thông tin liên lạc</MudText>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="person-tile person-empty">
+                        <MudAvatar Color="Color.Default" Size="Size.Large"><MudIcon Icon="@Icons.Material.Filled.PersonOff" /></MudAvatar>
+                        <div>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined" Class="mb-1">Cộng tác viên (nguồn giới thiệu)</MudChip>
+                            <MudText Typo="Typo.body1" Class="mud-text-secondary">Không qua cộng tác viên</MudText>
+                        </div>
+                    </div>
+                }
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
 
     <MudGrid>
         <MudItem xs="12" md="5">
@@ -245,6 +306,44 @@ else
                                 </MudPaper>
                             }
                         </MudHidden>
+                    }
+                </MudPaper>
+            }
+
+            @if (_canReadLoan)
+            {
+                <MudPaper Class="pa-4 mt-4" Elevation="1">
+                    <div class="d-flex justify-space-between align-center mb-3">
+                        <div class="d-flex align-center" style="gap:8px">
+                            <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Color="Color.Primary" />
+                            <MudText Typo="Typo.subtitle1"><b>Hỗ trợ vay vốn</b></MudText>
+                        </div>
+                        <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(_loanStatus)" Icon="@Labels.IconOf(_loanStatus)">@Labels.Vi(_loanStatus)</MudChip>
+                    </div>
+                    @if (_hasLoan)
+                    {
+                        <MudGrid>
+                            @Field("Số tiền vay", _loanAmount is null ? null : $"{_loanAmount:N0} đ")
+                            @Field("Thời hạn", _loanTermMonths is null ? null : $"{_loanTermMonths} tháng")
+                            @Field("Ngân hàng", _loanBankName)
+                            @Field("Lãi suất", _loanInterestRate is null ? null : $"{_loanInterestRate}%/năm")
+                            @Field("Ngày giải ngân", _loanDisbursedDate?.ToString("dd/MM/yyyy"))
+                        </MudGrid>
+                        @if (!string.IsNullOrWhiteSpace(_loanNote))
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-2"><b>Ghi chú:</b> @_loanNote</MudText>
+                        }
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info" Dense="true">Ứng viên chưa có hồ sơ vay (chưa vay).</MudAlert>
+                    }
+                    @if (_canUpdateLoan)
+                    {
+                        <MudButton Class="mt-3" Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true"
+                                   StartIcon="@(_hasLoan ? Icons.Material.Filled.Edit : Icons.Material.Filled.Add)" OnClick="OpenLoanEdit">
+                            @(_hasLoan ? "Cập nhật hồ sơ vay" : "Tạo hồ sơ vay")
+                        </MudButton>
                     }
                 </MudPaper>
             }
@@ -470,10 +569,25 @@ else
     private Candidate? _candidate;
     private CandidateJobOrder? _cjo;
     private string? _country;
+    private Guid? _consultantId;
+    private string _consultantName = "—";
+    private Guid? _collaboratorId;
+    private string _collaboratorName = "—";
     private bool _busy;
     private bool _accessDenied;
     private bool _canUpdateCandidate;
     private bool _canReadPayments;
+    private bool _canReadLoan;
+    private bool _canUpdateLoan;
+
+    private bool _hasLoan;
+    private LoanStatus _loanStatus = LoanStatus.NotBorrowed;
+    private decimal? _loanAmount;
+    private int? _loanTermMonths;
+    private string? _loanBankName;
+    private decimal? _loanInterestRate;
+    private DateOnly? _loanDisbursedDate;
+    private string? _loanNote;
 
     private List<JobOrder> _jobOrders = new();
     private List<CandidatePaymentRow> _payments = new();
@@ -516,6 +630,8 @@ else
     {
         _canUpdateCandidate = await HasPermission("candidates:update");
         _canReadPayments = await HasPermission("payments:read");
+        _canReadLoan = await HasPermission("loans:read");
+        _canUpdateLoan = await HasPermission("loans:update");
         await Load();
     }
 
@@ -533,6 +649,35 @@ else
             _candidate = null;
             return;
         }
+        // Người phụ trách: Tư vấn viên (tài khoản role consultant) + Cộng tác viên (nguồn giới thiệu).
+        _consultantId = _candidate.ConsultantId;
+        if (_consultantId is not null)
+        {
+            var c = await db.Users.Where(u => u.Id == _consultantId.Value)
+                .Select(u => new { u.FullName, u.Email }).FirstOrDefaultAsync();
+            _consultantName = string.IsNullOrWhiteSpace(c?.FullName) ? (c?.Email ?? "—") : c.FullName;
+        }
+        _collaboratorId = _candidate.CollaboratorId;
+        if (_collaboratorId is not null)
+        {
+            _collaboratorName = await db.Collaborators.Where(x => x.Id == _collaboratorId.Value)
+                .Select(x => x.FullName).FirstOrDefaultAsync() ?? "—";
+        }
+
+        if (_canReadLoan)
+        {
+            var loan = await db.Loans.Where(l => l.CandidateId == Id)
+                .OrderByDescending(l => l.CreatedAt).FirstOrDefaultAsync();
+            _hasLoan = loan is not null;
+            _loanStatus = loan?.Status ?? LoanStatus.NotBorrowed;
+            _loanAmount = loan?.Amount;
+            _loanTermMonths = loan?.TermMonths;
+            _loanBankName = loan?.BankName;
+            _loanInterestRate = loan?.InterestRate;
+            _loanDisbursedDate = loan?.DisbursedDate;
+            _loanNote = loan?.Note;
+        }
+
         _cjo = await db.CandidateJobOrders.Where(j => j.CandidateId == Id)
             .OrderByDescending(j => j.CreatedAt).FirstOrDefaultAsync();
         if (_cjo is not null)
@@ -621,6 +766,46 @@ else
                 .Select(v => new DocumentVersionRow(v.Id, v.VersionNumber, v.FileName, v.FileSize, v.CreatedAt,
                     d.CurrentVersionId == v.Id))
                 .ToList());
+    }
+
+    private async Task OpenAiAnalysis()
+    {
+        var parameters = new DialogParameters<CandidateAnalysisDialog> { { x => x.CandidateId, Id } };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        await DialogService.ShowAsync<CandidateAnalysisDialog>("Phân tích hồ sơ AI", parameters, options);
+    }
+
+    private async Task OpenLoanEdit()
+    {
+        if (!_canUpdateLoan) return;
+        var parameters = new DialogParameters<LoanDialog> { { x => x.CandidateId, Id } };
+        var dialog = await DialogService.ShowAsync<LoanDialog>("Hồ sơ hỗ trợ vay", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            Snackbar.Add("Đã cập nhật hồ sơ vay", Severity.Success);
+            await Load();
+        }
+    }
+
+    private async Task ShowConsultant(Guid id)
+    {
+        var parameters = new DialogParameters<ConsultantInfoDialog> { { x => x.ConsultantId, id } };
+        await DialogService.ShowAsync<ConsultantInfoDialog>("Thông tin tư vấn viên", parameters);
+    }
+
+    private async Task ShowCollaborator(Guid id)
+    {
+        var parameters = new DialogParameters<CollaboratorInfoDialog> { { x => x.CollaboratorId, id } };
+        await DialogService.ShowAsync<CollaboratorInfoDialog>("Thông tin cộng tác viên", parameters);
+    }
+
+    private static string Initials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return "?";
+        return parts.Length == 1 ? parts[0][..1].ToUpper() : $"{parts[^2][0]}{parts[^1][0]}".ToUpper();
     }
 
     private async Task OpenEdit()

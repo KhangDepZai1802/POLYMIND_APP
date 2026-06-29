@@ -1,0 +1,133 @@
+@using Microsoft.AspNetCore.Identity
+@using Polymind.Infrastructure.Identity
+@inject UserManager<ApplicationUser> UserManager
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthState
+@inject ISnackbar Snackbar
+
+@* Dialog cho super admin chỉnh sửa 1 tài khoản: họ tên, tên đăng nhập (email), mật khẩu. *@
+<MudDialog>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (!_found)
+        {
+            <MudAlert Severity="Severity.Warning">Không tìm thấy tài khoản.</MudAlert>
+        }
+        else
+        {
+            <MudTextField @bind-Value="_fullName" Label="Họ tên" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+            <MudTextField @bind-Value="_email" Label="Tên đăng nhập (email)" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+            <MudTextField @bind-Value="_password" Label="Mật khẩu mới" HelperText="Để trống nếu không đổi mật khẩu"
+                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                          InputType="@(_showPassword ? InputType.Text : InputType.Password)"
+                          Adornment="Adornment.End"
+                          AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                          OnAdornmentClick="@(() => _showPassword = !_showPassword)" />
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Hủy</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="_saving || !_found" OnClick="SaveAsync">Lưu thay đổi</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid UserId { get; set; }
+
+    private bool _loading = true;
+    private bool _saving;
+    private bool _found;
+    private bool _showPassword;
+    private string _fullName = "";
+    private string _email = "";
+    private string _password = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = await UserManager.FindByIdAsync(UserId.ToString());
+        if (user is not null)
+        {
+            _found = true;
+            _fullName = user.FullName;
+            _email = user.Email ?? user.UserName ?? "";
+        }
+        _loading = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_fullName) || string.IsNullOrWhiteSpace(_email))
+        {
+            Snackbar.Add("Vui lòng nhập họ tên và tên đăng nhập.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var user = await UserManager.FindByIdAsync(UserId.ToString());
+            if (user is null)
+            {
+                Snackbar.Add("Không tìm thấy tài khoản.", Severity.Error);
+                return;
+            }
+
+            var oldEmail = user.Email;
+            var oldFullName = user.FullName;
+            var newEmail = _email.Trim();
+            var emailChanged = !string.Equals(oldEmail, newEmail, StringComparison.OrdinalIgnoreCase);
+
+            user.FullName = _fullName.Trim();
+            var update = await UserManager.UpdateAsync(user);
+            if (!update.Succeeded)
+            {
+                Snackbar.Add(string.Join("; ", update.Errors.Select(e => e.Description)), Severity.Error);
+                return;
+            }
+
+            if (emailChanged)
+            {
+                var setEmail = await UserManager.SetEmailAsync(user, newEmail);
+                if (!setEmail.Succeeded)
+                {
+                    Snackbar.Add(string.Join("; ", setEmail.Errors.Select(e => e.Description)), Severity.Error);
+                    return;
+                }
+                var setName = await UserManager.SetUserNameAsync(user, newEmail);
+                if (!setName.Succeeded)
+                {
+                    Snackbar.Add(string.Join("; ", setName.Errors.Select(e => e.Description)), Severity.Error);
+                    return;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(_password))
+            {
+                var token = await UserManager.GeneratePasswordResetTokenAsync(user);
+                var reset = await UserManager.ResetPasswordAsync(user, token, _password);
+                if (!reset.Succeeded)
+                {
+                    Snackbar.Add(string.Join("; ", reset.Errors.Select(e => e.Description)), Severity.Error);
+                    return;
+                }
+            }
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+            db.AddAudit(await AuthState.GetUserIdAsync(), "update", "users", user.Id,
+                new { Email = oldEmail, FullName = oldFullName },
+                new { Email = newEmail, user.FullName, PasswordChanged = !string.IsNullOrWhiteSpace(_password) });
+            await db.SaveChangesAsync();
+
+            Snackbar.Add("Đã cập nhật tài khoản.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

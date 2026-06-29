@@ -73,7 +73,9 @@
                     <CellTemplate>
                         @if (context.Item.ConsultantId is Guid cid)
                         {
-                            <span style="text-decoration:underline;font-weight:600;cursor:pointer;color:var(--mud-palette-secondary)" @onclick="@(() => ShowConsultant(cid))" @onclick:stopPropagation="true">@context.Item.ConsultantName</span>
+                            <span class="chip-clickable" @onclick="@(() => ShowConsultant(cid))" @onclick:stopPropagation="true">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled" Icon="@Icons.Material.Filled.SupportAgent">TVV-@context.Item.ConsultantName</MudChip>
+                            </span>
                         }
                         else { <span class="mud-text-secondary">—</span> }
                     </CellTemplate>
@@ -137,10 +139,11 @@
                         }
                     </div>
                     <div class="d-flex align-center mt-1" style="gap:6px">
-                        <MudIcon Icon="@Icons.Material.Filled.SupportAgent" Size="Size.Small" Color="Color.Secondary" />
                         @if (r.ConsultantId is Guid cid)
                         {
-                            <span style="text-decoration:underline;font-weight:600;cursor:pointer;font-size:.75rem;color:var(--mud-palette-secondary)" @onclick="@(() => ShowConsultant(cid))" @onclick:stopPropagation="true">@r.ConsultantName</span>
+                            <span class="chip-clickable" @onclick="@(() => ShowConsultant(cid))" @onclick:stopPropagation="true">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled" Icon="@Icons.Material.Filled.SupportAgent">TVV-@r.ConsultantName</MudChip>
+                            </span>
                         }
                         else { <MudText Typo="Typo.caption" Class="mud-text-secondary">Chưa có tư vấn viên</MudText> }
                     </div>

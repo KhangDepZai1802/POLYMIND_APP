@@ -1,0 +1,112 @@
+@using Polymind.Web.Ai
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject GeminiClient Gemini
+
+@* Phân tích hồ sơ ứng viên bằng Gemini: điểm mạnh/yếu, thị trường phù hợp, mức sẵn sàng, khuyến nghị. *@
+<MudDialog>
+    <DialogContent>
+        <div class="d-flex align-center mb-3" style="gap:8px">
+            <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Color="Color.Secondary" />
+            <MudText Typo="Typo.h6"><b>Phân tích hồ sơ bằng AI</b></MudText>
+            <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined">Gemini</MudChip>
+        </div>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Ứng viên: <b>@_candidateName</b></MudText>
+
+        @if (_loading)
+        {
+            <div class="d-flex flex-column align-center py-6" style="gap:12px">
+                <MudProgressCircular Indeterminate="true" Color="Color.Secondary" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">AI đang phân tích hồ sơ...</MudText>
+            </div>
+        }
+        else if (!_result!.Ok)
+        {
+            <MudAlert Severity="Severity.Warning">@_result.Error</MudAlert>
+        }
+        else
+        {
+            <div style="white-space:pre-wrap;line-height:1.55">@_result.Text</div>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-3">
+                * Kết quả do AI sinh ra, chỉ mang tính tham khảo — cần người phụ trách kiểm chứng.
+            </MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (!_loading)
+        {
+            <MudButton StartIcon="@Icons.Material.Filled.Refresh" OnClick="Analyze">Phân tích lại</MudButton>
+        }
+        <MudButton OnClick="@(() => MudDialog.Close())">Đóng</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid CandidateId { get; set; }
+
+    private bool _loading = true;
+    private string _candidateName = "—";
+    private string _profile = "";
+    private AiResult? _result;
+
+    private const string System =
+        "Bạn là chuyên gia tư vấn xuất khẩu lao động (XKLĐ) của công ty POLYMIND. " +
+        "Hãy phân tích hồ sơ ứng viên và trả lời bằng tiếng Việt, ngắn gọn, có tiêu đề rõ ràng cho từng mục: " +
+        "1) Điểm mạnh; 2) Điểm cần lưu ý/rủi ro; 3) Thị trường (quốc gia) & ngành nghề phù hợp; " +
+        "4) Mức độ sẵn sàng (chấm điểm 1-10) kèm lý do; 5) Khuyến nghị bước tiếp theo.";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await BuildProfile();
+        await Analyze();
+    }
+
+    private async Task BuildProfile()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var c = await db.Candidates.FirstOrDefaultAsync(x => x.Id == CandidateId);
+        if (c is null) { _profile = ""; return; }
+        _candidateName = c.FullName;
+
+        var cjo = await db.CandidateJobOrders.Where(j => j.CandidateId == CandidateId)
+            .OrderByDescending(j => j.CreatedAt).FirstOrDefaultAsync();
+        string? country = null, jobField = null;
+        if (cjo is not null)
+        {
+            var jo = await db.JobOrders.Where(j => j.Id == cjo.JobOrderId).Select(j => new { j.Country, j.Field }).FirstOrDefaultAsync();
+            country = jo?.Country;
+            jobField = jo?.Field;
+        }
+        var loan = await db.Loans.Where(l => l.CandidateId == CandidateId).OrderByDescending(l => l.CreatedAt).FirstOrDefaultAsync();
+
+        int? age = c.Dob is null ? null : (int)((DateTime.UtcNow - c.Dob.Value.ToDateTime(TimeOnly.MinValue)).TotalDays / 365.25);
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("HỒ SƠ ỨNG VIÊN:");
+        sb.AppendLine($"- Họ tên: {c.FullName}");
+        if (c.Gender is not null) sb.AppendLine($"- Giới tính: {Labels.Vi(c.Gender.Value)}");
+        if (age is not null) sb.AppendLine($"- Tuổi: {age}");
+        if (!string.IsNullOrWhiteSpace(c.Province)) sb.AppendLine($"- Quê quán: {c.Province}");
+        if (c.MaritalStatus is not null) sb.AppendLine($"- Hôn nhân: {Labels.Vi(c.MaritalStatus.Value)}");
+        if (!string.IsNullOrWhiteSpace(c.EducationLevel)) sb.AppendLine($"- Học vấn: {c.EducationLevel}");
+        if (!string.IsNullOrWhiteSpace(c.Occupation)) sb.AppendLine($"- Nghề nghiệp: {c.Occupation}");
+        if (!string.IsNullOrWhiteSpace(c.WorkExperience)) sb.AppendLine($"- Kinh nghiệm: {c.WorkExperience}");
+        if (!string.IsNullOrWhiteSpace(c.Languages)) sb.AppendLine($"- Ngoại ngữ: {c.Languages}");
+        if (!string.IsNullOrWhiteSpace(country)) sb.AppendLine($"- Đơn hàng đang theo: {country}{(string.IsNullOrWhiteSpace(jobField) ? "" : $" — {jobField}")}");
+        if (cjo is not null) sb.AppendLine($"- Bước hiện tại trong quy trình: {Labels.Vi(cjo.CurrentStep)}");
+        if (loan is not null) sb.AppendLine($"- Tình trạng vay vốn: {Labels.Vi(loan.Status)}");
+        _profile = sb.ToString();
+    }
+
+    private async Task Analyze()
+    {
+        _loading = true;
+        _result = null;
+        StateHasChanged();
+        if (string.IsNullOrWhiteSpace(_profile))
+            _result = AiResult.Fail("Không đọc được hồ sơ ứng viên.");
+        else
+            _result = await Gemini.GenerateTextAsync(_profile, System);
+        _loading = false;
+    }
+}

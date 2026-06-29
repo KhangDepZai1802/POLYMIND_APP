@@ -68,10 +68,13 @@
                         }
                         else
                         {
+                            // Chỉ được đóng TUẦN TỰ 1→4: bước kế tiếp = bước chưa đóng đầu tiên.
+                            var nextStage = row.Stages.FirstOrDefault(x => x.Status != PaymentStatus.Paid)?.Stage;
                             <div class="pm-stage-track">
                                 @foreach (var s in row.Stages)
                                 {
                                     var paid = s.Status == PaymentStatus.Paid;
+                                    var isNext = s.Stage == nextStage;
                                     <div class="pm-stage @(paid ? "pm-stage--paid" : "")">
                                         <MudIcon Icon="@Labels.IconOf(s.Stage)" Size="Size.Small" Color="@(paid ? Color.Success : Color.Default)" />
                                         <div class="pm-stage-label">@((int)s.Stage). @Labels.ShortVi(s.Stage) <span class="mud-text-secondary">(@PaymentSchedule.Percent(s.Stage)%)</span></div>
@@ -80,7 +83,7 @@
                                         {
                                             <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Check">Đã đóng</MudChip>
                                         }
-                                        else if (s.PaymentId is Guid pid)
+                                        else if (s.PaymentId is Guid pid && isNext)
                                         {
                                             @if (_canApprovePayment)
                                             {
@@ -90,6 +93,13 @@
                                             {
                                                 <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">Chờ đóng</MudChip>
                                             }
+                                        }
+                                        else if (s.PaymentId is not null)
+                                        {
+                                            @* Chưa tới lượt: phải đóng bước trước đó đã. *@
+                                            <MudTooltip Text="Cần đóng các bước trước theo thứ tự">
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Lock">Chưa tới lượt</MudChip>
+                                            </MudTooltip>
                                         }
                                         else
                                         {
@@ -611,6 +621,21 @@
         await using var db = await DbFactory.CreateDbContextAsync();
         var p = await db.Payments.FirstOrDefaultAsync(x => x.Id == paymentId);
         if (p is null) return;
+
+        // Ép đóng TUẦN TỰ: không cho đóng bước này nếu còn bước trước (số nhỏ hơn) chưa đóng.
+        if (p.Stage is PaymentStage stage)
+        {
+            var siblings = await db.Payments
+                .Where(x => x.CandidateId == p.CandidateId && x.Stage != null)
+                .Select(x => new { x.Stage, x.Status })
+                .ToListAsync();
+            if (siblings.Any(x => (int)x.Stage!.Value < (int)stage && x.Status != PaymentStatus.Paid))
+            {
+                Snackbar.Add("Phải đóng các bước trước theo thứ tự 1 → 4.", Severity.Warning);
+                return;
+            }
+        }
+
         var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
         var oldValue = new { p.Status, p.PaidDate, p.ApprovedBy };
         p.ApprovedBy = actorId;
