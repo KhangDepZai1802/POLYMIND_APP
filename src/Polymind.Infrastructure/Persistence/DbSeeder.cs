@@ -31,7 +31,7 @@ public static class DbSeeder
         new SeedUser("document.staff@polymind.local", "Bộ phận hồ sơ", RoleNames.DocumentStaff),
         new SeedUser("visa.staff@polymind.local", "Bộ phận visa", RoleNames.VisaStaff),
         new SeedUser("accountant@polymind.local", "Kế toán", RoleNames.Accountant),
-        new SeedUser("agent@polymind.local", "Đại lý / CTV", RoleNames.Agent),
+        new SeedUser("agent@polymind.local", "Đại lý demo", RoleNames.Agent),
     };
 
     private static readonly IReadOnlyDictionary<string, string[]> RolePermissionMap = new Dictionary<string, string[]>
@@ -39,8 +39,6 @@ public static class DbSeeder
         [RoleNames.Director] = Combine(
             Read("dashboard", "leads", "candidates", "job_orders", "payments", "expenses", "receipts",
                 "agents", "collaborators", "commissions", "loans", "visas", "flights", "reports", "users", "roles", "notifications", "audit"),
-            Actions("payments", "approve"),
-            Actions("expenses", "approve"),
             Actions("commissions", "approve"),
             Actions("reports", "create", "read"),
             Messaging()),
@@ -69,8 +67,9 @@ public static class DbSeeder
             Messaging()),
 
         [RoleNames.DocumentStaff] = Combine(
-            Actions("candidates", "read", "update"),
-            Read("dashboard", "leads", "job_orders", "collaborators", "loans", "visas", "notifications"),
+            Actions("leads", "read", "update", "delete"),
+            Actions("candidates", "read", "update", "delete"),
+            Read("dashboard", "job_orders", "collaborators", "loans", "visas", "notifications"),
             Messaging()),
 
         [RoleNames.VisaStaff] = Combine(
@@ -91,6 +90,11 @@ public static class DbSeeder
 
         [RoleNames.Agent] = Combine(
             Read("candidates", "collaborators", "commissions", "loans", "notifications"),
+            Actions("collaborators", "update"),
+            Messaging()),
+
+        [RoleNames.Collaborator] = Combine(
+            Read("candidates", "commissions", "notifications"),
             Messaging()),
     };
 

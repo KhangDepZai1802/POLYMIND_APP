@@ -240,7 +240,9 @@
         }
 
         var permission = IsEdit ? "candidates:update" : "candidates:create";
-        if (!await HasPermission(permission))
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var authorization = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        if (!authorization.Succeeded || (IsEdit && !BusinessRoleAccess.CanEditCandidateProfile(authState.User)))
         {
             Snackbar.Add("Bạn không có quyền thực hiện thao tác này.", Severity.Warning);
             return;

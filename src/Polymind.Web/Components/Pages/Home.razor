@@ -147,7 +147,7 @@ else
     {
         // Đại lý không xem dashboard toàn công ty — chuyển về portal hoa hồng của họ.
         var scope = await AgentScope.GetAsync();
-        if (scope.IsAgentOnly)
+        if (scope.IsPartnerOnly)
         {
             Nav.NavigateTo("/my-commissions", replace: true);
             return;

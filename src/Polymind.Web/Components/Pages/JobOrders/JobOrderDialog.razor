@@ -91,7 +91,9 @@
         }
 
         var permission = IsEdit ? "job_orders:update" : "job_orders:create";
-        if (!await HasPermission(permission))
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var authorization = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        if (!authorization.Succeeded || !BusinessRoleAccess.CanEditJobOrder(authState.User))
         {
             Snackbar.Add("Bạn không có quyền thực hiện thao tác này.", Severity.Warning);
             return;

@@ -1,5 +1,6 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
+@inject IAuthorizationService AuthorizationService
 @inject ISnackbar Snackbar
 @inject AgentScope AgentScope
 
@@ -129,6 +130,15 @@
 
             var loan = await db.Loans.OrderByDescending(l => l.CreatedAt).FirstOrDefaultAsync(l => l.CandidateId == candidateId);
             var isNew = loan is null;
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var permission = isNew ? "loans:create" : "loans:update";
+            var authorization = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+            if (!authorization.Succeeded || !BusinessRoleAccess.CanEditLoan(authState.User))
+            {
+                Snackbar.Add("Bạn không có quyền lưu hồ sơ vay.", Severity.Warning);
+                return;
+            }
+
             if (loan is null)
             {
                 loan = new Loan

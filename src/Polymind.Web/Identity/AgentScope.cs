@@ -6,24 +6,32 @@ using Polymind.Infrastructure.Persistence.Constants;
 
 namespace Polymind.Web.Identity;
 
-/// <summary>Thông tin phạm vi dữ liệu của đại lý đang đăng nhập.</summary>
-/// <param name="IsAgentOnly">User chỉ thuộc role đại lý (không kèm role nhân sự nội bộ).</param>
-/// <param name="AgentId">Đại lý tương ứng tài khoản, null nếu chưa gắn.</param>
-public readonly record struct AgentScopeInfo(bool IsAgentOnly, Guid? AgentId);
+/// <summary>Thong tin pham vi du lieu cua tai khoan doi tac dang dang nhap.</summary>
+/// <param name="IsAgentOnly">User chi thuoc role dai ly, khong kem role nhan su noi bo.</param>
+/// <param name="AgentId">Dai ly tuong ung tai khoan; voi CTV la dai ly chu quan.</param>
+/// <param name="IsCollaboratorOnly">User chi thuoc role CTV.</param>
+/// <param name="CollaboratorId">CTV tuong ung tai khoan, null neu khong phai CTV hoac chua gan.</param>
+public readonly record struct AgentScopeInfo(
+    bool IsAgentOnly,
+    Guid? AgentId,
+    bool IsCollaboratorOnly,
+    Guid? CollaboratorId)
+{
+    public bool IsPartnerOnly => IsAgentOnly || IsCollaboratorOnly;
+}
 
 /// <summary>
-/// Giải quyết phạm vi dữ liệu cho Portal đại lý (spec §2.8): đại lý chỉ thấy ứng viên mình
-/// giới thiệu + hoa hồng của mình. Dùng để lọc/chặn ở các trang dùng chung.
+/// Giai quyet pham vi du lieu cho Portal doi tac: dai ly thay toan bo CTV/ung vien cua minh,
+/// CTV chi thay ung vien do chinh CTV do gioi thieu va hoa hong duoc chia.
 /// </summary>
 public class AgentScope(
     AuthenticationStateProvider authStateProvider,
     IDbContextFactory<ApplicationDbContext> dbFactory)
 {
-    // Các role nội bộ có quyền xem dữ liệu rộng — nếu user có thêm bất kỳ role này thì KHÔNG bị bó hẹp.
     private static readonly string[] StaffRoles =
     {
         RoleNames.SuperAdmin, RoleNames.Director, RoleNames.RecruitmentManager, RoleNames.Recruiter,
-        RoleNames.DocumentStaff, RoleNames.VisaStaff, RoleNames.Accountant
+        RoleNames.Consultant, RoleNames.DocumentStaff, RoleNames.VisaStaff, RoleNames.Accountant
     };
 
     private AgentScopeInfo? _cached;
@@ -35,17 +43,37 @@ public class AgentScope(
         var authState = await authStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
 
-        var isAgentOnly = user.IsInRole(RoleNames.Agent) && !StaffRoles.Any(user.IsInRole);
+        var hasStaffRole = StaffRoles.Any(user.IsInRole);
+        var isAgentOnly = user.IsInRole(RoleNames.Agent) && !hasStaffRole;
+        var isCollaboratorOnly = !isAgentOnly && user.IsInRole(RoleNames.Collaborator) && !hasStaffRole;
         Guid? agentId = null;
+        Guid? collaboratorId = null;
 
-        if (isAgentOnly && Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+        if ((isAgentOnly || isCollaboratorOnly) && Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
         {
             await using var db = await dbFactory.CreateDbContextAsync();
-            agentId = await db.Agents.Where(a => a.UserId == userId)
-                .Select(a => (Guid?)a.Id).FirstOrDefaultAsync();
+            if (isAgentOnly)
+            {
+                agentId = await db.Agents
+                    .Where(a => a.UserId == userId)
+                    .Select(a => (Guid?)a.Id)
+                    .FirstOrDefaultAsync();
+            }
+            else
+            {
+                var collaborator = await db.Collaborators
+                    .Where(c => c.UserId == userId)
+                    .Select(c => new { c.Id, c.AgentId })
+                    .FirstOrDefaultAsync();
+                if (collaborator is not null)
+                {
+                    collaboratorId = collaborator.Id;
+                    agentId = collaborator.AgentId;
+                }
+            }
         }
 
-        var info = new AgentScopeInfo(isAgentOnly, agentId);
+        var info = new AgentScopeInfo(isAgentOnly, agentId, isCollaboratorOnly, collaboratorId);
         _cached = info;
         return info;
     }

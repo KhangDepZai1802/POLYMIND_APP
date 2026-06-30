@@ -44,6 +44,7 @@
                 </MudListItem>
                 <MudListItem T="string" Icon="@Icons.Material.Filled.Place">@(string.IsNullOrWhiteSpace(_ctv.Address) ? "—" : _ctv.Address)</MudListItem>
                 <MudListItem T="string" Icon="@Icons.Material.Filled.Groups">Ứng viên đã giới thiệu: <b>@_candidateCount</b></MudListItem>
+                <MudListItem T="string" Icon="@Icons.Material.Filled.Percent">Tỷ lệ hoa hồng CTV: <b>@($"{_ctv.CommissionSharePercentage:0.#}%")</b></MudListItem>
                 @if (!string.IsNullOrWhiteSpace(_ctv.Note))
                 {
                     <MudListItem T="string" Icon="@Icons.Material.Filled.Notes">@_ctv.Note</MudListItem>

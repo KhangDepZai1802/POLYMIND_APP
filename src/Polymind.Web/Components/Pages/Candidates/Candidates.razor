@@ -232,6 +232,8 @@
         var query = db.Candidates.AsQueryable();
         if (scope.IsAgentOnly)
             query = query.Where(c => c.AgentId == scope.AgentId);
+        else if (scope.IsCollaboratorOnly)
+            query = query.Where(c => c.CollaboratorId == scope.CollaboratorId);
 
         var data = await query
             .Select(c => new

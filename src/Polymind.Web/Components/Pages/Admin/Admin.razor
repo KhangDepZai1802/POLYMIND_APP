@@ -11,7 +11,7 @@
 
 <PageTitle>Quản trị hệ thống — POLYMIND</PageTitle>
 
-<PageHeader Eyebrow="HỆ THỐNG" Title="Quản trị hệ thống" Subtitle="Tài khoản, phân quyền và nhật ký kiểm toán">
+<PageHeader Eyebrow="HỆ THỐNG" Title="Quản trị hệ thống" Subtitle="Tài khoản, phân quyền và nhật ký thao tác">
     <Actions>
         <MudButton StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" OnClick="LoadAsync">Tải lại</MudButton>
     </Actions>
@@ -255,15 +255,18 @@ else
             </AuthorizeView>
         </MudTabPanel>
 
-        <MudTabPanel Text="Audit log">
+        <MudTabPanel Text="Nhật ký thao tác">
             <AuthorizeView Policy="audit:read">
                 <Authorized>
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                        Nhật ký này giúp quản trị viên biết <b>ai đã làm gì, ở mục nào, lúc nào</b>. Các mã kỹ thuật chỉ dùng để đối chiếu khi cần kiểm tra sâu.
+                    </MudAlert>
                     <MudGrid Class="mb-3">
                         <MudItem xs="12" md="3">
-                            <MudTextField @bind-Value="_auditResource" Label="Resource" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            <MudTextField @bind-Value="_auditResource" Label="Lọc theo khu vực" Placeholder="VD: tài khoản, ứng viên..." Variant="Variant.Outlined" Margin="Margin.Dense" />
                         </MudItem>
                         <MudItem xs="12" md="3">
-                            <MudTextField @bind-Value="_auditAction" Label="Action" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            <MudTextField @bind-Value="_auditAction" Label="Lọc theo thao tác" Placeholder="VD: thêm, sửa, duyệt..." Variant="Variant.Outlined" Margin="Margin.Dense" />
                         </MudItem>
                         <MudItem xs="12" md="2" Class="d-flex align-center">
                             <MudButton Variant="Variant.Outlined" OnClick="LoadAuditAsync">Lọc</MudButton>
@@ -274,10 +277,10 @@ else
                         <thead>
                             <tr>
                                 <th>Thời gian</th>
-                                <th>User</th>
-                                <th>Action</th>
-                                <th>Resource</th>
-                                <th>ResourceId</th>
+                                <th>Người thực hiện</th>
+                                <th>Việc đã làm</th>
+                                <th>Khu vực</th>
+                                <th>Ghi chú</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -286,9 +289,15 @@ else
                                 <tr>
                                     <td>@log.CreatedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm")</td>
                                     <td>@log.UserName</td>
-                                    <td>@log.Action</td>
-                                    <td>@log.Resource</td>
-                                    <td><MudText Typo="Typo.caption">@log.ResourceId</MudText></td>
+                                    <td><MudChip T="string" Size="Size.Small" Color="@log.ActionColor">@log.ActionLabel</MudChip></td>
+                                    <td>@log.ResourceLabel</td>
+                                    <td>
+                                        <MudText Typo="Typo.body2">@log.Summary</MudText>
+                                        @if (!string.IsNullOrWhiteSpace(log.TechnicalId))
+                                        {
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Mã kỹ thuật: @log.TechnicalId</MudText>
+                                        }
+                                    </td>
                                 </tr>
                             }
                         </tbody>
@@ -296,7 +305,7 @@ else
                     </div>
                 </Authorized>
                 <NotAuthorized>
-                    <MudAlert Severity="Severity.Warning">Bạn không có quyền xem audit log.</MudAlert>
+                    <MudAlert Severity="Severity.Warning">Bạn không có quyền xem nhật ký thao tác.</MudAlert>
                 </NotAuthorized>
             </AuthorizeView>
         </MudTabPanel>
@@ -521,19 +530,23 @@ else
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         var query = db.AuditLogs.AsQueryable();
-        if (!string.IsNullOrWhiteSpace(_auditResource))
-            query = query.Where(a => a.Resource.Contains(_auditResource));
-        if (!string.IsNullOrWhiteSpace(_auditAction))
-            query = query.Where(a => a.Action.Contains(_auditAction));
+        var resourceFilter = NormalizeAuditFilter(_auditResource);
+        var actionFilter = NormalizeAuditFilter(_auditAction);
+        if (!string.IsNullOrWhiteSpace(resourceFilter))
+            query = query.Where(a => a.Resource.Contains(resourceFilter) || a.Resource.Contains(_auditResource!));
+        if (!string.IsNullOrWhiteSpace(actionFilter))
+            query = query.Where(a => a.Action.Contains(actionFilter) || a.Action.Contains(_auditAction!));
 
         var logs = await query.OrderByDescending(a => a.CreatedAt).Take(200).ToListAsync();
         var userNames = await db.Users.ToDictionaryAsync(u => u.Id, u => u.FullName);
         _auditLogs = logs.Select(a => new AuditRow(
             a.CreatedAt,
             a.UserId is null ? "Hệ thống" : userNames.GetValueOrDefault(a.UserId.Value, "—"),
-            a.Action,
-            a.Resource,
-            a.ResourceId?.ToString() ?? "—")).ToList();
+            AuditActionLabel(a.Action),
+            AuditResourceLabel(a.Resource),
+            AuditSummary(a.Action, a.Resource),
+            AuditActionColor(a.Action),
+            ShortTechnicalId(a.ResourceId))).ToList();
     }
 
     private async Task AddAuditAsync(string action, string resource, Guid resourceId, object? oldValue, object? newValue)
@@ -557,7 +570,8 @@ else
         (RoleNames.DocumentStaff, "Bộ phận hồ sơ", Icons.Material.Filled.FolderShared, Color.Secondary),
         (RoleNames.VisaStaff, "Bộ phận visa", Icons.Material.Filled.FlightTakeoff, Color.Tertiary),
         (RoleNames.Accountant, "Kế toán", Icons.Material.Filled.AccountBalance, Color.Success),
-        (RoleNames.Agent, "Đại lý / CTV", Icons.Material.Filled.Handshake, Color.Dark),
+        (RoleNames.Agent, "Đại lý", Icons.Material.Filled.Handshake, Color.Dark),
+        (RoleNames.Collaborator, "Cộng tác viên", Icons.Material.Filled.Diversity3, Color.Secondary),
     };
 
     private IEnumerable<(string Key, string Label, string Icon, Color Color, List<UserRow> Users)> GroupedUsers()
@@ -582,5 +596,101 @@ else
         public string? SelectedRole { get; set; }
     }
 
-    private sealed record AuditRow(DateTimeOffset CreatedAt, string UserName, string Action, string Resource, string ResourceId);
+    private static string AuditActionLabel(string action) => action switch
+    {
+        "create" => "Thêm mới",
+        "update" => "Cập nhật",
+        "delete" => "Xóa",
+        "approve" => "Duyệt",
+        "mark_paid" => "Đánh dấu đã chi",
+        "create_receipt" => "Tạo phiếu",
+        "assign" => "Gắn vào đơn hàng",
+        "advance_step" => "Chuyển bước",
+        "update_role" => "Đổi vai trò",
+        "lock" => "Khóa tài khoản",
+        "unlock" => "Mở tài khoản",
+        "reset_password" => "Reset mật khẩu",
+        "upload_version" => "Tải hồ sơ lên",
+        "restore_version" => "Khôi phục hồ sơ",
+        _ => HumanizeTechnicalName(action)
+    };
+
+    private static string AuditResourceLabel(string resource) => resource switch
+    {
+        "users" => "Tài khoản",
+        "roles" => "Vai trò",
+        "role_permissions" => "Phân quyền",
+        "leads" => "Lead",
+        "candidates" => "Ứng viên",
+        "candidate_job_orders" => "Quy trình ứng viên",
+        "candidate_documents" => "Hồ sơ ứng viên",
+        "job_orders" => "Đơn hàng",
+        "payments" => "Khoản thu",
+        "expenses" => "Khoản chi",
+        "receipts" => "Phiếu thu/chi",
+        "agents" => "Đại lý",
+        "collaborators" => "Cộng tác viên",
+        "agent_commissions" => "Hoa hồng",
+        "agent_commission_configs" => "Cấu hình hoa hồng",
+        "loans" => "Hỗ trợ vay",
+        "visas" => "Visa",
+        "flights" => "Xuất cảnh",
+        "notifications" => "Thông báo",
+        "messages" => "Tin nhắn",
+        _ => HumanizeTechnicalName(resource)
+    };
+
+    private static string AuditSummary(string action, string resource)
+        => $"{AuditActionLabel(action)} trong mục {AuditResourceLabel(resource).ToLowerInvariant()}.";
+
+    private static Color AuditActionColor(string action) => action switch
+    {
+        "create" or "unlock" => Color.Success,
+        "update" or "update_role" or "assign" or "advance_step" or "upload_version" or "restore_version" => Color.Info,
+        "approve" or "mark_paid" or "create_receipt" => Color.Primary,
+        "delete" or "lock" => Color.Error,
+        "reset_password" => Color.Warning,
+        _ => Color.Default
+    };
+
+    private static string? ShortTechnicalId(Guid? id)
+        => id is null ? null : id.Value.ToString("N")[..8].ToUpperInvariant();
+
+    private static string NormalizeAuditFilter(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "";
+        var text = value.Trim().ToLowerInvariant();
+        return text switch
+        {
+            "tài khoản" or "tai khoan" or "user" => "users",
+            "ứng viên" or "ung vien" => "candidates",
+            "lead" => "leads",
+            "đơn hàng" or "don hang" or "job" => "job_orders",
+            "khoản thu" or "khoan thu" or "thu" => "payments",
+            "khoản chi" or "khoan chi" or "chi" => "expenses",
+            "hoa hồng" or "hoa hong" => "agent_commissions",
+            "thêm" or "them" => "create",
+            "sửa" or "sua" or "cập nhật" or "cap nhat" => "update",
+            "xóa" or "xoa" => "delete",
+            "duyệt" or "duyet" => "approve",
+            _ => text
+        };
+    }
+
+    private static string HumanizeTechnicalName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "Không rõ";
+        var text = value.Replace('_', ' ').Replace('-', ' ').Trim();
+        return string.Join(' ', text.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Select(word => word.Length == 0 ? word : char.ToUpperInvariant(word[0]) + word[1..]));
+    }
+
+    private sealed record AuditRow(
+        DateTimeOffset CreatedAt,
+        string UserName,
+        string ActionLabel,
+        string ResourceLabel,
+        string Summary,
+        Color ActionColor,
+        string? TechnicalId);
 }

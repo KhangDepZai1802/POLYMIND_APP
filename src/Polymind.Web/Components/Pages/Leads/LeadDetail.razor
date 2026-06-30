@@ -15,7 +15,23 @@
 }
 else
 {
-    <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/leads"))" Class="mb-3">Quay lại</MudButton>
+    <div class="d-flex justify-space-between align-center mb-3">
+        <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/leads"))">Quay lại</MudButton>
+        <div class="d-flex flex-wrap" style="gap:8px">
+            @if (_canUpdateLead)
+            {
+                <MudButton Class="entity-action-button" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenEditLead" Disabled="_busy">
+                    Sửa thông tin
+                </MudButton>
+            }
+            @if (_canDeleteLead)
+            {
+                <MudButton Class="entity-action-button" Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteLead" Disabled="_busy">
+                    Xóa
+                </MudButton>
+            }
+        </div>
+    </div>
 
     <MudGrid>
         <MudItem xs="12" md="7">
@@ -202,6 +218,7 @@ else
     private string _statusNote = "";
     private bool _busy;
     private bool _canUpdateLead;
+    private bool _canDeleteLead;
     private bool _canCreateCandidate;
     private Guid? _assignTo;
     private DateTime? _appointmentDate;
@@ -271,6 +288,81 @@ else
         }
     }
 
+    private async Task OpenEditLead()
+    {
+        if (!_canUpdateLead) return;
+        var parameters = new DialogParameters<LeadDialog> { { x => x.LeadId, Id } };
+        var dialog = await DialogService.ShowAsync<LeadDialog>("Sửa thông tin Lead", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            Snackbar.Add("Đã cập nhật Lead", Severity.Success);
+            await Load();
+        }
+    }
+
+    private async Task DeleteLead()
+    {
+        if (_lead is null) return;
+        if (!await HasLeadDeleteAccess())
+        {
+            Snackbar.Add("Bạn không có quyền xóa lead.", Severity.Warning);
+            return;
+        }
+
+        var message = IsConverted
+            ? $"Lead \"{_lead.FullName}\" đã chuyển thành ứng viên. Xóa lead sẽ giữ hồ sơ ứng viên và chỉ bỏ liên kết lead. Bạn có chắc chắn?"
+            : $"Xóa lead \"{_lead.FullName}\" cùng lịch sử chăm sóc liên quan. Bạn có chắc chắn?";
+        var confirm = await DialogService.ShowMessageBoxAsync(
+            "Xóa lead?",
+            message,
+            yesText: "Xóa",
+            cancelText: "Hủy");
+        if (confirm != true) return;
+
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var lead = await db.Leads.FirstOrDefaultAsync(l => l.Id == Id);
+            if (lead is null)
+            {
+                Snackbar.Add("Lead này không còn tồn tại.", Severity.Info);
+                Nav.NavigateTo("/leads");
+                return;
+            }
+
+            var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+            var linkedCandidates = await db.Candidates.Where(c => c.LeadId == Id).ToListAsync();
+            foreach (var candidate in linkedCandidates)
+                candidate.LeadId = null;
+
+            var activities = await db.LeadActivities.Where(a => a.LeadId == Id).ToListAsync();
+            var notifications = await db.Notifications
+                .Where(n => n.ReferenceType == "lead" && n.ReferenceId == Id)
+                .ToListAsync();
+            db.LeadActivities.RemoveRange(activities);
+            db.Notifications.RemoveRange(notifications);
+            db.AddAudit(actorId, "delete", "leads", lead.Id, new
+            {
+                lead.Code,
+                lead.FullName,
+                lead.Phone,
+                lead.Status,
+                LinkedCandidates = linkedCandidates.Count,
+            }, null);
+            db.Leads.Remove(lead);
+            await db.SaveChangesAsync();
+
+            Snackbar.Add("Đã xóa Lead.", Severity.Success);
+            Nav.NavigateTo("/leads");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
     private void NotifyConvertedLocked()
         => Snackbar.Add("Lead này đã được chuyển sang ứng viên — không thể thay đổi phân công/lịch hẹn. Chỉ có thể đổi trạng thái (chuyển ngược về Lead).", Severity.Warning);
 
@@ -278,7 +370,7 @@ else
     {
         if (_lead is null) return;
         if (IsConverted) { NotifyConvertedLocked(); return; }
-        if (!await HasPermission("leads:update"))
+        if (!await HasLeadUpdateAccess())
         {
             Snackbar.Add("Bạn không có quyền phân công lead.", Severity.Warning);
             return;
@@ -314,7 +406,7 @@ else
     {
         if (_lead is null) return;
         if (IsConverted) { NotifyConvertedLocked(); return; }
-        if (!await HasPermission("leads:update"))
+        if (!await HasLeadUpdateAccess())
         {
             Snackbar.Add("Bạn không có quyền cập nhật lead.", Severity.Warning);
             return;
@@ -354,7 +446,7 @@ else
     private async Task UpdateStatus()
     {
         if (_lead is null) return;
-        if (!await HasPermission("leads:update"))
+        if (!await HasLeadUpdateAccess())
         {
             Snackbar.Add("Bạn không có quyền cập nhật lead.", Severity.Warning);
             return;
@@ -461,7 +553,7 @@ else
     private async Task Convert()
     {
         if (_lead is null) return;
-        if (!await HasAllPermissions("leads:update", "candidates:create"))
+        if (!await HasLeadUpdateAccess() || !await HasPermission("candidates:create"))
         {
             Snackbar.Add("Bạn không có quyền chuyển lead thành ứng viên.", Severity.Warning);
             return;
@@ -535,15 +627,29 @@ else
 
     private async Task LoadPermissions()
     {
-        _canUpdateLead = await HasPermission("leads:update");
+        _canUpdateLead = await HasLeadUpdateAccess();
+        _canDeleteLead = await HasLeadDeleteAccess();
         _canCreateCandidate = await HasPermission("candidates:create");
     }
+
+    private Task<bool> HasLeadUpdateAccess()
+        => HasPermission("leads:update", BusinessRoleAccess.CanEditLead);
+
+    private Task<bool> HasLeadDeleteAccess()
+        => HasPermission("leads:delete", BusinessRoleAccess.CanDeleteLead);
 
     private async Task<bool> HasPermission(string permission)
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
         return result.Succeeded;
+    }
+
+    private async Task<bool> HasPermission(string permission, Func<System.Security.Claims.ClaimsPrincipal, bool> roleCheck)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        return result.Succeeded && roleCheck(authState.User);
     }
 
     private async Task<bool> HasAllPermissions(params string[] permissions)

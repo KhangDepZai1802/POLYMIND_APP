@@ -1,6 +1,6 @@
 namespace Polymind.Infrastructure.Persistence.Constants;
 
-/// <summary>9 vai trò nghiệp vụ (mục 2 đặc tả + Tư vấn viên).</summary>
+/// <summary>10 vai trò nghiệp vụ (mục 2 đặc tả + Tư vấn viên + CTV tách riêng).</summary>
 public static class RoleNames
 {
     public const string SuperAdmin = "super_admin";
@@ -12,6 +12,7 @@ public static class RoleNames
     public const string VisaStaff = "visa_staff";
     public const string Accountant = "accountant";
     public const string Agent = "agent";
+    public const string Collaborator = "collaborator";
 
     public static readonly IReadOnlyDictionary<string, string> All = new Dictionary<string, string>
     {
@@ -23,6 +24,7 @@ public static class RoleNames
         [DocumentStaff] = "Bộ phận hồ sơ",
         [VisaStaff] = "Bộ phận visa",
         [Accountant] = "Kế toán",
-        [Agent] = "Đại lý / CTV",
+        [Agent] = "Đại lý",
+        [Collaborator] = "Cộng tác viên",
     };
 }

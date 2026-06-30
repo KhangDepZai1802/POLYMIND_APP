@@ -1,34 +1,139 @@
 @page "/my-commissions"
 @attribute [Authorize(Policy = "commissions:read")]
+@using Polymind.Web.Components.Pages.Agents
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AgentScope AgentScope
+@inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
 
 <PageTitle>Hoa hồng của tôi — POLYMIND</PageTitle>
 
-<PageHeader Eyebrow="CỘNG TÁC VIÊN" Title="Hoa hồng của tôi" Subtitle="Theo dõi hoa hồng và ứng viên bạn đã giới thiệu" />
+<PageHeader Eyebrow="@_eyebrow" Title="@_title" Subtitle="@_subtitle" />
 
 @if (_loading)
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
 }
-else if (_agentId is null)
+else if (_scopeError is not null)
 {
-    <MudAlert Severity="Severity.Warning">Tài khoản của bạn chưa được gắn với đại lý nào. Vui lòng liên hệ quản trị viên.</MudAlert>
+    <MudAlert Severity="Severity.Warning">@_scopeError</MudAlert>
 }
 else
 {
     <MudGrid Spacing="2">
-        @Kpi("Ứng viên giới thiệu", _candidateCount.ToString("N0"), Icons.Material.Filled.Groups, Color.Info)
-        @Kpi("Tổng hoa hồng", $"{_total:N0} đ", Icons.Material.Filled.Handshake, Color.Primary)
-        @Kpi("Đã chi", $"{_paid:N0} đ", Icons.Material.Filled.Paid, Color.Success)
-        @Kpi("Chờ/đang duyệt", $"{(_total - _paid):N0} đ", Icons.Material.Filled.HourglassBottom, Color.Warning)
+        @if (_isCollaboratorPortal)
+        {
+            @Kpi("Đại lý chủ quản", _agentName, Icons.Material.Filled.Storefront, Color.Primary)
+            @Kpi("Ứng viên đã giới thiệu", _candidateCount.ToString("N0"), Icons.Material.Filled.Groups, Color.Info)
+            @Kpi("Hoa hồng qua đại lý", $"{_grossCommission:N0} đ", Icons.Material.Filled.Handshake, Color.Warning)
+            @Kpi("CTV được hưởng", $"{_ctvShare:N0} đ", Icons.Material.Filled.Paid, Color.Success)
+        }
+        else
+        {
+            @Kpi("CTV thuộc đại lý", _collaboratorCount.ToString("N0"), Icons.Material.Filled.Diversity3, Color.Secondary)
+            @Kpi("Ứng viên thuộc đại lý", _candidateCount.ToString("N0"), Icons.Material.Filled.Groups, Color.Info)
+            @Kpi("Tổng hoa hồng đại lý", $"{_grossCommission:N0} đ", Icons.Material.Filled.Handshake, Color.Primary)
+            @Kpi("Còn lại sau chia CTV", $"{_agentNet:N0} đ", Icons.Material.Filled.AccountBalanceWallet, Color.Success)
+        }
     </MudGrid>
 
-    <MudPaper Class="pa-4 mt-2" Elevation="1">
+    @if (_isCollaboratorPortal && _collaborator is not null)
+    {
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+            Bạn đang thuộc đại lý <b>@_agentName</b>. Tỷ lệ hoa hồng CTV hiện tại: <b>@($"{_collaborator.CommissionSharePercentage:0.#}%")</b>.
+        </MudAlert>
+    }
+
+    @if (!_isCollaboratorPortal)
+    {
+        <MudPaper Class="pa-4 mt-3" Elevation="1">
+            <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Cộng tác viên thuộc đại lý (@_collaborators.Count)</b></MudText>
+            @if (_collaborators.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">Đại lý của bạn chưa có CTV nào.</MudAlert>
+            }
+            else
+            {
+                <div class="table-scroll-x">
+                    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                        <thead>
+                            <tr>
+                                <th>CTV</th>
+                                <th style="text-align:center">Ứng viên</th>
+                                <th style="text-align:right">% CTV</th>
+                                <th style="text-align:right">CTV được hưởng</th>
+                                <th style="text-align:right">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var c in _collaborators)
+                            {
+                                <tr>
+                                    <td>
+                                        <b>@c.FullName</b>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@c.Code</MudText>
+                                    </td>
+                                    <td style="text-align:center">@c.CandidateCount</td>
+                                    <td style="text-align:right">@($"{c.SharePercentage:0.#}%")</td>
+                                    <td style="text-align:right">@($"{c.ShareAmount:N0} đ")</td>
+                                    <td style="text-align:right">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => OpenCtvDialog(c.Id))" />
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </div>
+            }
+        </MudPaper>
+    }
+
+    <MudPaper Class="pa-4 mt-3" Elevation="1">
+        <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Ứng viên đã giới thiệu (@_candidates.Count)</b></MudText>
+        @if (_candidates.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true">Chưa có ứng viên nào trong phạm vi tài khoản này.</MudAlert>
+        }
+        else
+        {
+            <div class="table-scroll-x">
+                <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                    <thead>
+                        <tr>
+                            <th>Mã</th>
+                            <th>Ứng viên</th>
+                            @if (!_isCollaboratorPortal)
+                            {
+                                <th>CTV giới thiệu</th>
+                            }
+                            <th>SĐT</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in _candidates)
+                        {
+                            <tr style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/candidates/{c.Id}"))">
+                                <td>@Short(c.Code)</td>
+                                <td><b>@c.FullName</b></td>
+                                @if (!_isCollaboratorPortal)
+                                {
+                                    <td>@(c.CollaboratorName ?? "—")</td>
+                                }
+                                <td>@(string.IsNullOrWhiteSpace(c.Phone) ? "—" : c.Phone)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </div>
+        }
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mt-3" Elevation="1">
         <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Chi tiết hoa hồng (@_rows.Count)</b></MudText>
         @if (_rows.Count == 0)
         {
-            <MudAlert Severity="Severity.Info">Chưa có hoa hồng phát sinh.</MudAlert>
+            <MudAlert Severity="Severity.Info" Dense="true">Chưa có hoa hồng phát sinh.</MudAlert>
         }
         else
         {
@@ -37,8 +142,17 @@ else
                     <thead>
                         <tr>
                             <th>Ứng viên</th>
+                            @if (!_isCollaboratorPortal)
+                            {
+                                <th>CTV</th>
+                            }
                             <th>Mốc</th>
-                            <th style="text-align:right">Hoa hồng</th>
+                            <th style="text-align:right">Hoa hồng đại lý</th>
+                            <th style="text-align:right">CTV hưởng</th>
+                            @if (!_isCollaboratorPortal)
+                            {
+                                <th style="text-align:right">Đại lý còn lại</th>
+                            }
                             <th>Trạng thái</th>
                             <th>Ngày chi</th>
                         </tr>
@@ -48,8 +162,17 @@ else
                         {
                             <tr>
                                 <td>@r.CandidateName</td>
+                                @if (!_isCollaboratorPortal)
+                                {
+                                    <td>@(r.CollaboratorName ?? "—")</td>
+                                }
                                 <td>@Labels.Vi(r.Milestone)</td>
-                                <td style="text-align:right">@($"{r.Amount:N0} đ")</td>
+                                <td style="text-align:right">@($"{r.AgentAmount:N0} đ")</td>
+                                <td style="text-align:right">@($"{r.CollaboratorAmount:N0} đ")</td>
+                                @if (!_isCollaboratorPortal)
+                                {
+                                    <td style="text-align:right">@($"{r.AgentNetAmount:N0} đ")</td>
+                                }
                                 <td><MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(r.Status)">@Labels.Vi(r.Status)</MudChip></td>
                                 <td>@(r.PaidDate?.ToString("dd/MM/yyyy") ?? "—")</td>
                             </tr>
@@ -63,39 +186,203 @@ else
 
 @code {
     private bool _loading = true;
-    private Guid? _agentId;
+    private bool _isCollaboratorPortal;
+    private string? _scopeError;
+    private string _eyebrow = "ĐỐI TÁC";
+    private string _title = "Hoa hồng của tôi";
+    private string _subtitle = "Theo dõi ứng viên giới thiệu và phần hoa hồng được hưởng";
+    private string _agentName = "—";
     private int _candidateCount;
-    private decimal _total, _paid;
+    private int _collaboratorCount;
+    private decimal _grossCommission;
+    private decimal _ctvShare;
+    private decimal _agentNet;
+    private Guid? _agentId;
+    private Collaborator? _collaborator;
 
-    private record Row(string CandidateName, CommissionMilestone Milestone, decimal Amount, CommissionStatus Status, DateOnly? PaidDate);
-    private List<Row> _rows = new();
+    private record CandidateRow(Guid Id, string Code, string FullName, string? Phone, string? CollaboratorName);
+    private record CollaboratorRow(Guid Id, string Code, string FullName, decimal SharePercentage, int CandidateCount, decimal ShareAmount);
+    private record CommissionRow(
+        string CandidateName,
+        Guid? CollaboratorId,
+        string? CollaboratorName,
+        CommissionMilestone Milestone,
+        decimal AgentAmount,
+        decimal CollaboratorAmount,
+        decimal AgentNetAmount,
+        CommissionStatus Status,
+        DateOnly? PaidDate);
+
+    private List<CandidateRow> _candidates = new();
+    private List<CollaboratorRow> _collaborators = new();
+    private List<CommissionRow> _rows = new();
 
     protected override async Task OnInitializedAsync()
     {
         var scope = await AgentScope.GetAsync();
-        _agentId = scope.AgentId;
-        if (_agentId is null) { _loading = false; return; }
+        _isCollaboratorPortal = scope.IsCollaboratorOnly;
 
+        if (!scope.IsPartnerOnly)
+        {
+            _scopeError = "Trang này dành cho tài khoản đại lý hoặc cộng tác viên.";
+            _loading = false;
+            return;
+        }
+
+        if (scope.AgentId is null)
+        {
+            _scopeError = "Tài khoản của bạn chưa được gắn với đại lý nào. Vui lòng liên hệ quản trị viên.";
+            _loading = false;
+            return;
+        }
+
+        _agentId = scope.AgentId.Value;
         await using var db = await DbFactory.CreateDbContextAsync();
-        _candidateCount = await db.Candidates.CountAsync(c => c.AgentId == _agentId);
+        var agent = await db.Agents.FirstOrDefaultAsync(a => a.Id == scope.AgentId.Value);
+        if (agent is null)
+        {
+            _scopeError = "Không tìm thấy đại lý gắn với tài khoản này.";
+            _loading = false;
+            return;
+        }
 
-        var names = await db.Candidates.ToDictionaryAsync(c => c.Id, c => c.FullName);
-        var commissions = await db.AgentCommissions.Where(c => c.AgentId == _agentId)
-            .OrderByDescending(c => c.CreatedAt).ToListAsync();
-        _rows = commissions.Select(c => new Row(
-            names.GetValueOrDefault(c.CandidateId, "—"), c.Milestone, c.CommissionAmount, c.Status, c.PaidDate)).ToList();
-        _total = commissions.Sum(c => c.CommissionAmount);
-        _paid = commissions.Where(c => c.Status == CommissionStatus.Paid).Sum(c => c.CommissionAmount);
+        _agentName = agent.Name;
+        if (_isCollaboratorPortal)
+        {
+            if (scope.CollaboratorId is null)
+            {
+                _scopeError = "Tài khoản CTV của bạn chưa được gắn với hồ sơ cộng tác viên.";
+                _loading = false;
+                return;
+            }
 
+            _collaborator = await db.Collaborators.FirstOrDefaultAsync(c => c.Id == scope.CollaboratorId.Value);
+            if (_collaborator is null)
+            {
+                _scopeError = "Không tìm thấy hồ sơ CTV gắn với tài khoản này.";
+                _loading = false;
+                return;
+            }
+
+            _eyebrow = "CỘNG TÁC VIÊN";
+            _title = "Hoa hồng CTV của tôi";
+            _subtitle = $"Thuộc đại lý {_agentName}";
+        }
+        else
+        {
+            _eyebrow = "ĐẠI LÝ";
+            _title = "Portal đại lý";
+            _subtitle = "Theo dõi CTV, ứng viên và hoa hồng của đại lý";
+        }
+
+        await LoadRowsAsync(db, scope.AgentId.Value, scope.CollaboratorId);
         _loading = false;
+    }
+
+    private async Task LoadRowsAsync(ApplicationDbContext db, Guid agentId, Guid? collaboratorId)
+    {
+        var collaborators = await db.Collaborators
+            .Where(c => c.AgentId == agentId)
+            .OrderBy(c => c.FullName)
+            .ToListAsync();
+        var collaboratorById = collaborators.ToDictionary(c => c.Id);
+
+        var candidateQuery = db.Candidates.Where(c => c.AgentId == agentId);
+        if (collaboratorId is not null)
+            candidateQuery = candidateQuery.Where(c => c.CollaboratorId == collaboratorId);
+
+        var candidates = await candidateQuery
+            .OrderBy(c => c.FullName)
+            .Select(c => new { c.Id, c.Code, c.FullName, c.Phone, c.CollaboratorId })
+            .ToListAsync();
+        var candidateIds = candidates.Select(c => c.Id).ToHashSet();
+        _candidateCount = candidates.Count;
+
+        _candidates = candidates.Select(c => new CandidateRow(
+            c.Id,
+            c.Code,
+            c.FullName,
+            c.Phone,
+            c.CollaboratorId is Guid cid && collaboratorById.TryGetValue(cid, out var ctv) ? ctv.FullName : null))
+            .ToList();
+
+        var commissions = candidateIds.Count == 0
+            ? new List<AgentCommission>()
+            : await db.AgentCommissions
+                .Where(c => c.AgentId == agentId && candidateIds.Contains(c.CandidateId))
+                .OrderByDescending(c => c.CreatedAt)
+                .ToListAsync();
+
+        var candidateById = candidates.ToDictionary(c => c.Id);
+        _rows = commissions.Select(c =>
+        {
+            var candidate = candidateById[c.CandidateId];
+            Collaborator? collaborator = null;
+            if (candidate.CollaboratorId is Guid cid)
+                collaboratorById.TryGetValue(cid, out collaborator);
+            var collaboratorAmount = collaborator is null
+                ? 0m
+                : Math.Round(c.CommissionAmount * collaborator.CommissionSharePercentage / 100m, 0, MidpointRounding.AwayFromZero);
+            return new CommissionRow(
+                candidate.FullName,
+                collaborator?.Id,
+                collaborator?.FullName,
+                c.Milestone,
+                c.CommissionAmount,
+                collaboratorAmount,
+                c.CommissionAmount - collaboratorAmount,
+                c.Status,
+                c.PaidDate);
+        }).ToList();
+
+        _grossCommission = _rows.Sum(r => r.AgentAmount);
+        _ctvShare = _rows.Sum(r => r.CollaboratorAmount);
+        _agentNet = _rows.Sum(r => r.AgentNetAmount);
+
+        if (!_isCollaboratorPortal)
+        {
+            _collaboratorCount = collaborators.Count;
+            _collaborators = collaborators.Select(c =>
+            {
+                var ctvCandidateIds = candidates.Where(x => x.CollaboratorId == c.Id).Select(x => x.Id).ToHashSet();
+                var shareAmount = _rows
+                    .Where(r => r.CollaboratorId == c.Id)
+                    .Sum(r => r.CollaboratorAmount);
+                return new CollaboratorRow(c.Id, c.Code, c.FullName, c.CommissionSharePercentage, ctvCandidateIds.Count, shareAmount);
+            }).ToList();
+        }
+    }
+
+    private static string Short(string code)
+    {
+        var i = code.LastIndexOf('-');
+        return i >= 0 && i < code.Length - 1 ? "#" + code[(i + 1)..] : code;
+    }
+
+    private async Task OpenCtvDialog(Guid ctvId)
+    {
+        if (_agentId is null) return;
+        var parameters = new DialogParameters<CollaboratorDialog>
+        {
+            { x => x.AgentId, _agentId.Value },
+            { x => x.CollaboratorId, ctvId },
+        };
+        var dialog = await DialogService.ShowAsync<CollaboratorDialog>("Sửa tỷ lệ hoa hồng CTV", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await LoadRowsAsync(db, _agentId.Value, null);
+            Snackbar.Add("Đã cập nhật tỷ lệ hoa hồng CTV.", Severity.Success);
+        }
     }
 
     private RenderFragment Kpi(string title, string value, string icon, Color color) =>@<MudItem xs="6" sm="6" md="3">
         <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
-            <div class="d-flex justify-space-between align-start">
-                <div>
+            <div class="d-flex justify-space-between align-start" style="gap:10px">
+                <div style="min-width:0">
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">@title</MudText>
-                    <MudText Typo="Typo.h6"><b>@value</b></MudText>
+                    <MudText Typo="Typo.h6" Style="overflow-wrap:anywhere"><b>@value</b></MudText>
                 </div>
                 <MudIcon Icon="@icon" Color="@color" Size="Size.Large" />
             </div>

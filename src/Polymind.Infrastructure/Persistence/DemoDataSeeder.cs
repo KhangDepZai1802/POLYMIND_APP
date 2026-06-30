@@ -1,7 +1,10 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Polymind.Domain.Entities;
 using Polymind.Domain.Enums;
+using Polymind.Infrastructure.Identity;
 using Polymind.Infrastructure.Persistence.Constants;
 
 namespace Polymind.Infrastructure.Persistence;
@@ -13,13 +16,15 @@ public static class DemoDataSeeder
     {
         using var scope = sp.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DemoDataSeeder");
 
         var adminId = await db.Users.Select(u => u.Id).FirstOrDefaultAsync();
         var rnd = new Random(42);
 
         if (await db.Leads.AnyAsync()) // core đã seed → chỉ bù dữ liệu mở rộng (idempotent theo bảng)
         {
-            await SeedExtrasAsync(db, rnd, adminId);
+            await SeedExtrasAsync(db, userManager, logger, rnd, adminId);
             return;
         }
 
@@ -148,17 +153,26 @@ public static class DemoDataSeeder
         }
         await db.SaveChangesAsync();
 
-        await SeedExtrasAsync(db, rnd, adminId);
+        await SeedExtrasAsync(db, userManager, logger, rnd, adminId);
     }
 
     /// <summary>Bù dữ liệu demo cho Visa / Vé máy bay / Cấu hình &amp; phát sinh hoa hồng.
     /// Idempotent theo từng bảng nên an toàn chạy lại trên DB đã seed.</summary>
-    private static async Task SeedExtrasAsync(ApplicationDbContext db, Random rnd, Guid adminId)
+    private static async Task SeedExtrasAsync(
+        ApplicationDbContext db,
+        UserManager<ApplicationUser> userManager,
+        ILogger logger,
+        Random rnd,
+        Guid adminId)
     {
         var cjos = await db.CandidateJobOrders
             .Select(x => new { x.CandidateId, x.JobOrderId, x.CurrentStep })
             .ToListAsync();
-        if (cjos.Count == 0) return;
+        if (cjos.Count == 0)
+        {
+            await EnsurePartnerAccountsAsync(db, userManager, logger);
+            return;
+        }
 
         // ---- Bổ sung đại lý để bảng thi đua phong phú (idempotent theo Code) ----
         var extraAgents = new[]
@@ -192,6 +206,7 @@ public static class DemoDataSeeder
                         Phone = $"09{rnd.Next(10000000, 99999999)}",
                         Email = $"ctv{n}@polymind.local",
                         Address = "Việt Nam",
+                        CommissionSharePercentage = new[] { 45m, 50m, 55m, 60m }[rnd.Next(4)],
                         AgentId = agent.Id,
                         IsActive = rnd.Next(6) != 0, // ~83% đang hoạt động
                     });
@@ -202,6 +217,8 @@ public static class DemoDataSeeder
         }
 
         // ---- Gán mỗi ứng viên vào 1 đại lý + 1 CTV của đại lý đó (ai chưa có thì backfill) ----
+        await EnsurePartnerAccountsAsync(db, userManager, logger);
+
         var agentsForFill = await db.Agents.OrderBy(a => a.Code).ToListAsync();
         var ctvByAgent = (await db.Collaborators.ToListAsync())
             .GroupBy(c => c.AgentId)
@@ -310,19 +327,6 @@ public static class DemoDataSeeder
 
         var jobOrders = await db.JobOrders.ToDictionaryAsync(j => j.Id);
         var candAgent = await db.Candidates.ToDictionaryAsync(c => c.Id, c => c.AgentId);
-
-        // ---- Portal đại lý: gắn tài khoản agent@ vào 1 đại lý (để demo data-scope) ----
-        var agentUser = await db.Users.FirstOrDefaultAsync(u => u.NormalizedEmail == "AGENT@POLYMIND.LOCAL");
-        if (agentUser is not null && !await db.Agents.AnyAsync(a => a.UserId == agentUser.Id))
-        {
-            var firstAgent = await db.Agents.OrderBy(a => a.Code).FirstOrDefaultAsync(a => a.UserId == null);
-            if (firstAgent is not null)
-            {
-                firstAgent.UserId = agentUser.Id;
-                firstAgent.UpdatedAt = DateTimeOffset.UtcNow;
-                await db.SaveChangesAsync();
-            }
-        }
 
         // ---- Visa: ứng viên đã tới bước Nộp hồ sơ Visa trở đi ----
         if (!await db.Visas.AnyAsync())
@@ -511,6 +515,231 @@ public static class DemoDataSeeder
         }
 
         await db.SaveChangesAsync();
+    }
+
+    private static async Task EnsurePartnerAccountsAsync(
+        ApplicationDbContext db,
+        UserManager<ApplicationUser> userManager,
+        ILogger logger)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var changed = false;
+        var agents = await db.Agents.OrderBy(a => a.Code).ToListAsync();
+        var collaborators = await db.Collaborators.OrderBy(c => c.Code).ToListAsync();
+        var genericAgent = await userManager.FindByEmailAsync("agent@polymind.local");
+
+        for (var i = 0; i < agents.Count; i++)
+        {
+            var agent = agents[i];
+            var user = agent.UserId is Guid userId
+                ? await db.Users.FirstOrDefaultAsync(u => u.Id == userId)
+                : null;
+
+            if (user is null)
+            {
+                var canUseGenericAgent = i == 0
+                    && genericAgent is not null
+                    && !await db.Agents.AnyAsync(a => a.UserId == genericAgent.Id && a.Id != agent.Id);
+                user = canUseGenericAgent
+                    ? genericAgent!
+                    : await EnsurePartnerUserAsync(
+                        userManager,
+                        logger,
+                        PartnerEmail("agent", agent.Code),
+                        string.IsNullOrWhiteSpace(agent.RepresentativeName) ? agent.Name : agent.RepresentativeName!,
+                        agent.Phone,
+                        RoleNames.Agent);
+
+                agent.UserId = user.Id;
+                agent.UpdatedAt = now;
+                changed = true;
+            }
+
+            await EnsurePartnerUserReadyAsync(userManager, logger, user, RoleNames.Agent, agent.Name, agent.Phone);
+        }
+
+        foreach (var collaborator in collaborators)
+        {
+            if (collaborator.CommissionSharePercentage <= 0)
+            {
+                collaborator.CommissionSharePercentage = 50m;
+                collaborator.UpdatedAt = now;
+                changed = true;
+            }
+
+            var user = collaborator.UserId is Guid userId
+                ? await db.Users.FirstOrDefaultAsync(u => u.Id == userId)
+                : null;
+
+            if (user is null)
+            {
+                user = await EnsurePartnerUserAsync(
+                    userManager,
+                    logger,
+                    PartnerEmail("ctv", collaborator.Code),
+                    collaborator.FullName,
+                    collaborator.Phone,
+                    RoleNames.Collaborator);
+
+                collaborator.UserId = user.Id;
+                collaborator.UpdatedAt = now;
+                changed = true;
+            }
+
+            await EnsurePartnerUserReadyAsync(userManager, logger, user, RoleNames.Collaborator, collaborator.FullName, collaborator.Phone);
+        }
+
+        if (changed)
+            await db.SaveChangesAsync();
+
+        await RemoveGeneratedPartnerRoleExtrasAsync(
+            db,
+            userManager,
+            RoleNames.Agent,
+            agents.Where(a => a.UserId is not null).Select(a => a.UserId!.Value).ToHashSet(),
+            email => email.Equals("agent@polymind.local", StringComparison.OrdinalIgnoreCase)
+                || email.StartsWith("agent-", StringComparison.OrdinalIgnoreCase));
+        await RemoveGeneratedPartnerRoleExtrasAsync(
+            db,
+            userManager,
+            RoleNames.Collaborator,
+            collaborators.Where(c => c.UserId is not null).Select(c => c.UserId!.Value).ToHashSet(),
+            email => email.StartsWith("ctv-", StringComparison.OrdinalIgnoreCase));
+
+        logger.LogInformation(
+            "Da dong bo tai khoan doi tac: {AgentCount} tai khoan dai ly, {CollaboratorCount} tai khoan CTV.",
+            agents.Count,
+            collaborators.Count);
+    }
+
+    private static async Task<ApplicationUser> EnsurePartnerUserAsync(
+        UserManager<ApplicationUser> userManager,
+        ILogger logger,
+        string email,
+        string fullName,
+        string? phone,
+        string role)
+    {
+        var user = await userManager.FindByEmailAsync(email);
+        if (user is null)
+        {
+            user = new ApplicationUser
+            {
+                UserName = email,
+                Email = email,
+                EmailConfirmed = true,
+                FullName = fullName,
+                PhoneNumber = phone,
+                IsActive = true,
+            };
+
+            var create = await userManager.CreateAsync(user, DbSeeder.DefaultAdminPassword);
+            if (!create.Succeeded)
+            {
+                var errors = string.Join("; ", create.Errors.Select(e => e.Description));
+                logger.LogError("Tao tai khoan doi tac {Email} that bai: {Errors}", email, errors);
+                throw new InvalidOperationException($"Tao tai khoan doi tac {email} that bai: {errors}");
+            }
+        }
+
+        await EnsurePartnerUserReadyAsync(userManager, logger, user, role, fullName, phone);
+        return user;
+    }
+
+    private static async Task EnsurePartnerUserReadyAsync(
+        UserManager<ApplicationUser> userManager,
+        ILogger logger,
+        ApplicationUser user,
+        string role,
+        string fullName,
+        string? phone)
+    {
+        var changed = false;
+        if (!user.EmailConfirmed)
+        {
+            user.EmailConfirmed = true;
+            changed = true;
+        }
+        if (!user.IsActive)
+        {
+            user.IsActive = true;
+            changed = true;
+        }
+        if (string.IsNullOrWhiteSpace(user.FullName))
+        {
+            user.FullName = fullName;
+            changed = true;
+        }
+        if (string.IsNullOrWhiteSpace(user.PhoneNumber) && !string.IsNullOrWhiteSpace(phone))
+        {
+            user.PhoneNumber = phone;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            var update = await userManager.UpdateAsync(user);
+            if (!update.Succeeded)
+            {
+                logger.LogWarning(
+                    "Cap nhat tai khoan doi tac {Email} chua thanh cong: {Errors}",
+                    user.Email,
+                    string.Join("; ", update.Errors.Select(e => e.Description)));
+            }
+        }
+
+        if (!await userManager.IsInRoleAsync(user, role))
+            await userManager.AddToRoleAsync(user, role);
+    }
+
+    private static async Task RemoveGeneratedPartnerRoleExtrasAsync(
+        ApplicationDbContext db,
+        UserManager<ApplicationUser> userManager,
+        string role,
+        HashSet<Guid> linkedUserIds,
+        Func<string, bool> isGeneratedEmail)
+    {
+        var staffRoles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            RoleNames.SuperAdmin,
+            RoleNames.Director,
+            RoleNames.RecruitmentManager,
+            RoleNames.Recruiter,
+            RoleNames.Consultant,
+            RoleNames.DocumentStaff,
+            RoleNames.VisaStaff,
+            RoleNames.Accountant,
+        };
+        var generatedUsers = await db.Users
+            .Where(u => u.Email != null)
+            .ToListAsync();
+
+        foreach (var user in generatedUsers.Where(u => !linkedUserIds.Contains(u.Id) && isGeneratedEmail(u.Email!)))
+        {
+            if (await userManager.IsInRoleAsync(user, role))
+                await userManager.RemoveFromRoleAsync(user, role);
+        }
+
+        var unlinkedUsers = generatedUsers.Where(u => !linkedUserIds.Contains(u.Id)).ToList();
+        foreach (var user in unlinkedUsers)
+        {
+            var roles = await userManager.GetRolesAsync(user);
+            if (!roles.Contains(role) || roles.Any(staffRoles.Contains)) continue;
+            await userManager.RemoveFromRoleAsync(user, role);
+        }
+    }
+
+    private static string PartnerEmail(string prefix, string code)
+        => $"{prefix}-{NormalizeCode(code)}@polymind.local";
+
+    private static string NormalizeCode(string code)
+    {
+        var chars = code
+            .Trim()
+            .ToLowerInvariant()
+            .Where(char.IsLetterOrDigit)
+            .ToArray();
+        return chars.Length == 0 ? Guid.NewGuid().ToString("N")[..8] : new string(chars);
     }
 
     private static string AirportOf(string country) => country switch

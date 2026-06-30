@@ -24,6 +24,35 @@ public sealed class MinioDocumentStorage(IOptions<MinioStorageOptions> options) 
         IBrowserFile file,
         CancellationToken cancellationToken = default)
     {
+        var objectKey = string.Join('/',
+            "candidates",
+            candidateId.ToString("N"),
+            documentType.ToString().ToLowerInvariant(),
+            BuildStoredFileName(file));
+
+        return await UploadObjectAsync(objectKey, file, cancellationToken);
+    }
+
+    public async Task<UploadedDocumentObject> UploadMessageAttachmentAsync(
+        Guid senderId,
+        Guid recipientId,
+        IBrowserFile file,
+        CancellationToken cancellationToken = default)
+    {
+        var objectKey = string.Join('/',
+            "messages",
+            senderId.ToString("N"),
+            recipientId.ToString("N"),
+            BuildStoredFileName(file));
+
+        return await UploadObjectAsync(objectKey, file, cancellationToken);
+    }
+
+    private async Task<UploadedDocumentObject> UploadObjectAsync(
+        string objectKey,
+        IBrowserFile file,
+        CancellationToken cancellationToken)
+    {
         ValidateOptions();
         if (file.Size <= 0)
             throw new InvalidOperationException("File rỗng.");
@@ -34,12 +63,6 @@ public sealed class MinioDocumentStorage(IOptions<MinioStorageOptions> options) 
         var extension = Path.GetExtension(fileName);
         if (!AllowedExtensions.Contains(extension))
             throw new InvalidOperationException("Chỉ hỗ trợ PDF, ảnh, Word và Excel.");
-
-        var objectKey = string.Join('/',
-            "candidates",
-            candidateId.ToString("N"),
-            documentType.ToString().ToLowerInvariant(),
-            $"{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}{extension.ToLowerInvariant()}");
 
         var client = BuildClient();
         await EnsureBucketAsync(client, cancellationToken);
@@ -110,5 +133,12 @@ public sealed class MinioDocumentStorage(IOptions<MinioStorageOptions> options) 
         foreach (var c in Path.GetInvalidFileNameChars())
             name = name.Replace(c, '_');
         return string.IsNullOrWhiteSpace(name) ? "document" : name;
+    }
+
+    private static string BuildStoredFileName(IBrowserFile file)
+    {
+        var fileName = SanitizeFileName(file.Name);
+        var extension = Path.GetExtension(fileName).ToLowerInvariant();
+        return $"{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}{extension}";
     }
 }

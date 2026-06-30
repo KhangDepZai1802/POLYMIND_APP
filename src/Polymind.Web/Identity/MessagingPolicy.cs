@@ -24,7 +24,7 @@ public static class MessagingPolicy
             return senderRoles.Contains(RoleNames.SuperAdmin);
 
         // Người nhận là Đại lý/CTV → chỉ các vai trò liên quan tuyển dụng.
-        if (recipientRoles.Contains(RoleNames.Agent))
+        if (recipientRoles.Contains(RoleNames.Agent) || recipientRoles.Contains(RoleNames.Collaborator))
             return senderRoles.Contains(RoleNames.SuperAdmin)
                 || senderRoles.Contains(RoleNames.Director)
                 || senderRoles.Contains(RoleNames.RecruitmentManager)
@@ -45,6 +45,7 @@ public static class MessagingPolicy
     private static readonly string[] Priority =
     {
         RoleNames.SuperAdmin, RoleNames.Director, RoleNames.RecruitmentManager, RoleNames.Recruiter,
-        RoleNames.Consultant, RoleNames.DocumentStaff, RoleNames.VisaStaff, RoleNames.Accountant, RoleNames.Agent
+        RoleNames.Consultant, RoleNames.DocumentStaff, RoleNames.VisaStaff, RoleNames.Accountant,
+        RoleNames.Agent, RoleNames.Collaborator
     };
 }

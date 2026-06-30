@@ -13,6 +13,12 @@ public interface IDocumentStorage
         IBrowserFile file,
         CancellationToken cancellationToken = default);
 
+    Task<UploadedDocumentObject> UploadMessageAttachmentAsync(
+        Guid senderId,
+        Guid recipientId,
+        IBrowserFile file,
+        CancellationToken cancellationToken = default);
+
     Task<string> GetDownloadUrlAsync(
         string objectKey,
         CancellationToken cancellationToken = default);

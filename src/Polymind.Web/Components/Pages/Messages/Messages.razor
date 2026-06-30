@@ -1,8 +1,11 @@
 @page "/messages"
 @attribute [Authorize(Policy = "messages:read")]
+@using System.Text.Json
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ISnackbar Snackbar
+@inject IDocumentStorage DocumentStorage
+@inject NavigationManager Nav
 
 <PageTitle>Tin nhắn — POLYMIND</PageTitle>
 
@@ -77,19 +80,55 @@
                         @foreach (var m in _thread)
                         {
                             <div class="chat-bubble @(m.Mine ? "chat-mine" : "chat-theirs")">
-                                <div>@m.Body</div>
+                                @if (!string.IsNullOrWhiteSpace(m.Text))
+                                {
+                                    <div>@m.Text</div>
+                                }
+                                @if (m.Attachment is not null)
+                                {
+                                    <div class="chat-attachment">
+                                        @if (m.Attachment.IsImage && !string.IsNullOrWhiteSpace(m.Attachment.Url))
+                                        {
+                                            <img class="chat-attachment-image" src="@m.Attachment.Url" alt="@m.Attachment.FileName" />
+                                        }
+                                        <div class="chat-attachment-row">
+                                            <MudIcon Icon="@AttachmentIcon(m.Attachment)" Size="Size.Small" />
+                                            <div class="chat-attachment-text">
+                                                <span class="chat-attachment-name">@m.Attachment.FileName</span>
+                                                <span class="chat-attachment-meta">@FormatBytes(m.Attachment.FileSize)</span>
+                                            </div>
+                                            <MudIconButton Icon="@Icons.Material.Filled.Download" Size="Size.Small" Color="Color.Inherit"
+                                                           OnClick="@(() => DownloadAttachment(m.Attachment))" />
+                                        </div>
+                                    </div>
+                                }
                                 <div class="chat-meta">@m.At.ToLocalTime().ToString("dd/MM HH:mm")</div>
                             </div>
                         }
                     }
                 </div>
 
+                @if (_attachmentFile is not null)
+                {
+                    <div class="message-file-chip">
+                        <MudIcon Icon="@FileIcon(_attachmentFile)" Size="Size.Small" />
+                        <div class="message-file-main">
+                            <span class="message-file-name">@_attachmentFile.Name</span>
+                            <span class="message-file-meta">@FormatBytes(_attachmentFile.Size)</span>
+                        </div>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="ClearAttachment" />
+                    </div>
+                }
                 <div class="d-flex align-end mt-2" style="gap:8px">
+                    <label class="message-attach-button" title="Gửi file hoặc hình ảnh">
+                        <InputFile OnChange="OnAttachmentSelected" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" class="message-attach-input" />
+                        <MudIcon Icon="@Icons.Material.Filled.AttachFile" Size="Size.Small" />
+                    </label>
                     <MudTextField @bind-Value="_compose" Placeholder="Nhập tin nhắn..." Variant="Variant.Outlined" Margin="Margin.Dense"
                                   Lines="2" Immediate="true" Class="flex-grow-1"
                                   OnKeyDown="OnComposeKeyDown" />
                     <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Send"
-                               OnClick="Send" Disabled="@(_sending || string.IsNullOrWhiteSpace(_compose))">Gửi</MudButton>
+                               OnClick="Send" Disabled="@(_sending || (string.IsNullOrWhiteSpace(_compose) && _attachmentFile is null))">Gửi</MudButton>
                 </div>
             }
         </MudPaper>
@@ -98,7 +137,23 @@
 
 @code {
     private record Contact(Guid Id, string Name, string RoleLabel, string? LastBody, DateTimeOffset? LastAt, int Unread);
-    private record ThreadMsg(Guid Id, bool Mine, string Body, DateTimeOffset At);
+    private record ThreadMsg(Guid Id, bool Mine, string Text, ThreadAttachment? Attachment, DateTimeOffset At);
+    private sealed record ParsedMessage(string Text, MessageAttachmentPayload? Attachment);
+    private sealed record MessageAttachmentPayload(string ObjectKey, string FileName, long FileSize, string? ContentType);
+    private sealed record ThreadAttachment(string ObjectKey, string FileName, long FileSize, string? ContentType, string? Url)
+    {
+        public bool IsImage => !string.IsNullOrWhiteSpace(ContentType)
+            && ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class MessageBodyPayload
+    {
+        public string Kind { get; set; } = "polymind-message-v1";
+        public string Text { get; set; } = "";
+        public MessageAttachmentPayload? Attachment { get; set; }
+    }
+
+    private static readonly JsonSerializerOptions MessageJsonOptions = new(JsonSerializerDefaults.Web);
 
     private Guid _meId;
     private List<string> _myRoles = new();
@@ -109,6 +164,7 @@
     private string _selectedRole = "";
     private string _search = "";
     private string _compose = "";
+    private IBrowserFile? _attachmentFile;
     private bool _sending;
 
     private IEnumerable<Contact> FilteredContacts => string.IsNullOrWhiteSpace(_search)
@@ -147,12 +203,13 @@
             var conv = myMsgs.Where(m => (m.SenderId == _meId && m.RecipientId == u.Id)
                                       || (m.SenderId == u.Id && m.RecipientId == _meId)).ToList();
             var last = conv.OrderByDescending(m => m.CreatedAt).FirstOrDefault();
+            var lastPreview = last is null ? null : MessagePreview(ParseMessageBody(last.Body));
             var unread = conv.Count(m => m.RecipientId == _meId && m.SenderId == u.Id && !m.IsRead);
             contacts.Add(new Contact(
                 u.Id,
                 string.IsNullOrWhiteSpace(u.FullName) ? (u.Email ?? "Người dùng") : u.FullName,
                 MessagingPolicy.PrimaryRoleLabel(roles),
-                last is null ? null : Truncate(last.Body, 38),
+                lastPreview is null ? null : Truncate(lastPreview, 38),
                 last?.CreatedAt,
                 unread));
         }
@@ -193,7 +250,35 @@
             await db.SaveChangesAsync();
         }
 
-        _thread = msgs.Select(m => new ThreadMsg(m.Id, m.SenderId == _meId, m.Body, m.CreatedAt)).ToList();
+        var rows = new List<ThreadMsg>();
+        foreach (var m in msgs)
+        {
+            var parsed = ParseMessageBody(m.Body);
+            ThreadAttachment? attachment = null;
+            if (parsed.Attachment is not null)
+            {
+                string? url = null;
+                try
+                {
+                    url = await DocumentStorage.GetDownloadUrlAsync(parsed.Attachment.ObjectKey);
+                }
+                catch
+                {
+                    url = null;
+                }
+
+                attachment = new ThreadAttachment(
+                    parsed.Attachment.ObjectKey,
+                    parsed.Attachment.FileName,
+                    parsed.Attachment.FileSize,
+                    parsed.Attachment.ContentType,
+                    url);
+            }
+
+            rows.Add(new ThreadMsg(m.Id, m.SenderId == _meId, parsed.Text, attachment, m.CreatedAt));
+        }
+
+        _thread = rows;
 
         if (unread.Count > 0) await LoadContacts(); // cập nhật badge
     }
@@ -206,7 +291,7 @@
 
     private async Task Send()
     {
-        if (_selectedId is null || string.IsNullOrWhiteSpace(_compose) || _sending) return;
+        if (_selectedId is null || (string.IsNullOrWhiteSpace(_compose) && _attachmentFile is null) || _sending) return;
         _sending = true;
         try
         {
@@ -223,22 +308,132 @@
                 return;
             }
 
+            MessageAttachmentPayload? attachment = null;
+            if (_attachmentFile is not null)
+            {
+                var uploaded = await DocumentStorage.UploadMessageAttachmentAsync(_meId, _selectedId.Value, _attachmentFile);
+                attachment = new MessageAttachmentPayload(
+                    uploaded.ObjectKey,
+                    uploaded.FileName,
+                    uploaded.FileSize,
+                    uploaded.ContentType);
+            }
+
+            var payload = new MessageBodyPayload
+            {
+                Text = _compose.Trim(),
+                Attachment = attachment,
+            };
+
             db.Messages.Add(new Message
             {
                 SenderId = _meId,
                 RecipientId = _selectedId.Value,
-                Body = _compose.Trim(),
+                Body = SerializeMessageBody(payload),
                 IsRead = false,
             });
             await db.SaveChangesAsync();
             _compose = "";
+            _attachmentFile = null;
             await LoadThread();
             await LoadContacts();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Không gửi được tin nhắn: {ex.Message}", Severity.Error);
         }
         finally { _sending = false; }
     }
 
+    private void OnAttachmentSelected(InputFileChangeEventArgs args)
+    {
+        _attachmentFile = args.File;
+    }
+
+    private void ClearAttachment()
+    {
+        _attachmentFile = null;
+    }
+
+    private async Task DownloadAttachment(ThreadAttachment attachment)
+    {
+        try
+        {
+            var url = !string.IsNullOrWhiteSpace(attachment.Url)
+                ? attachment.Url
+                : await DocumentStorage.GetDownloadUrlAsync(attachment.ObjectKey);
+            Nav.NavigateTo(url, forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Không tạo được link tải file: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private static string SerializeMessageBody(MessageBodyPayload payload)
+        => JsonSerializer.Serialize(payload, MessageJsonOptions);
+
+    private static ParsedMessage ParseMessageBody(string body)
+    {
+        if (!string.IsNullOrWhiteSpace(body) && body.TrimStart().StartsWith('{'))
+        {
+            try
+            {
+                var payload = JsonSerializer.Deserialize<MessageBodyPayload>(body, MessageJsonOptions);
+                if (payload?.Kind == "polymind-message-v1")
+                    return new ParsedMessage(payload.Text ?? "", payload.Attachment);
+            }
+            catch
+            {
+                // Tin nhắn cũ hoặc JSON lỗi sẽ hiển thị nguyên văn.
+            }
+        }
+
+        return new ParsedMessage(body, null);
+    }
+
+    private static string MessagePreview(ParsedMessage message)
+    {
+        if (!string.IsNullOrWhiteSpace(message.Text))
+            return message.Text;
+        return message.Attachment is null ? "" : $"File: {message.Attachment.FileName}";
+    }
+
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max] + "…";
+
+    private static string AttachmentIcon(ThreadAttachment attachment)
+        => FileIcon(attachment.FileName, attachment.ContentType);
+
+    private static string FileIcon(IBrowserFile file)
+        => FileIcon(file.Name, file.ContentType);
+
+    private static string FileIcon(string fileName, string? contentType = null)
+    {
+        if (!string.IsNullOrWhiteSpace(contentType) && contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            return Icons.Material.Filled.Image;
+
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        return ext switch
+        {
+            ".pdf" => Icons.Material.Filled.PictureAsPdf,
+            ".doc" or ".docx" => Icons.Material.Filled.Article,
+            ".xls" or ".xlsx" => Icons.Material.Filled.TableChart,
+            _ => Icons.Material.Filled.AttachFile,
+        };
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes >= 1024 * 1024)
+            return $"{bytes / 1024d / 1024d:0.#} MB";
+        if (bytes >= 1024)
+            return $"{bytes / 1024d:0.#} KB";
+        return $"{bytes} B";
+    }
 
     private static string Initials(string name)
     {

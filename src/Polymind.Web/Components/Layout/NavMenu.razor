@@ -1,5 +1,5 @@
 <MudNavMenu>
-    @if (!_isAgentOnly)
+    @if (!_isPartnerOnly)
     {
         <AuthorizeView Policy="dashboard:read">
             <Authorized>
@@ -42,7 +42,7 @@
             <MudNavLink Href="/visa" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.FlightTakeoff">Visa &amp; Xuất cảnh</MudNavLink>
         </Authorized>
     </AuthorizeView>
-    @if (_isAgentOnly)
+    @if (_isPartnerOnly)
     {
         <AuthorizeView Policy="commissions:read">
             <Authorized>
@@ -69,7 +69,7 @@
         </Authorized>
     </AuthorizeView>
     <MudNavLink Href="/guide" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.MenuBook">Hướng dẫn sử dụng</MudNavLink>
-    @if (!_isAgentOnly)
+    @if (!_isPartnerOnly)
     {
         <AuthorizeView Policy="users:read">
             <Authorized>
@@ -81,11 +81,11 @@
 
 @code {
     [Inject] private AgentScope AgentScope { get; set; } = default!;
-    private bool _isAgentOnly;
+    private bool _isPartnerOnly;
 
     protected override async Task OnInitializedAsync()
     {
         var scope = await AgentScope.GetAsync();
-        _isAgentOnly = scope.IsAgentOnly;
+        _isPartnerOnly = scope.IsPartnerOnly;
     }
 }

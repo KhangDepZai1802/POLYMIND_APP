@@ -506,6 +506,21 @@ body,
 .rank-3 { background:linear-gradient(135deg,#CD7F32,#a86a2c); }
 .rank-n { background:var(--mud-palette-lines-default); color:var(--mud-palette-text-secondary); }
 
+.entity-action-button {
+    transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease, background-color .16s ease;
+}
+.entity-action-button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgba(15, 23, 42, .12);
+}
+.entity-action-button:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 4px 10px rgba(15, 23, 42, .10);
+}
+.theme-dark .entity-action-button:hover:not(:disabled) {
+    box-shadow: 0 8px 18px rgba(0, 0, 0, .28);
+}
+
 /* Khung hội thoại nhắn tin */
 .message-contact-list-scroll {
     max-height: 432px;
@@ -520,6 +535,106 @@ body,
 .chat-mine { align-self:flex-end; background:var(--mud-palette-primary); color:var(--mud-palette-primary-text); border-bottom-right-radius:4px; }
 .chat-theirs { align-self:flex-start; background:var(--mud-palette-background-grey); color:var(--mud-palette-text-primary); border:1px solid var(--mud-palette-lines-default); border-bottom-left-radius:4px; }
 .chat-meta { font-size:.68rem; opacity:.75; margin-top:2px; }
+.message-attach-button {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    border: 1px solid var(--mud-palette-lines-default);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--mud-palette-primary);
+    background: var(--mud-palette-surface);
+    flex: 0 0 auto;
+    transition: background-color .18s ease, border-color .18s ease, box-shadow .18s ease, color .18s ease, transform .18s ease;
+}
+.message-attach-button:hover {
+    color: var(--mud-palette-primary-darken);
+    border-color: color-mix(in srgb, var(--mud-palette-primary) 42%, var(--mud-palette-lines-default));
+    background: color-mix(in srgb, var(--mud-palette-primary) 8%, var(--mud-palette-surface));
+    box-shadow: 0 8px 18px rgba(1, 103, 216, .14);
+    transform: translateY(-1px);
+}
+.message-attach-button:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 10px rgba(1, 103, 216, .1);
+}
+.message-attach-button:focus-within {
+    outline: 2px solid color-mix(in srgb, var(--mud-palette-primary) 34%, transparent);
+    outline-offset: 2px;
+}
+.message-attach-button .mud-icon-root,
+.ai-chat-file-button .mud-icon-root {
+    pointer-events: none;
+    transition: transform .18s ease;
+}
+.message-attach-button:hover .mud-icon-root,
+.ai-chat-file-button:hover .mud-icon-root {
+    transform: scale(1.08);
+}
+.message-attach-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+.message-file-chip {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 8px 8px 8px 10px;
+    border-radius: 12px;
+    border: 1px solid var(--mud-palette-lines-default);
+    background: var(--mud-palette-background-grey);
+}
+.message-file-main,
+.chat-attachment-text {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+.message-file-name,
+.chat-attachment-name {
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.message-file-meta,
+.chat-attachment-meta {
+    font-size: .72rem;
+    opacity: .78;
+}
+.chat-attachment {
+    margin-top: 6px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.22);
+    background: rgba(255,255,255,.12);
+}
+.chat-theirs .chat-attachment {
+    border-color: var(--mud-palette-lines-default);
+    background: var(--mud-palette-surface);
+}
+.chat-attachment-image {
+    display: block;
+    width: min(320px, 100%);
+    max-height: 240px;
+    object-fit: cover;
+}
+.chat-attachment-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+}
 
 /* Thẻ KPI bấm được (Tổng quan / Báo cáo) */
 .stat-card-clickable { transition: transform .12s ease, box-shadow .12s ease; }
@@ -751,14 +866,73 @@ body,
 
 .ai-chat-compose {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 10px;
-    align-items: end;
+    align-items: center;
     margin-top: 12px;
+}
+
+.ai-chat-file-button {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    border: 1px solid rgba(26, 95, 168, .18);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--mud-palette-secondary);
+    background: #fff;
+    align-self: center;
+    flex: 0 0 48px;
+    transition: background-color .18s ease, border-color .18s ease, box-shadow .18s ease, color .18s ease, transform .18s ease;
+}
+
+.ai-chat-file-button:hover {
+    color: #0167D8;
+    border-color: rgba(1, 103, 216, .38);
+    background: #f4f9ff;
+    box-shadow: 0 10px 22px rgba(1, 103, 216, .14);
+    transform: translateY(-1px);
+}
+
+.ai-chat-file-button:active {
+    transform: translateY(0);
+    box-shadow: 0 5px 12px rgba(1, 103, 216, .1);
+}
+
+.ai-chat-file-button:focus-within {
+    outline: 2px solid rgba(1, 103, 216, .2);
+    outline-offset: 2px;
+}
+
+.ai-chat-file-chip {
+    max-width: 520px;
+}
+
+.ai-message-file {
+    margin-top: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    padding: 6px 8px;
+    border-radius: 10px;
+    background: rgba(255,255,255,.16);
+    font-size: .82rem;
+}
+
+.ai-bubble-ai .ai-message-file {
+    background: rgba(1, 103, 216, .08);
 }
 
 .ai-chat-input .mud-input-outlined-border {
     border-radius: 14px !important;
+}
+
+.ai-chat-input {
+    min-width: 0;
 }
 
 .ai-extract-grid {
@@ -962,6 +1136,19 @@ body,
     border-color: rgba(148, 163, 184, .26) !important;
 }
 
+.theme-dark .ai-chat-file-button {
+    color: #67e8f9;
+    border-color: rgba(103, 232, 249, .24);
+    background: rgba(15, 23, 42, .78);
+}
+
+.theme-dark .ai-chat-file-button:hover {
+    color: #bae6fd;
+    border-color: rgba(103, 232, 249, .48);
+    background: rgba(14, 116, 144, .26);
+    box-shadow: 0 10px 22px rgba(34, 211, 238, .12);
+}
+
 .theme-dark .ai-bubble {
     box-shadow: 0 8px 18px rgba(0, 0, 0, .22);
 }
@@ -1047,7 +1234,11 @@ body,
         max-width: 90%;
     }
     .ai-chat-compose {
-        grid-template-columns: 1fr;
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+    .ai-chat-compose > .mud-button-root {
+        grid-column: 1 / -1;
+        width: 100%;
     }
     .ai-upload-zone {
         min-height: 190px;

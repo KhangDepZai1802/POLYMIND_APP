@@ -11,6 +11,7 @@ public class Collaborator : BaseEntity
     public string? Email { get; set; }
     public string? Address { get; set; }
     public string? Note { get; set; }
+    public decimal CommissionSharePercentage { get; set; } = 50;
     public Guid AgentId { get; set; } // CTV thuộc đại lý nào
     public Agent Agent { get; set; } = default!;
     public bool IsActive { get; set; } = true;

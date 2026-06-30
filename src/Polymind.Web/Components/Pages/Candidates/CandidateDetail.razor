@@ -28,9 +28,15 @@ else
         <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/candidates"))">Quay lại</MudButton>
         <div class="d-flex flex-wrap" style="gap:8px">
             <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.AutoAwesome" OnClick="OpenAiAnalysis">Phân tích AI</MudButton>
-            @if (_canUpdateCandidate)
+            @if (_canEditCandidateProfile)
             {
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenEdit">Sửa thông tin</MudButton>
+                <MudButton Class="entity-action-button" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenEdit">Sửa thông tin</MudButton>
+            }
+            @if (_canDeleteCandidate)
+            {
+                <MudButton Class="entity-action-button" Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteCandidate" Disabled="_busy">
+                    Xóa
+                </MudButton>
             }
         </div>
     </div>
@@ -188,23 +194,33 @@ else
                 </AuthorizeView>
             </MudPaper>
 
-            @if (_cjo is not null && _cjo.CurrentStep < WorkflowStep.Completed && _canUpdateCandidate)
+            @if (_cjo is not null && _cjo.CurrentStep >= WorkflowStep.Completed)
+            {
+                <MudAlert Severity="Severity.Success" Class="mb-4">Ứng viên đã hoàn tất toàn bộ quy trình 🎉</MudAlert>
+            }
+            else if (_cjo is not null)
             {
                 <MudPaper Class="pa-4 mb-4" Elevation="1">
                     <MudText Typo="Typo.subtitle1" Class="mb-1"><b>Bước hiện tại</b></MudText>
                     <MudChip T="string" Color="Color.Primary" Class="mb-3">@Labels.Vi(_cjo.CurrentStep)</MudChip>
-                    <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true"
-                               StartIcon="@Icons.Material.Filled.ArrowForward" OnClick="AdvanceStep" Disabled="_busy">
-                        Hoàn thành & chuyển bước tiếp theo
-                    </MudButton>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">Phụ trách: @_workflowOwnerLabel</MudText>
+                    @if (_canAdvanceWorkflow)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true"
+                                   StartIcon="@Icons.Material.Filled.ArrowForward" OnClick="AdvanceStep" Disabled="_busy">
+                            Hoàn thành & chuyển bước tiếp theo
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info" Dense="true">
+                            Tài khoản này chỉ được xem tiến trình ở bước hiện tại.
+                        </MudAlert>
+                    }
                 </MudPaper>
             }
-            else if (_cjo is not null)
-            {
-                <MudAlert Severity="Severity.Success" Class="mb-4">Ứng viên đã hoàn tất toàn bộ quy trình 🎉</MudAlert>
-            }
 
-            @if (_cjo is null && _canUpdateCandidate)
+            @if (_cjo is null && _canAssignJobOrder)
             {
                 <MudPaper Class="pa-4" Elevation="1">
                     <MudText Typo="Typo.subtitle1" Class="mb-1"><b>Gắn vào đơn hàng</b></MudText>
@@ -230,7 +246,7 @@ else
                 </MudPaper>
             }
 
-            @if (_canReadPayments)
+            @if (CanShowCandidateDebt)
             {
                 <MudPaper Class="pa-4 mt-4" Elevation="1">
                     <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Công nợ ứng viên</b></MudText>
@@ -343,9 +359,16 @@ else
                     }
                     @if (_canUpdateLoan)
                     {
-                        <MudButton Class="mt-3" Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true"
+                        <MudButton Class="mt-3 entity-action-button" Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true"
                                    StartIcon="@(_hasLoan ? Icons.Material.Filled.Edit : Icons.Material.Filled.Add)" OnClick="OpenLoanEdit">
                             @(_hasLoan ? "Cập nhật khoản vay" : "Thêm khoản vay")
+                        </MudButton>
+                    }
+                    @if (_hasLoan && _canDeleteLoan)
+                    {
+                        <MudButton Class="mt-2 entity-action-button" Variant="Variant.Outlined" Color="Color.Error" FullWidth="true"
+                                   StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteCandidateLoan" Disabled="_busy">
+                            Xóa khoản vay
                         </MudButton>
                     }
                 </MudPaper>
@@ -579,9 +602,15 @@ else
     private bool _busy;
     private bool _accessDenied;
     private bool _canUpdateCandidate;
+    private bool _canEditCandidateProfile;
+    private bool _canDeleteCandidate;
     private bool _canReadPayments;
     private bool _canReadLoan;
     private bool _canUpdateLoan;
+    private bool _canDeleteLoan;
+    private bool _canAssignJobOrder;
+    private bool _canAdvanceWorkflow;
+    private string _workflowOwnerLabel = "";
 
     private bool _hasLoan;
     private LoanStatus _loanStatus = LoanStatus.Borrowing;
@@ -628,13 +657,19 @@ else
         || !string.IsNullOrWhiteSpace(_candidate?.BankName);
     private bool HasGuardianInfo => !string.IsNullOrWhiteSpace(_candidate?.GuardianName)
         || !string.IsNullOrWhiteSpace(_candidate?.GuardianPhone);
+    private bool CanShowCandidateDebt => _canReadPayments && _cjo?.CurrentStep >= WorkflowStep.Deposit;
 
     protected override async Task OnInitializedAsync()
     {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         _canUpdateCandidate = await HasPermission("candidates:update");
+        _canEditCandidateProfile = _canUpdateCandidate && BusinessRoleAccess.CanEditCandidateProfile(authState.User);
+        _canDeleteCandidate = await HasPermission("candidates:delete") && BusinessRoleAccess.CanDeleteCandidate(authState.User);
         _canReadPayments = await HasPermission("payments:read");
         _canReadLoan = await HasPermission("loans:read");
-        _canUpdateLoan = await HasPermission("loans:update");
+        _canUpdateLoan = await HasPermission("loans:update") && BusinessRoleAccess.CanEditLoan(authState.User);
+        _canDeleteLoan = await HasPermission("loans:delete") && BusinessRoleAccess.CanDeleteLoan(authState.User);
+        _canAssignJobOrder = WorkflowStepAccess.CanAssignJobOrder(authState.User);
         await Load();
     }
 
@@ -646,7 +681,8 @@ else
 
         // Đại lý chỉ được xem ứng viên do mình giới thiệu (spec §2.8).
         var scope = await AgentScope.GetAsync();
-        if (scope.IsAgentOnly && _candidate.AgentId != scope.AgentId)
+        if ((scope.IsAgentOnly && _candidate.AgentId != scope.AgentId)
+            || (scope.IsCollaboratorOnly && _candidate.CollaboratorId != scope.CollaboratorId))
         {
             _accessDenied = true;
             _candidate = null;
@@ -686,15 +722,20 @@ else
         if (_cjo is not null)
         {
             _country = await db.JobOrders.Where(j => j.Id == _cjo.JobOrderId).Select(j => j.Country).FirstOrDefaultAsync();
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            _canAdvanceWorkflow = WorkflowStepAccess.CanAdvance(authState.User, _cjo.CurrentStep);
+            _workflowOwnerLabel = WorkflowStepAccess.OwnerLabel(_cjo.CurrentStep);
         }
         else
         {
+            _canAdvanceWorkflow = false;
+            _workflowOwnerLabel = "";
             _jobOrders = await db.JobOrders
                 .Where(j => j.Status != JobOrderStatus.Cancelled)
                 .OrderByDescending(j => j.CreatedAt).ToListAsync();
         }
 
-        if (_canReadPayments)
+        if (CanShowCandidateDebt)
         {
             var payments = await db.Payments
                 .Where(p => p.CandidateId == Id)
@@ -813,6 +854,7 @@ else
 
     private async Task OpenEdit()
     {
+        if (!_canEditCandidateProfile) return;
         var parameters = new DialogParameters<CandidateDialog> { { x => x.CandidateId, Id } };
         var dialog = await DialogService.ShowAsync<CandidateDialog>("Sửa thông tin ứng viên", parameters);
         var result = await dialog.Result;
@@ -823,10 +865,166 @@ else
         }
     }
 
+    private async Task DeleteCandidate()
+    {
+        if (_candidate is null) return;
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (!await HasPermission("candidates:delete") || !BusinessRoleAccess.CanDeleteCandidate(authState.User))
+        {
+            Snackbar.Add("Bạn không có quyền xóa ứng viên.", Severity.Warning);
+            return;
+        }
+
+        var confirm = await DialogService.ShowMessageBoxAsync(
+            "Xóa ứng viên?",
+            $"Xóa hồ sơ ứng viên \"{_candidate.FullName}\" và toàn bộ dữ liệu nghiệp vụ đi kèm như hồ sơ, tiến trình, công nợ, vay vốn, visa/vé và hoa hồng. Bạn có chắc chắn?",
+            yesText: "Xóa",
+            cancelText: "Hủy");
+        if (confirm != true) return;
+
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var candidate = await db.Candidates.FirstOrDefaultAsync(c => c.Id == Id);
+            if (candidate is null)
+            {
+                Snackbar.Add("Ứng viên này không còn tồn tại.", Severity.Info);
+                Nav.NavigateTo("/candidates");
+                return;
+            }
+
+            var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+            var cjoIds = await db.CandidateJobOrders.Where(c => c.CandidateId == Id).Select(c => c.Id).ToListAsync();
+            var documentIds = await db.CandidateDocuments.Where(d => d.CandidateId == Id).Select(d => d.Id).ToListAsync();
+            var payments = await db.Payments.Where(p => p.CandidateId == Id)
+                .Select(p => new { p.Id, p.ReceiptId })
+                .ToListAsync();
+            var paymentIds = payments.Select(p => p.Id).ToList();
+            var paymentReceiptIds = payments.Where(p => p.ReceiptId is not null).Select(p => p.ReceiptId!.Value).ToList();
+            var commissionReceiptIds = await db.AgentCommissions
+                .Where(c => c.CandidateId == Id && c.ReceiptId != null)
+                .Select(c => c.ReceiptId!.Value)
+                .ToListAsync();
+
+            var versions = await db.DocumentVersions.Where(v => documentIds.Contains(v.DocumentId)).ToListAsync();
+            var documents = await db.CandidateDocuments.Where(d => d.CandidateId == Id).ToListAsync();
+            var workflowRecords = await db.WorkflowStepRecords.Where(r => cjoIds.Contains(r.CandidateJobOrderId)).ToListAsync();
+            var assignments = await db.CandidateJobOrders.Where(c => c.CandidateId == Id).ToListAsync();
+            var loans = await db.Loans.Where(l => l.CandidateId == Id).ToListAsync();
+            var paymentRows = await db.Payments.Where(p => p.CandidateId == Id).ToListAsync();
+            var receipts = await db.Receipts
+                .Where(r => r.CandidateId == Id
+                    || (r.PaymentId != null && paymentIds.Contains(r.PaymentId.Value))
+                    || paymentReceiptIds.Contains(r.Id)
+                    || commissionReceiptIds.Contains(r.Id))
+                .ToListAsync();
+            var visas = await db.Visas.Where(v => v.CandidateId == Id).ToListAsync();
+            var flights = await db.Flights.Where(f => f.CandidateId == Id).ToListAsync();
+            var commissions = await db.AgentCommissions.Where(c => c.CandidateId == Id).ToListAsync();
+            var notifications = await db.Notifications
+                .Where(n => n.ReferenceType == "candidate" && n.ReferenceId == Id)
+                .ToListAsync();
+
+            db.DocumentVersions.RemoveRange(versions);
+            db.CandidateDocuments.RemoveRange(documents);
+            db.WorkflowStepRecords.RemoveRange(workflowRecords);
+            db.CandidateJobOrders.RemoveRange(assignments);
+            db.Loans.RemoveRange(loans);
+            db.Receipts.RemoveRange(receipts);
+            db.Payments.RemoveRange(paymentRows);
+            db.Visas.RemoveRange(visas);
+            db.Flights.RemoveRange(flights);
+            db.AgentCommissions.RemoveRange(commissions);
+            db.Notifications.RemoveRange(notifications);
+
+            if (candidate.LeadId is Guid leadId)
+            {
+                var lead = await db.Leads.FirstOrDefaultAsync(l => l.Id == leadId);
+                if (lead is not null)
+                {
+                    lead.Status = LeadStatus.New;
+                    lead.UpdatedAt = DateTimeOffset.UtcNow;
+                    db.LeadActivities.Add(new LeadActivity
+                    {
+                        LeadId = lead.Id,
+                        ActivityType = LeadActivityType.StatusChange,
+                        Content = "Xóa hồ sơ ứng viên liên kết; đưa lead về trạng thái Lead mới",
+                        NewStatus = LeadStatus.New,
+                    });
+                }
+            }
+
+            db.AddAudit(actorId, "delete", "candidates", candidate.Id, new
+            {
+                candidate.Code,
+                candidate.FullName,
+                candidate.Phone,
+                Documents = documents.Count,
+                Payments = paymentRows.Count,
+                Loans = loans.Count,
+                JobOrders = assignments.Count,
+            }, null);
+            db.Candidates.Remove(candidate);
+            await db.SaveChangesAsync();
+
+            Snackbar.Add("Đã xóa hồ sơ ứng viên.", Severity.Success);
+            Nav.NavigateTo("/candidates");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DeleteCandidateLoan()
+    {
+        if (!_hasLoan) return;
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (!await HasPermission("loans:delete") || !BusinessRoleAccess.CanDeleteLoan(authState.User))
+        {
+            Snackbar.Add("Bạn không có quyền xóa khoản vay.", Severity.Warning);
+            return;
+        }
+
+        var confirm = await DialogService.ShowMessageBoxAsync(
+            "Xóa khoản vay?",
+            $"Xóa hồ sơ vay vốn của ứng viên \"{_candidate?.FullName}\". Bạn có chắc chắn?",
+            yesText: "Xóa",
+            cancelText: "Hủy");
+        if (confirm != true) return;
+
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var loans = await db.Loans.Where(l => l.CandidateId == Id).ToListAsync();
+            if (loans.Count == 0)
+            {
+                Snackbar.Add("Ứng viên này chưa có khoản vay.", Severity.Info);
+                await Load();
+                return;
+            }
+
+            var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+            db.AddAudit(actorId, "delete", "loans", loans.OrderByDescending(l => l.CreatedAt).First().Id,
+                loans.Select(l => new { l.Code, l.CandidateId, l.Status, l.Amount, l.BankName }).ToList(), null);
+            db.Loans.RemoveRange(loans);
+            await db.SaveChangesAsync();
+            Snackbar.Add("Đã xóa khoản vay.", Severity.Success);
+            await Load();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
     private async Task AssignJobOrder()
     {
         if (_selectedJobOrderId is null) return;
-        if (!await HasPermission("candidates:update"))
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (!WorkflowStepAccess.CanAssignJobOrder(authState.User))
         {
             Snackbar.Add("Bạn không có quyền gắn ứng viên vào đơn hàng.", Severity.Warning);
             return;
@@ -879,7 +1077,8 @@ else
     private async Task AdvanceStep()
     {
         if (_cjo is null || _cjo.CurrentStep >= WorkflowStep.Completed) return;
-        if (!await HasPermission("candidates:update"))
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (!WorkflowStepAccess.CanAdvance(authState.User, _cjo.CurrentStep))
         {
             Snackbar.Add("Bạn không có quyền cập nhật quy trình ứng viên.", Severity.Warning);
             return;

@@ -6,6 +6,7 @@
 @inject IAuthorizationService AuthorizationService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject AgentScope AgentScope
+@inject ISnackbar Snackbar
 
 <PageTitle>Hỗ trợ vay — POLYMIND</PageTitle>
 
@@ -13,7 +14,7 @@
     <Actions>
         @if (_canUpdate)
         {
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">
+            <MudButton Class="entity-action-button" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">
                 Thêm khoản vay
             </MudButton>
         }
@@ -100,11 +101,18 @@ else
                                     <td>@(string.IsNullOrWhiteSpace(r.BankName) ? "—" : r.BankName)</td>
                                     <td>@(r.DisbursedDate?.ToString("dd/MM/yyyy") ?? "—")</td>
                                     <td style="text-align:right" @onclick:stopPropagation="true">
-                                        @if (_canUpdate)
-                                        {
-                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit"
-                                                       OnClick="@(() => OpenEdit(r.CandidateId))">Sửa</MudButton>
-                                        }
+                                        <div class="d-inline-flex flex-wrap justify-end" style="gap:6px">
+                                            @if (_canUpdate)
+                                            {
+                                                <MudButton Class="entity-action-button" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit"
+                                                           OnClick="@(() => OpenEdit(r.CandidateId))">Sửa</MudButton>
+                                            }
+                                            @if (_canDelete)
+                                            {
+                                                <MudButton Class="entity-action-button" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete"
+                                                           OnClick="@(() => DeleteLoan(r))">Xóa</MudButton>
+                                            }
+                                        </div>
                                     </td>
                                 </tr>
                             }
@@ -131,7 +139,11 @@ else
                             </MudText>
                             @if (_canUpdate)
                             {
-                                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenEdit(r.CandidateId))">Sửa</MudButton>
+                                <MudButton Class="entity-action-button" Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenEdit(r.CandidateId))">Sửa</MudButton>
+                            }
+                            @if (_canDelete)
+                            {
+                                <MudButton Class="entity-action-button" Size="Size.Small" Variant="Variant.Text" Color="Color.Error" OnClick="@(() => DeleteLoan(r))">Xóa</MudButton>
                             }
                         </div>
                         @if (!string.IsNullOrWhiteSpace(r.BankName))
@@ -154,6 +166,7 @@ else
     private List<LoanRow> _rows = new();
     private bool _loading = true;
     private bool _canUpdate;
+    private bool _canDelete;
     private string _search = "";
     private LoanStatus? _statusFilter;
 
@@ -170,7 +183,9 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        _canUpdate = await HasPermission("loans:update");
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _canUpdate = await HasPermission("loans:update") && BusinessRoleAccess.CanEditLoan(authState.User);
+        _canDelete = await HasPermission("loans:delete") && BusinessRoleAccess.CanDeleteLoan(authState.User);
         await Load();
     }
 
@@ -237,6 +252,48 @@ else
         var result = await dialog.Result;
         if (result is not null && !result.Canceled)
             await Load();
+    }
+
+    private async Task DeleteLoan(LoanRow row)
+    {
+        if (!_canDelete) return;
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (!await HasPermission("loans:delete") || !BusinessRoleAccess.CanDeleteLoan(authState.User))
+        {
+            Snackbar.Add("Bạn không có quyền xóa khoản vay.", Severity.Warning);
+            return;
+        }
+
+        var confirm = await DialogService.ShowMessageBoxAsync(
+            "Xóa khoản vay?",
+            $"Xóa hồ sơ vay vốn của ứng viên \"{row.CandidateName}\". Bạn có chắc chắn?",
+            yesText: "Xóa",
+            cancelText: "Hủy");
+        if (confirm != true) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var scope = await AgentScope.GetAsync();
+        if (scope.IsAgentOnly && !await db.Candidates.AnyAsync(c => c.Id == row.CandidateId && c.AgentId == scope.AgentId))
+        {
+            Snackbar.Add("Bạn không có quyền xóa khoản vay của ứng viên này.", Severity.Warning);
+            return;
+        }
+
+        var loans = await db.Loans.Where(l => l.CandidateId == row.CandidateId).ToListAsync();
+        if (loans.Count == 0)
+        {
+            Snackbar.Add("Khoản vay này không còn tồn tại.", Severity.Info);
+            await Load();
+            return;
+        }
+
+        var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+        db.AddAudit(actorId, "delete", "loans", loans.OrderByDescending(l => l.CreatedAt).First().Id,
+            loans.Select(l => new { l.Code, l.CandidateId, l.Status, l.Amount, l.BankName }).ToList(), null);
+        db.Loans.RemoveRange(loans);
+        await db.SaveChangesAsync();
+        Snackbar.Add("Đã xóa khoản vay.", Severity.Success);
+        await Load();
     }
 
     private async Task<bool> HasPermission(string permission)

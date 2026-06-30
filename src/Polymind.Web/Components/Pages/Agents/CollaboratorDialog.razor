@@ -16,6 +16,10 @@
                 <MudTextField @bind-Value="_m.Email" Label="Email" Variant="Variant.Outlined" Margin="Margin.Dense" />
             </MudItem>
             <MudItem xs="12" sm="6">
+                <MudNumericField T="decimal" @bind-Value="_m.CommissionSharePercentage" Label="% hoa hồng CTV" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                 Min="0" Max="100" Step="5" Adornment="Adornment.End" AdornmentText="%" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
                 <MudSwitch T="bool" @bind-Value="_m.IsActive" Color="Color.Success" Label="@(_m.IsActive ? "Đang hoạt động" : "Ngừng hoạt động")" />
             </MudItem>
             <MudItem xs="12">
@@ -54,6 +58,7 @@
             _m.Email = c.Email;
             _m.Address = c.Address;
             _m.Note = c.Note;
+            _m.CommissionSharePercentage = c.CommissionSharePercentage;
             _m.IsActive = c.IsActive;
         }
     }
@@ -87,6 +92,7 @@
                 c.Email = _m.Email;
                 c.Address = _m.Address;
                 c.Note = _m.Note;
+                c.CommissionSharePercentage = ClampPercentage(_m.CommissionSharePercentage);
                 c.IsActive = _m.IsActive;
                 c.UpdatedAt = DateTimeOffset.UtcNow;
             }
@@ -101,6 +107,7 @@
                     Email = _m.Email,
                     Address = _m.Address,
                     Note = _m.Note,
+                    CommissionSharePercentage = ClampPercentage(_m.CommissionSharePercentage),
                     IsActive = _m.IsActive,
                     AgentId = AgentId,
                 });
@@ -119,6 +126,8 @@
         return result.Succeeded;
     }
 
+    private static decimal ClampPercentage(decimal value) => Math.Clamp(value, 0m, 100m);
+
     private sealed class FormModel
     {
         public string FullName { get; set; } = "";
@@ -126,6 +135,7 @@
         public string? Email { get; set; }
         public string? Address { get; set; }
         public string? Note { get; set; }
+        public decimal CommissionSharePercentage { get; set; } = 50m;
         public bool IsActive { get; set; } = true;
     }
 }

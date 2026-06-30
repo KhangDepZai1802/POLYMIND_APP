@@ -125,6 +125,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
                 .WithMany()
                 .HasForeignKey(x => x.AgentId)
                 .OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.CommissionSharePercentage).HasPrecision(5, 2).HasDefaultValue(50m);
         });
 
         b.Entity<Message>(e =>

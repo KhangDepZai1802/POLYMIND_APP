@@ -18,10 +18,16 @@ else
 {
     <div class="d-flex justify-space-between align-center mb-3">
         <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/jobs"))">Quay lại</MudButton>
-        @if (_canUpdate)
-        {
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenEdit">Sửa Job</MudButton>
-        }
+        <div class="d-flex flex-wrap" style="gap:8px">
+            @if (_canUpdate)
+            {
+                <MudButton Class="entity-action-button" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenEdit">Sửa Job</MudButton>
+            }
+            @if (_canDelete)
+            {
+                <MudButton Class="entity-action-button" Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteJobOrder" Disabled="_busy">Xóa</MudButton>
+            }
+        </div>
     </div>
 
     <MudGrid>
@@ -159,10 +165,14 @@ else
     private CountryDisplay.CountryStyle _country;
     private List<CandidateRow> _candidates = new();
     private bool _canUpdate;
+    private bool _canDelete;
+    private bool _busy;
 
     protected override async Task OnInitializedAsync()
     {
-        _canUpdate = await HasPermission("job_orders:update");
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _canUpdate = await HasPermission("job_orders:update") && BusinessRoleAccess.CanEditJobOrder(authState.User);
+        _canDelete = await HasPermission("job_orders:delete") && BusinessRoleAccess.CanDeleteJobOrder(authState.User);
         await Load();
     }
 
@@ -186,6 +196,7 @@ else
 
     private async Task OpenEdit()
     {
+        if (!_canUpdate) return;
         var parameters = new DialogParameters<JobOrderDialog> { { x => x.JobOrderId, Id } };
         var dialog = await DialogService.ShowAsync<JobOrderDialog>("Sửa Job", parameters);
         var result = await dialog.Result;
@@ -193,6 +204,85 @@ else
         {
             Snackbar.Add("Đã cập nhật job", Severity.Success);
             await Load();
+        }
+    }
+
+    private async Task DeleteJobOrder()
+    {
+        if (_job is null) return;
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (!await HasPermission("job_orders:delete") || !BusinessRoleAccess.CanDeleteJobOrder(authState.User))
+        {
+            Snackbar.Add("Bạn không có quyền xóa Job.", Severity.Warning);
+            return;
+        }
+
+        var confirm = await DialogService.ShowMessageBoxAsync(
+            "Xóa Job?",
+            $"Xóa job \"{_job.Code}\". Hệ thống sẽ gỡ ứng viên khỏi job này, xóa tiến trình/visa/vé/hoa hồng liên quan; hồ sơ ứng viên và khoản thu vẫn được giữ. Bạn có chắc chắn?",
+            yesText: "Xóa",
+            cancelText: "Hủy");
+        if (confirm != true) return;
+
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var job = await db.JobOrders.FirstOrDefaultAsync(j => j.Id == Id);
+            if (job is null)
+            {
+                Snackbar.Add("Job này không còn tồn tại.", Severity.Info);
+                Nav.NavigateTo("/jobs");
+                return;
+            }
+
+            var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+            var assignmentIds = await db.CandidateJobOrders.Where(c => c.JobOrderId == Id).Select(c => c.Id).ToListAsync();
+            var stepRecords = await db.WorkflowStepRecords.Where(r => assignmentIds.Contains(r.CandidateJobOrderId)).ToListAsync();
+            var assignments = await db.CandidateJobOrders.Where(c => c.JobOrderId == Id).ToListAsync();
+            var visas = await db.Visas.Where(v => v.JobOrderId == Id).ToListAsync();
+            var flights = await db.Flights.Where(f => f.JobOrderId == Id).ToListAsync();
+            var commissions = await db.AgentCommissions.Where(c => c.JobOrderId == Id).ToListAsync();
+            var commissionConfigs = await db.AgentCommissionConfigs.Where(c => c.JobOrderId == Id).ToListAsync();
+            var leads = await db.Leads.Where(l => l.InterestedJobOrderId == Id).ToListAsync();
+            foreach (var lead in leads)
+                lead.InterestedJobOrderId = null;
+
+            var payments = await db.Payments.Where(p => p.JobOrderId == Id).ToListAsync();
+            foreach (var payment in payments)
+                payment.JobOrderId = null;
+
+            var notifications = await db.Notifications
+                .Where(n => (n.ReferenceType == "job_order" || n.ReferenceType == "job") && n.ReferenceId == Id)
+                .ToListAsync();
+
+            db.WorkflowStepRecords.RemoveRange(stepRecords);
+            db.CandidateJobOrders.RemoveRange(assignments);
+            db.Visas.RemoveRange(visas);
+            db.Flights.RemoveRange(flights);
+            db.AgentCommissions.RemoveRange(commissions);
+            db.AgentCommissionConfigs.RemoveRange(commissionConfigs);
+            db.Notifications.RemoveRange(notifications);
+            db.AddAudit(actorId, "delete", "job_orders", job.Id, new
+            {
+                job.Code,
+                job.Country,
+                job.CompanyName,
+                job.Field,
+                Assignments = assignments.Count,
+                Visas = visas.Count,
+                Flights = flights.Count,
+                PaymentsUnlinked = payments.Count,
+            }, null);
+            db.JobOrders.Remove(job);
+            await db.SaveChangesAsync();
+
+            Snackbar.Add("Đã xóa Job.", Severity.Success);
+            Nav.NavigateTo("/jobs");
+        }
+        finally
+        {
+            _busy = false;
         }
     }
 

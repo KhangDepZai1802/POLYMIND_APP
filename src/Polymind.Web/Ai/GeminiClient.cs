@@ -66,6 +66,56 @@ public sealed class GeminiClient
         return CallAsync(body, ct);
     }
 
+    /// <summary>Hội thoại có đính kèm file/ảnh ở lượt user mới nhất.</summary>
+    public Task<AiResult> ChatWithFileAsync(
+        IReadOnlyList<AiChatMessage> history,
+        byte[] data,
+        string mimeType,
+        string? system = null,
+        CancellationToken ct = default)
+    {
+        var lastUserIndex = -1;
+        for (var i = history.Count - 1; i >= 0; i--)
+        {
+            if (history[i].FromUser)
+            {
+                lastUserIndex = i;
+                break;
+            }
+        }
+
+        var contents = history
+            .Select((message, index) =>
+            {
+                var text = string.IsNullOrWhiteSpace(message.Text)
+                    ? "Hãy phân tích file/hình ảnh tôi đính kèm."
+                    : message.Text;
+
+                var parts = index == lastUserIndex
+                    ? new object[]
+                    {
+                        new { text },
+                        new { inlineData = new { mimeType, data = Convert.ToBase64String(data) } },
+                    }
+                    : new object[] { new { text } };
+
+                return (object)new
+                {
+                    role = message.FromUser ? "user" : "model",
+                    parts,
+                };
+            })
+            .ToArray();
+
+        var body = new
+        {
+            systemInstruction = system is null ? null : new { parts = new[] { new { text = system } } },
+            contents,
+            generationConfig = new { temperature = 0.7, maxOutputTokens = 2048 },
+        };
+        return CallAsync(body, ct);
+    }
+
     /// <summary>Đọc ảnh/PDF hồ sơ (CV, CCCD...) và trả về JSON/văn bản theo prompt trích xuất.</summary>
     public Task<AiResult> ExtractFromFileAsync(byte[] data, string mimeType, string prompt, CancellationToken ct = default)
     {

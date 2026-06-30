@@ -110,10 +110,14 @@
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
+    /// <summary>Null = tạo mới; có giá trị = sửa lead hiện có.</summary>
+    [Parameter] public Guid? LeadId { get; set; }
+
     private Lead _model = new() { FullName = "", Source = LeadSource.Hotline };
     private DateTime? _dob;
     private bool _saving;
     private bool _canEditSensitiveProfile;
+    private bool IsEdit => LeadId is not null;
 
     private record JobOrderOption(Guid Id, string Code, string Country);
     private record UserOption(Guid Id, string FullName);
@@ -143,6 +147,16 @@
             .Select(u => new UserOption(u.Id, u.FullName)).ToListAsync();
 
         _collaborators = await db.Collaborators.Where(c => c.IsActive).OrderBy(c => c.FullName).ToListAsync();
+
+        if (LeadId is null) return;
+        var lead = await db.Leads.AsNoTracking().FirstOrDefaultAsync(l => l.Id == LeadId);
+        if (lead is null) return;
+
+        _model = lead;
+        _dob = lead.Dob?.ToDateTime(TimeOnly.MinValue);
+        _selectedCtv = lead.CollaboratorId is null
+            ? null
+            : _collaborators.FirstOrDefault(c => c.Id == lead.CollaboratorId.Value);
     }
 
     private Task<IEnumerable<Collaborator>> SearchCtv(string value, CancellationToken token)
@@ -168,17 +182,21 @@
     private async Task Save()
     {
         if (string.IsNullOrWhiteSpace(_model.FullName)) return;
-        if (!await HasPermission("leads:create"))
+        var permission = IsEdit ? "leads:update" : "leads:create";
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var authorization = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
+        if (!authorization.Succeeded || (IsEdit && !BusinessRoleAccess.CanEditLead(authState.User)))
         {
-            Snackbar.Add("Bạn không có quyền tạo lead.", Severity.Warning);
+            Snackbar.Add("Bạn không có quyền thực hiện thao tác này.", Severity.Warning);
             return;
         }
 
         _saving = true;
 
         await using var db = await DbFactory.CreateDbContextAsync();
+        var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
         _model.Dob = _dob is null ? null : DateOnly.FromDateTime(_dob.Value);
-        if (!_canEditSensitiveProfile) ClearSensitiveProfile(_model);
+        if (!_canEditSensitiveProfile && !IsEdit) ClearSensitiveProfile(_model);
 
         // Nguồn ≠ "Giới thiệu" → bỏ liên kết CTV. Nếu là "Giới thiệu" + có CTV → gán luôn đại lý của CTV đó.
         if (_model.Source != LeadSource.Referral)
@@ -186,20 +204,95 @@
         else if (_selectedCtv is not null)
             _model.AgentId = _selectedCtv.AgentId;
 
-        _model.Code = $"LD-{DateTime.Now:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}";
-        _model.Status = LeadStatus.New;
-        db.Leads.Add(_model);
-        db.LeadActivities.Add(new LeadActivity
+        if (IsEdit)
         {
-            LeadId = _model.Id,
-            ActivityType = LeadActivityType.Note,
-            Content = "Tạo lead mới",
-            NewStatus = LeadStatus.New,
-        });
+            var lead = await db.Leads.FirstOrDefaultAsync(l => l.Id == LeadId);
+            if (lead is null)
+            {
+                Snackbar.Add("Không tìm thấy lead.", Severity.Error);
+                return;
+            }
+
+            var oldValue = Snapshot(lead);
+            ApplyEditableFields(_model, lead, _canEditSensitiveProfile);
+            lead.UpdatedAt = DateTimeOffset.UtcNow;
+            db.LeadActivities.Add(new LeadActivity
+            {
+                LeadId = lead.Id,
+                ActivityType = LeadActivityType.Note,
+                Content = "Cập nhật thông tin lead",
+            });
+            db.AddAudit(actorId, "update", "leads", lead.Id, oldValue, Snapshot(lead));
+        }
+        else
+        {
+            _model.Code = $"LD-{DateTime.Now:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}";
+            _model.Status = LeadStatus.New;
+            db.Leads.Add(_model);
+            db.LeadActivities.Add(new LeadActivity
+            {
+                LeadId = _model.Id,
+                ActivityType = LeadActivityType.Note,
+                Content = "Tạo lead mới",
+                NewStatus = LeadStatus.New,
+            });
+            db.AddAudit(actorId, "create", "leads", _model.Id, null, Snapshot(_model));
+        }
         await db.SaveChangesAsync();
 
         MudDialog.Close(DialogResult.Ok(true));
     }
+
+    private static void ApplyEditableFields(Lead source, Lead target, bool includeSensitiveProfile)
+    {
+        target.FullName = source.FullName.Trim();
+        target.Phone = source.Phone;
+        target.Dob = source.Dob;
+        target.Gender = source.Gender;
+        target.Cccd = source.Cccd;
+        target.Province = source.Province;
+        target.Address = source.Address;
+        target.Source = source.Source;
+        target.AgentId = source.AgentId;
+        target.CollaboratorId = source.CollaboratorId;
+        target.TargetCountry = source.TargetCountry;
+        target.InterestedJobOrderId = source.InterestedJobOrderId;
+        target.AssignedTo = source.AssignedTo;
+        target.Notes = source.Notes;
+
+        if (!includeSensitiveProfile) return;
+
+        target.Email = source.Email;
+        target.Occupation = source.Occupation;
+        target.EducationLevel = source.EducationLevel;
+        target.WorkExperience = source.WorkExperience;
+        target.Languages = source.Languages;
+    }
+
+    private static object Snapshot(Lead lead) => new
+    {
+        lead.Code,
+        lead.FullName,
+        lead.Phone,
+        lead.Dob,
+        lead.Gender,
+        lead.Cccd,
+        lead.Email,
+        lead.Province,
+        lead.Address,
+        lead.Occupation,
+        lead.EducationLevel,
+        lead.WorkExperience,
+        lead.Languages,
+        lead.Source,
+        lead.AgentId,
+        lead.CollaboratorId,
+        lead.TargetCountry,
+        lead.InterestedJobOrderId,
+        lead.AssignedTo,
+        lead.Status,
+        lead.Notes,
+    };
 
     private static void ClearSensitiveProfile(Lead lead)
     {

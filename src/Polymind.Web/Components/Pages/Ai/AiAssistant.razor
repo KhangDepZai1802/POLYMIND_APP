@@ -43,7 +43,19 @@
                     @foreach (var m in _history)
                     {
                         <div class="ai-bubble-row @(m.FromUser ? "from-user" : "from-ai")">
-                            <div class="ai-bubble @(m.FromUser ? "ai-bubble-user" : "ai-bubble-ai")" style="white-space:pre-wrap">@m.Text</div>
+                            <div class="ai-bubble @(m.FromUser ? "ai-bubble-user" : "ai-bubble-ai")">
+                                @if (!string.IsNullOrWhiteSpace(m.Text))
+                                {
+                                    <div style="white-space:pre-wrap">@m.Text</div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(m.AttachmentName))
+                                {
+                                    <div class="ai-message-file">
+                                        <MudIcon Icon="@FileIcon(m.AttachmentName, m.AttachmentMimeType)" Size="Size.Small" />
+                                        <span>@m.AttachmentName</span>
+                                    </div>
+                                }
+                            </div>
                         </div>
                     }
                     @if (_chatBusy)
@@ -56,11 +68,26 @@
                         </div>
                     }
                 </div>
+                @if (_chatFile is not null)
+                {
+                    <div class="ai-file-chip ai-chat-file-chip">
+                        <span class="ai-file-icon"><MudIcon Icon="@FileIcon(_chatFile)" /></span>
+                        <span class="ai-file-main">
+                            <span class="ai-file-name">@_chatFile.Name</span>
+                            <span class="ai-file-meta">@FormatBytes(_chatFile.Size)</span>
+                        </span>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Default" OnClick="ClearChatFile" />
+                    </div>
+                }
                 <div class="ai-chat-compose">
+                    <label class="ai-chat-file-button" title="Gửi file hoặc hình ảnh">
+                        <InputFile OnChange="OnChatFileSelected" accept="image/*,application/pdf,text/plain,text/csv,.txt,.csv" class="ai-upload-input" />
+                        <MudIcon Icon="@Icons.Material.Filled.AttachFile" Size="Size.Small" />
+                    </label>
                     <MudTextField @bind-Value="_input" Placeholder="Nhập câu hỏi..." Variant="Variant.Outlined" Margin="Margin.Dense"
                                   Lines="1" Immediate="true" OnKeyDown="OnKeyDown" Disabled="_chatBusy || !Gemini.IsConfigured" Class="ai-chat-input" />
                     <MudButton Color="Color.Secondary" Variant="Variant.Filled" EndIcon="@Icons.Material.Filled.Send"
-                               OnClick="SendAsync" Disabled="_chatBusy || !Gemini.IsConfigured || string.IsNullOrWhiteSpace(_input)">Gửi</MudButton>
+                               OnClick="SendAsync" Disabled="_chatBusy || !Gemini.IsConfigured || (string.IsNullOrWhiteSpace(_input) && _chatFile is null)">Gửi</MudButton>
                 </div>
                 @if (_history.Count > 0)
                 {
@@ -139,12 +166,14 @@
     private readonly List<AiChatMessage> _history = new();
     private string _input = "";
     private bool _chatBusy;
+    private IBrowserFile? _chatFile;
 
     private IBrowserFile? _cvFile;
     private bool _cvBusy;
     private AiResult? _cvResult;
 
     private const long MaxCvBytes = 8 * 1024 * 1024; // 8 MB
+    private const long MaxChatFileBytes = 8 * 1024 * 1024; // 8 MB
 
     private const string ChatSystemBase =
         "Bạn là trợ lý AI nội bộ của công ty xuất khẩu lao động (XKLĐ) POLYMIND. " +
@@ -255,19 +284,73 @@
     private async Task SendAsync()
     {
         var text = _input?.Trim();
-        if (string.IsNullOrWhiteSpace(text) || _chatBusy || !Gemini.IsConfigured) return;
+        if ((string.IsNullOrWhiteSpace(text) && _chatFile is null) || _chatBusy || !Gemini.IsConfigured) return;
 
-        _history.Add(new AiChatMessage { FromUser = true, Text = text });
+        var file = _chatFile;
+        byte[]? fileBytes = null;
+        string? mime = null;
+        if (file is not null)
+        {
+            if (file.Size > MaxChatFileBytes)
+            {
+                _history.Add(new AiChatMessage
+                {
+                    FromUser = false,
+                    Text = $"⚠️ File quá lớn (tối đa {FormatBytes(MaxChatFileBytes)})."
+                });
+                return;
+            }
+
+            mime = ResolveChatMime(file);
+            if (mime is null)
+            {
+                _history.Add(new AiChatMessage
+                {
+                    FromUser = false,
+                    Text = "⚠️ AI hiện đọc trực tiếp ảnh, PDF, TXT hoặc CSV. Với Word/Excel, hãy xuất sang PDF rồi gửi lại."
+                });
+                return;
+            }
+
+            using var ms = new MemoryStream();
+            await file.OpenReadStream(MaxChatFileBytes).CopyToAsync(ms);
+            fileBytes = ms.ToArray();
+        }
+
+        _history.Add(new AiChatMessage
+        {
+            FromUser = true,
+            Text = string.IsNullOrWhiteSpace(text) ? "Hãy phân tích file/hình ảnh tôi đính kèm." : text,
+            AttachmentName = file?.Name,
+            AttachmentMimeType = mime,
+        });
         _input = "";
+        _chatFile = null;
         _chatBusy = true;
         StateHasChanged();
 
-        var result = await Gemini.ChatAsync(_history, _systemPrompt);
+        var result = fileBytes is not null && mime is not null
+            ? await Gemini.ChatWithFileAsync(_history, fileBytes, mime, _systemPrompt)
+            : await Gemini.ChatAsync(_history, _systemPrompt);
         _history.Add(new AiChatMessage { FromUser = false, Text = result.Ok ? result.Text : $"⚠️ {result.Error}" });
         _chatBusy = false;
     }
 
-    private void ClearChat() => _history.Clear();
+    private void ClearChat()
+    {
+        _history.Clear();
+        _chatFile = null;
+    }
+
+    private void OnChatFileSelected(InputFileChangeEventArgs args)
+    {
+        _chatFile = args.File;
+    }
+
+    private void ClearChatFile()
+    {
+        _chatFile = null;
+    }
 
     private void OnCvSelected(InputFileChangeEventArgs args)
     {
@@ -319,13 +402,32 @@
             ".png" => "image/png",
             ".jpg" or ".jpeg" => "image/jpeg",
             ".webp" => "image/webp",
-            _ => "image/jpeg",
+            ".txt" => "text/plain",
+            ".csv" => "text/csv",
+            _ => "application/octet-stream",
         };
     }
 
-    private static string FileIcon(IBrowserFile file)
+    private static string? ResolveChatMime(IBrowserFile file)
     {
-        var ext = Path.GetExtension(file.Name).ToLowerInvariant();
+        var mime = ResolveMime(file);
+        if (mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ||
+            mime is "application/pdf" or "text/plain" or "text/csv")
+        {
+            return mime;
+        }
+
+        return null;
+    }
+
+    private static string FileIcon(IBrowserFile file)
+        => FileIcon(file.Name, file.ContentType);
+
+    private static string FileIcon(string fileName, string? contentType = null)
+    {
+        if (!string.IsNullOrWhiteSpace(contentType) && contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            return Icons.Material.Filled.Image;
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
         return ext switch
         {
             ".pdf" => Icons.Material.Filled.PictureAsPdf,
