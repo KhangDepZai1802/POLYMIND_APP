@@ -9,13 +9,17 @@ namespace Polymind.Web.Identity;
 /// <summary>Thong tin pham vi du lieu cua tai khoan doi tac dang dang nhap.</summary>
 /// <param name="IsAgentOnly">User chi thuoc role dai ly, khong kem role nhan su noi bo.</param>
 /// <param name="AgentId">Dai ly tuong ung tai khoan; voi CTV la dai ly chu quan.</param>
+/// <param name="AgentName">Ten dai ly tuong ung tai khoan; voi CTV la ten dai ly chu quan.</param>
 /// <param name="IsCollaboratorOnly">User chi thuoc role CTV.</param>
 /// <param name="CollaboratorId">CTV tuong ung tai khoan, null neu khong phai CTV hoac chua gan.</param>
+/// <param name="CollaboratorName">Ten CTV tuong ung tai khoan, null neu khong phai CTV hoac chua gan.</param>
 public readonly record struct AgentScopeInfo(
     bool IsAgentOnly,
     Guid? AgentId,
+    string? AgentName,
     bool IsCollaboratorOnly,
-    Guid? CollaboratorId)
+    Guid? CollaboratorId,
+    string? CollaboratorName)
 {
     public bool IsPartnerOnly => IsAgentOnly || IsCollaboratorOnly;
 }
@@ -47,33 +51,42 @@ public class AgentScope(
         var isAgentOnly = user.IsInRole(RoleNames.Agent) && !hasStaffRole;
         var isCollaboratorOnly = !isAgentOnly && user.IsInRole(RoleNames.Collaborator) && !hasStaffRole;
         Guid? agentId = null;
+        string? agentName = null;
         Guid? collaboratorId = null;
+        string? collaboratorName = null;
 
         if ((isAgentOnly || isCollaboratorOnly) && Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
         {
             await using var db = await dbFactory.CreateDbContextAsync();
             if (isAgentOnly)
             {
-                agentId = await db.Agents
+                var agent = await db.Agents
                     .Where(a => a.UserId == userId)
-                    .Select(a => (Guid?)a.Id)
+                    .Select(a => new { a.Id, a.Name })
                     .FirstOrDefaultAsync();
+                if (agent is not null)
+                {
+                    agentId = agent.Id;
+                    agentName = agent.Name;
+                }
             }
             else
             {
                 var collaborator = await db.Collaborators
                     .Where(c => c.UserId == userId)
-                    .Select(c => new { c.Id, c.AgentId })
+                    .Select(c => new { c.Id, c.FullName, c.AgentId, AgentName = c.Agent.Name })
                     .FirstOrDefaultAsync();
                 if (collaborator is not null)
                 {
                     collaboratorId = collaborator.Id;
+                    collaboratorName = collaborator.FullName;
                     agentId = collaborator.AgentId;
+                    agentName = collaborator.AgentName;
                 }
             }
         }
 
-        var info = new AgentScopeInfo(isAgentOnly, agentId, isCollaboratorOnly, collaboratorId);
+        var info = new AgentScopeInfo(isAgentOnly, agentId, agentName, isCollaboratorOnly, collaboratorId, collaboratorName);
         _cached = info;
         return info;
     }

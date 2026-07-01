@@ -8,9 +8,9 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject AgentScope AgentScope
 
-<PageTitle>Ứng viên — POLYMIND</PageTitle>
+<PageTitle>@_pageTitle — POLYMIND</PageTitle>
 
-<PageHeader Eyebrow="HỒ SƠ" Title="Quản lý Ứng viên" Subtitle="@($"{_rows.Count} ứng viên trong quy trình")">
+<PageHeader Eyebrow="@_pageEyebrow" Title="@_pageTitle" Subtitle="@_pageSubtitle">
     <Actions>
         <AuthorizeView Policy="candidates:create">
             <Authorized>
@@ -165,6 +165,9 @@
     private string _search = "";
     private string? _countryFilter;
     private WorkflowStep? _stepFilter;
+    private string _pageEyebrow = "HỒ SƠ";
+    private string _pageTitle = "Quản lý Ứng viên";
+    private string _pageSubtitle = "0 ứng viên trong quy trình";
     // Danh sách quốc gia ĐỘNG: chỉ gồm các nước thực sự xuất hiện trong bảng ứng viên.
     private List<string> _countries = new();
 
@@ -284,5 +287,34 @@
         // Nếu nước đang lọc không còn trong bảng (vd sau khi đổi dữ liệu), bỏ lọc.
         if (_countryFilter is not null && !_countries.Contains(_countryFilter, StringComparer.OrdinalIgnoreCase))
             _countryFilter = null;
+
+        UpdatePageHeader(scope);
+    }
+
+    private void UpdatePageHeader(AgentScopeInfo scope)
+    {
+        if (scope.IsCollaboratorOnly)
+        {
+            var collaboratorName = string.IsNullOrWhiteSpace(scope.CollaboratorName) ? "của tôi" : scope.CollaboratorName;
+            _pageEyebrow = "CỘNG TÁC VIÊN";
+            _pageTitle = $"Ứng viên - CTV {collaboratorName}";
+            _pageSubtitle = scope.AgentName is null
+                ? $"{_rows.Count:N0} ứng viên do bạn giới thiệu"
+                : $"{_rows.Count:N0} ứng viên do bạn giới thiệu • Thuộc đại lý {scope.AgentName}";
+            return;
+        }
+
+        if (scope.IsAgentOnly)
+        {
+            var agentName = string.IsNullOrWhiteSpace(scope.AgentName) ? "Đại lý của tôi" : scope.AgentName;
+            _pageEyebrow = "ĐẠI LÝ";
+            _pageTitle = $"Ứng viên - {agentName}";
+            _pageSubtitle = $"{_rows.Count:N0} ứng viên thuộc đại lý của bạn";
+            return;
+        }
+
+        _pageEyebrow = "HỒ SƠ";
+        _pageTitle = "Quản lý Ứng viên";
+        _pageSubtitle = $"{_rows.Count:N0} ứng viên trong quy trình";
     }
 }

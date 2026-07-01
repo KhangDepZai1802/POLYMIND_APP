@@ -58,14 +58,24 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @{ var ar = 0; }
                     @foreach (var a in _agentBoard)
                     {
-                        ar++;
-                        var rank = ar;
-                        <tr style="@AgentRowStyle" @onclick="@(() => OpenAgentDetail(a.Id))">
-                            <td>@RankBadge(rank)</td>
-                            <td><b>@a.Name</b><MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@a.Code</MudText></td>
+                        <tr class="@AgentBoardRowClass(a)" style="@AgentRowStyle" @onclick="@(() => OpenAgentDetail(a.Id))">
+                            <td>@RankBadge(a.Rank)</td>
+                            <td>
+                                <div class="d-flex align-center flex-wrap" style="gap:6px">
+                                    <b>@a.Name</b>
+                                    @if (a.IsMine)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">Tôi</MudChip>
+                                    }
+                                    else if (a.IsMyAgency)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">Đại lý của tôi</MudChip>
+                                    }
+                                </div>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@a.Code</MudText>
+                            </td>
                             <td style="text-align:center">@a.CollaboratorCount</td>
                             <td style="text-align:center">@a.CandidateCount</td>
                             <td style="text-align:right">@($"{a.Commission:N0} đ")</td>
@@ -76,16 +86,23 @@
             </MudSimpleTable>
         </MudHidden>
         <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
-            @{ var arm = 0; }
             @foreach (var a in _agentBoard)
             {
-                arm++;
-                var rank = arm;
-                <MudPaper Class="mobile-card pa-3" Elevation="0" Style="@AgentRowStyle" @onclick="@(() => OpenAgentDetail(a.Id))">
+                <MudPaper Class="@($"mobile-card pa-3 {AgentBoardCardClass(a)}")" Elevation="0" Style="@AgentRowStyle" @onclick="@(() => OpenAgentDetail(a.Id))">
                     <div class="d-flex align-center" style="gap:10px">
-                        @RankBadge(rank)
+                        @RankBadge(a.Rank)
                         <div style="min-width:0;flex:1">
-                            <MudText Typo="Typo.subtitle2" Style="font-weight:600">@a.Name</MudText>
+                            <div class="d-flex align-center flex-wrap" style="gap:6px">
+                                <MudText Typo="Typo.subtitle2" Style="font-weight:600">@a.Name</MudText>
+                                @if (a.IsMine)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">Tôi</MudChip>
+                                }
+                                else if (a.IsMyAgency)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">Đại lý của tôi</MudChip>
+                                }
+                            </div>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.CollaboratorCount CTV • @a.CandidateCount ứng viên</MudText>
                         </div>
                         <Money Amount="a.Revenue" />
@@ -122,17 +139,20 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @{ var cr = 0; }
                     @foreach (var c in _ctvBoard)
                     {
-                        cr++;
-                        var rank = cr;
-                        <tr>
-                            <td>@RankBadge(rank)</td>
+                        <tr class="@CtvBoardRowClass(c)">
+                            <td>@RankBadge(c.Rank)</td>
                             <td>
-                                <span class="chip-clickable" @onclick="@(() => ShowCtv(c.Id))" @onclick:stopPropagation="true">
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Diversity3">CTV-@c.FullName</MudChip>
-                                </span>
+                                <div class="d-flex align-center flex-wrap" style="gap:6px">
+                                    <span class="chip-clickable" @onclick="@(() => ShowCtv(c.Id))" @onclick:stopPropagation="true">
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Diversity3">CTV-@c.FullName</MudChip>
+                                    </span>
+                                    @if (c.IsMine)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">Tôi</MudChip>
+                                    }
+                                </div>
                                 <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@c.Code</MudText>
                             </td>
                             <td>@c.AgentName</td>
@@ -147,18 +167,21 @@
             </MudSimpleTable>
         </MudHidden>
         <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
-            @{ var crm = 0; }
             @foreach (var c in _ctvBoard)
             {
-                crm++;
-                var rank = crm;
-                <MudPaper Class="mobile-card pa-3" Elevation="0">
+                <MudPaper Class="@($"mobile-card pa-3 {CtvBoardCardClass(c)}")" Elevation="0">
                     <div class="d-flex align-center" style="gap:10px">
-                        @RankBadge(rank)
+                        @RankBadge(c.Rank)
                         <div style="min-width:0;flex:1">
-                            <span class="chip-clickable" @onclick="@(() => ShowCtv(c.Id))">
-                                <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Diversity3">CTV-@c.FullName</MudChip>
-                            </span>
+                            <div class="d-flex align-center flex-wrap" style="gap:6px">
+                                <span class="chip-clickable" @onclick="@(() => ShowCtv(c.Id))">
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Diversity3">CTV-@c.FullName</MudChip>
+                                </span>
+                                @if (c.IsMine)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">Tôi</MudChip>
+                                }
+                            </div>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@c.AgentName • @c.CandidateCount ứng viên</MudText>
                         </div>
                         <Money Amount="c.Revenue" />
@@ -222,8 +245,18 @@
 }
 
 @code {
-    private record AgentBoardRow(Guid Id, string Code, string Name, int CollaboratorCount, int CandidateCount, decimal Commission, decimal Revenue);
-    private record CtvBoardRow(Guid Id, string Code, string FullName, string AgentName, bool IsActive, int CandidateCount, decimal Revenue);
+    private record AgentBoardRow(Guid Id, string Code, string Name, int CollaboratorCount, int CandidateCount, decimal Commission, decimal Revenue)
+    {
+        public int Rank { get; init; }
+        public bool IsMine { get; init; }
+        public bool IsMyAgency { get; init; }
+    }
+
+    private record CtvBoardRow(Guid Id, string Code, string FullName, string AgentName, bool IsActive, int CandidateCount, decimal Revenue)
+    {
+        public int Rank { get; init; }
+        public bool IsMine { get; init; }
+    }
 
     private List<Agent> _agents = new();
     private List<AgentBoardRow> _agentBoard = new();
@@ -238,6 +271,10 @@
     private string _pageTitle = "Đại lý và Cộng tác viên";
     private string _pageEyebrow = "HOA HỒNG";
     private string _pageSubtitle = "";
+    private string _partnerScopeLabel = "";
+    private Guid? _currentAgentId;
+    private Guid? _currentCollaboratorId;
+    private bool _isCollaboratorOnly;
     private string AgentRowStyle => _isPartnerOnly ? "" : "cursor:pointer";
 
     private IEnumerable<Agent> Filtered => _agents.Where(a =>
@@ -250,6 +287,10 @@
     {
         var scope = await AgentScope.GetAsync();
         _isPartnerOnly = scope.IsPartnerOnly;
+        _isCollaboratorOnly = scope.IsCollaboratorOnly;
+        _currentAgentId = scope.AgentId;
+        _currentCollaboratorId = scope.CollaboratorId;
+        _partnerScopeLabel = BuildPartnerScopeLabel(scope);
         _pageTitle = _isPartnerOnly ? "Bảng thi đua doanh số" : "Đại lý và Cộng tác viên";
         _pageEyebrow = _isPartnerOnly ? "THI ĐUA" : "HOA HỒNG";
         await Load();
@@ -290,7 +331,7 @@
         decimal RevenueOfCandidate(Guid id) => paidByCandidate.GetValueOrDefault(id, 0m);
 
         // Bảng đại lý
-        _agentBoard = _agents.Select(a =>
+        var rankedAgents = _agents.Select(a =>
         {
             var agentCands = cands.Where(c => c.AgentId == a.Id).ToList();
             return new AgentBoardRow(
@@ -301,12 +342,18 @@
                 agentCands.Sum(c => RevenueOfCandidate(c.Id)));
         })
         .OrderByDescending(x => x.Revenue).ThenByDescending(x => x.CandidateCount)
-        .Take(3) // chỉ hiển thị 3 đại lý doanh thu cao nhất
+        .Select((row, index) => row with
+        {
+            Rank = index + 1,
+            IsMine = !_isCollaboratorOnly && _currentAgentId == row.Id,
+            IsMyAgency = _isCollaboratorOnly && _currentAgentId == row.Id
+        })
         .ToList();
+        _agentBoard = TakeTopWithPinned(rankedAgents, 3, row => row.IsMine || row.IsMyAgency);
 
         // Bảng CTV
         var agentNames = _agents.ToDictionary(a => a.Id, a => a.Name);
-        _ctvBoard = ctvs.Select(c =>
+        var rankedCtvs = ctvs.Select(c =>
         {
             var ctvCands = cands.Where(x => x.CollaboratorId == c.Id).ToList();
             return new CtvBoardRow(
@@ -317,13 +364,55 @@
                 ctvCands.Sum(x => RevenueOfCandidate(x.Id)));
         })
         .OrderByDescending(x => x.Revenue).ThenByDescending(x => x.CandidateCount)
-        .Take(5) // chỉ hiển thị 5 cộng tác viên doanh thu cao nhất
+        .Select((row, index) => row with
+        {
+            Rank = index + 1,
+            IsMine = _currentCollaboratorId == row.Id
+        })
         .ToList();
+        _ctvBoard = TakeTopWithPinned(rankedCtvs, 5, row => row.IsMine);
 
         _agentTotal = _agents.Count;
         _ctvTotal = ctvs.Count;
-        _pageSubtitle = $"{_agentTotal} đại lý • {_ctvTotal} cộng tác viên • Tháng {_selectedMonth}/{_currentYear}";
+        _pageSubtitle = string.IsNullOrWhiteSpace(_partnerScopeLabel)
+            ? $"{_agentTotal} đại lý • {_ctvTotal} cộng tác viên • Tháng {_selectedMonth}/{_currentYear}"
+            : $"{_partnerScopeLabel} • Tháng {_selectedMonth}/{_currentYear}";
     }
+
+    private static List<T> TakeTopWithPinned<T>(IReadOnlyList<T> rows, int count, Func<T, bool> isPinned)
+        where T : class
+    {
+        var board = rows.Take(count).ToList();
+        var pinned = rows.FirstOrDefault(isPinned);
+        if (pinned is not null && !board.Contains(pinned))
+            board.Add(pinned);
+
+        return board;
+    }
+
+    private static string BuildPartnerScopeLabel(AgentScopeInfo scope)
+    {
+        if (scope.IsCollaboratorOnly)
+        {
+            var collaborator = string.IsNullOrWhiteSpace(scope.CollaboratorName) ? "CTV của tôi" : $"CTV {scope.CollaboratorName}";
+            return scope.AgentName is null ? collaborator : $"{collaborator} • Đại lý {scope.AgentName}";
+        }
+
+        if (scope.IsAgentOnly)
+            return string.IsNullOrWhiteSpace(scope.AgentName) ? "Đại lý của tôi" : scope.AgentName;
+
+        return "";
+    }
+
+    private static string AgentBoardRowClass(AgentBoardRow row)
+        => row.IsMine ? "partner-self-row" : row.IsMyAgency ? "partner-related-row" : "";
+
+    private static string AgentBoardCardClass(AgentBoardRow row)
+        => row.IsMine ? "partner-self-card" : row.IsMyAgency ? "partner-related-card" : "";
+
+    private static string CtvBoardRowClass(CtvBoardRow row) => row.IsMine ? "partner-self-row" : "";
+
+    private static string CtvBoardCardClass(CtvBoardRow row) => row.IsMine ? "partner-self-card" : "";
 
     private void OpenAgentDetail(Guid id)
     {
