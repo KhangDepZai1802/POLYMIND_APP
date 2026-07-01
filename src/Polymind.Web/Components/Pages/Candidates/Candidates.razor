@@ -62,8 +62,8 @@
                     <CellTemplate>
                         @if (context.Item.Gender is Gender g)
                         {
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
-                                     Color="@(g == Gender.Male ? Color.Info : g == Gender.Female ? Color.Secondary : Color.Default)"
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="@GenderChipClass(g)"
+                                     Color="@GenderChipColor(g)"
                                      Icon="@(g == Gender.Male ? Icons.Material.Filled.Male : g == Gender.Female ? Icons.Material.Filled.Female : Icons.Material.Filled.Transgender)">@Labels.Vi(g)</MudChip>
                         }
                         else { <span class="mud-text-secondary">—</span> }
@@ -190,6 +190,20 @@
         var i = code.LastIndexOf('-');
         return i >= 0 && i < code.Length - 1 ? "#" + code[(i + 1)..] : code;
     }
+
+    private static string GenderChipClass(Gender gender) => gender switch
+    {
+        Gender.Male => "gender-chip-male",
+        Gender.Female => "gender-chip-female",
+        _ => string.Empty
+    };
+
+    private static Color GenderChipColor(Gender gender) => gender switch
+    {
+        Gender.Male => Color.Info,
+        Gender.Female => Color.Error,
+        _ => Color.Default
+    };
 
     protected override async Task OnInitializedAsync() => await Load();
 

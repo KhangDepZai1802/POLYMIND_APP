@@ -6,18 +6,30 @@
 @inject ISnackbar Snackbar
 @inject IAuthorizationService AuthorizationService
 @inject AuthenticationStateProvider AuthStateProvider
+@inject AgentScope AgentScope
 
-<PageTitle>Đại lý &amp; Cộng tác viên — POLYMIND</PageTitle>
+<PageTitle>@_pageTitle — POLYMIND</PageTitle>
 
-<PageHeader Eyebrow="HOA HỒNG" Title="Đại lý và Cộng tác viên" Subtitle="@($"{_agentTotal} đại lý • {_ctvTotal} cộng tác viên")">
+<PageHeader Eyebrow="@_pageEyebrow" Title="@_pageTitle" Subtitle="@_pageSubtitle">
     <Actions>
-        <AuthorizeView Policy="agents:create">
-            <Authorized>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">
-                    Thêm đại lý
-                </MudButton>
-            </Authorized>
-        </AuthorizeView>
+        <MudSelect T="int" Value="_selectedMonth" ValueChanged="OnMonthChanged"
+                   Label="Tháng thi đua" Variant="Variant.Outlined" Margin="Margin.Dense"
+                   Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.CalendarMonth" Style="min-width:160px">
+            @foreach (var month in Enumerable.Range(1, 12))
+            {
+                <MudSelectItem T="int" Value="@month" Disabled="@IsFutureMonth(month)">Tháng @month</MudSelectItem>
+            }
+        </MudSelect>
+        @if (!_isPartnerOnly)
+        {
+            <AuthorizeView Policy="agents:create">
+                <Authorized>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">
+                        Thêm đại lý
+                    </MudButton>
+                </Authorized>
+            </AuthorizeView>
+        }
     </Actions>
 </PageHeader>
 
@@ -51,7 +63,7 @@
                     {
                         ar++;
                         var rank = ar;
-                        <tr style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/agents/{a.Id}"))">
+                        <tr style="@AgentRowStyle" @onclick="@(() => OpenAgentDetail(a.Id))">
                             <td>@RankBadge(rank)</td>
                             <td><b>@a.Name</b><MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@a.Code</MudText></td>
                             <td style="text-align:center">@a.CollaboratorCount</td>
@@ -69,7 +81,7 @@
             {
                 arm++;
                 var rank = arm;
-                <MudPaper Class="mobile-card pa-3" Elevation="0" Style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/agents/{a.Id}"))">
+                <MudPaper Class="mobile-card pa-3" Elevation="0" Style="@AgentRowStyle" @onclick="@(() => OpenAgentDetail(a.Id))">
                     <div class="d-flex align-center" style="gap:10px">
                         @RankBadge(rank)
                         <div style="min-width:0;flex:1">
@@ -157,54 +169,57 @@
     }
 </MudPaper>
 
-@* ===== Danh sách đại lý (điều hướng chi tiết) ===== *@
-<MudPaper Elevation="1" Class="pa-4">
-    <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Danh sách đại lý</b></MudText>
-    <MudTextField @bind-Value="_search" Placeholder="Tìm tên, mã, SĐT..." Adornment="Adornment.Start"
-                  AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+@if (!_isPartnerOnly)
+{
+    @* ===== Danh sách đại lý (điều hướng chi tiết) ===== *@
+    <MudPaper Elevation="1" Class="pa-4">
+        <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Danh sách đại lý</b></MudText>
+        <MudTextField @bind-Value="_search" Placeholder="Tìm tên, mã, SĐT..." Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
 
-    <MudHidden Breakpoint="Breakpoint.SmAndDown">
-        <MudDataGrid T="Agent" Items="Filtered" Hover="true" Dense="true" Striped="true"
-                     RowClick="@(args => Nav.NavigateTo($"/agents/{args.Item.Id}"))" Class="cursor-pointer">
-            <Columns>
-                <PropertyColumn Property="x => x.Code" Title="Mã" />
-                <PropertyColumn Property="x => x.Name" Title="Tên đại lý" />
-                <PropertyColumn Property="x => x.RepresentativeName" Title="Người đại diện" />
-                <PropertyColumn Property="x => x.Phone" Title="SĐT" />
-                <TemplateColumn Title="Trạng thái">
-                    <CellTemplate>
-                        <MudChip T="string" Size="Size.Small" Color="@(context.Item.IsActive ? Color.Success : Color.Default)">
-                            @(context.Item.IsActive ? "Đang hợp tác" : "Ngừng")
-                        </MudChip>
-                    </CellTemplate>
-                </TemplateColumn>
-            </Columns>
-            <PagerContent><MudDataGridPager T="Agent" /></PagerContent>
-        </MudDataGrid>
-    </MudHidden>
+        <MudHidden Breakpoint="Breakpoint.SmAndDown">
+            <MudDataGrid T="Agent" Items="Filtered" Hover="true" Dense="true" Striped="true"
+                         RowClick="@(args => Nav.NavigateTo($"/agents/{args.Item.Id}"))" Class="cursor-pointer">
+                <Columns>
+                    <PropertyColumn Property="x => x.Code" Title="Mã" />
+                    <PropertyColumn Property="x => x.Name" Title="Tên đại lý" />
+                    <PropertyColumn Property="x => x.RepresentativeName" Title="Người đại diện" />
+                    <PropertyColumn Property="x => x.Phone" Title="SĐT" />
+                    <TemplateColumn Title="Trạng thái">
+                        <CellTemplate>
+                            <MudChip T="string" Size="Size.Small" Color="@(context.Item.IsActive ? Color.Success : Color.Default)">
+                                @(context.Item.IsActive ? "Đang hợp tác" : "Ngừng")
+                            </MudChip>
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+                <PagerContent><MudDataGridPager T="Agent" /></PagerContent>
+            </MudDataGrid>
+        </MudHidden>
 
-    <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
-        @if (!Filtered.Any())
-        {
-            <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Không có đại lý phù hợp.</MudText>
-        }
-        else
-        {
-            @foreach (var a in Filtered)
+        <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+            @if (!Filtered.Any())
             {
-                <MudPaper Class="mobile-card pa-3" Elevation="0" Style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/agents/{a.Id}"))">
-                    <div class="d-flex justify-space-between align-center" style="gap:8px">
-                        <div style="min-width:0">
-                            <MudText Typo="Typo.subtitle2" Style="font-weight:600">@a.Name</MudText>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.Code • @(string.IsNullOrWhiteSpace(a.Phone) ? "—" : a.Phone)</MudText>
-                        </div>
-                        <MudChip T="string" Size="Size.Small" Color="@(a.IsActive ? Color.Success : Color.Default)">@(a.IsActive ? "Đang hợp tác" : "Ngừng")</MudChip>
-                    </div>
-                </MudPaper>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Không có đại lý phù hợp.</MudText>
             }
-        }
-    </MudHidden>
-</MudPaper>
+            else
+            {
+                @foreach (var a in Filtered)
+                {
+                    <MudPaper Class="mobile-card pa-3" Elevation="0" Style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/agents/{a.Id}"))">
+                        <div class="d-flex justify-space-between align-center" style="gap:8px">
+                            <div style="min-width:0">
+                                <MudText Typo="Typo.subtitle2" Style="font-weight:600">@a.Name</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.Code • @(string.IsNullOrWhiteSpace(a.Phone) ? "—" : a.Phone)</MudText>
+                            </div>
+                            <MudChip T="string" Size="Size.Small" Color="@(a.IsActive ? Color.Success : Color.Default)">@(a.IsActive ? "Đang hợp tác" : "Ngừng")</MudChip>
+                        </div>
+                    </MudPaper>
+                }
+            }
+        </MudHidden>
+    </MudPaper>
+}
 
 @code {
     private record AgentBoardRow(Guid Id, string Code, string Name, int CollaboratorCount, int CandidateCount, decimal Commission, decimal Revenue);
@@ -216,6 +231,14 @@
     private int _agentTotal;
     private int _ctvTotal;
     private string _search = "";
+    private bool _isPartnerOnly;
+    private readonly int _currentYear = DateTime.Today.Year;
+    private readonly int _currentMonth = DateTime.Today.Month;
+    private int _selectedMonth = DateTime.Today.Month;
+    private string _pageTitle = "Đại lý và Cộng tác viên";
+    private string _pageEyebrow = "HOA HỒNG";
+    private string _pageSubtitle = "";
+    private string AgentRowStyle => _isPartnerOnly ? "" : "cursor:pointer";
 
     private IEnumerable<Agent> Filtered => _agents.Where(a =>
         string.IsNullOrWhiteSpace(_search)
@@ -223,7 +246,23 @@
         || a.Code.Contains(_search, StringComparison.OrdinalIgnoreCase)
         || (a.Phone?.Contains(_search) ?? false));
 
-    protected override async Task OnInitializedAsync() => await Load();
+    protected override async Task OnInitializedAsync()
+    {
+        var scope = await AgentScope.GetAsync();
+        _isPartnerOnly = scope.IsPartnerOnly;
+        _pageTitle = _isPartnerOnly ? "Bảng thi đua doanh số" : "Đại lý và Cộng tác viên";
+        _pageEyebrow = _isPartnerOnly ? "THI ĐUA" : "HOA HỒNG";
+        await Load();
+    }
+
+    private bool IsFutureMonth(int month) => _currentYear == DateTime.Today.Year && month > _currentMonth;
+
+    private async Task OnMonthChanged(int month)
+    {
+        if (IsFutureMonth(month)) return;
+        _selectedMonth = month;
+        await Load();
+    }
 
     private async Task Load()
     {
@@ -231,12 +270,19 @@
         _agents = await db.Agents.OrderBy(a => a.Name).ToListAsync();
         var ctvs = await db.Collaborators.ToListAsync();
         var cands = await db.Candidates.Select(c => new { c.Id, c.AgentId, c.CollaboratorId }).ToListAsync();
+        var monthStart = new DateOnly(_currentYear, _selectedMonth, 1);
+        var monthEnd = monthStart.AddMonths(1);
+        var commissionStart = new DateTimeOffset(monthStart.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var commissionEnd = new DateTimeOffset(monthEnd.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+
         var paidByCandidate = await db.Payments
             .Where(p => p.Status == PaymentStatus.Paid)
+            .Where(p => p.PaidDate >= monthStart && p.PaidDate < monthEnd)
             .GroupBy(p => p.CandidateId)
             .Select(g => new { CandidateId = g.Key, Sum = g.Sum(x => x.Amount) })
             .ToDictionaryAsync(x => x.CandidateId, x => x.Sum);
         var commissionByAgent = await db.AgentCommissions
+            .Where(c => c.CreatedAt >= commissionStart && c.CreatedAt < commissionEnd)
             .GroupBy(c => c.AgentId)
             .Select(g => new { AgentId = g.Key, Sum = g.Sum(x => x.CommissionAmount) })
             .ToDictionaryAsync(x => x.AgentId, x => x.Sum);
@@ -276,6 +322,13 @@
 
         _agentTotal = _agents.Count;
         _ctvTotal = ctvs.Count;
+        _pageSubtitle = $"{_agentTotal} đại lý • {_ctvTotal} cộng tác viên • Tháng {_selectedMonth}/{_currentYear}";
+    }
+
+    private void OpenAgentDetail(Guid id)
+    {
+        if (_isPartnerOnly) return;
+        Nav.NavigateTo($"/agents/{id}");
     }
 
     private async Task ShowCtv(Guid id)

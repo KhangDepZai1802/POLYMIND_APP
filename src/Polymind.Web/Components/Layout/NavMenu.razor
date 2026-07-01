@@ -34,7 +34,7 @@
     </AuthorizeView>
     <AuthorizeView Policy="agents:read">
         <Authorized>
-            <MudNavLink Href="/agents" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Handshake">Đại lý &amp; Hoa hồng</MudNavLink>
+            <MudNavLink Href="/agents" Match="NavLinkMatch.Prefix" Icon="@(_isPartnerOnly ? Icons.Material.Filled.EmojiEvents : Icons.Material.Filled.Handshake)">@(_isPartnerOnly ? "Bảng thi đua doanh số" : "Đại lý & Hoa hồng")</MudNavLink>
         </Authorized>
     </AuthorizeView>
     <AuthorizeView Policy="visas:read">
@@ -46,7 +46,7 @@
     {
         <AuthorizeView Policy="commissions:read">
             <Authorized>
-                <MudNavLink Href="/my-commissions" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Handshake">Hoa hồng của tôi</MudNavLink>
+                <MudNavLink Href="/my-commissions" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Paid">Hoa hồng của tôi</MudNavLink>
             </Authorized>
         </AuthorizeView>
     }

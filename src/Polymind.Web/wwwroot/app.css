@@ -693,6 +693,35 @@ body,
     box-shadow: 0 2px 10px rgba(0,0,0,.28);
 }
 
+.gender-chip-male {
+    --gender-chip-color: #1976d2;
+}
+
+.gender-chip-female {
+    --gender-chip-color: #e53935;
+}
+
+.gender-chip-male,
+.gender-chip-female {
+    border-color: var(--gender-chip-color) !important;
+    color: var(--gender-chip-color) !important;
+}
+
+.gender-chip-male.mud-chip-outlined,
+.gender-chip-female.mud-chip-outlined {
+    border: 1px solid var(--gender-chip-color) !important;
+}
+
+.gender-chip-male .mud-chip-icon,
+.gender-chip-female .mud-chip-icon,
+.gender-chip-male .mud-icon-root,
+.gender-chip-female .mud-icon-root,
+.gender-chip-male svg,
+.gender-chip-female svg {
+    color: var(--gender-chip-color) !important;
+    fill: var(--gender-chip-color) !important;
+}
+
 .people-card {
     border-left: 4px solid var(--mud-palette-secondary);
     background: linear-gradient(180deg, rgba(var(--mud-palette-secondary-rgb), .06), transparent 60%);

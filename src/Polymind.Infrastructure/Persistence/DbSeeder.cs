@@ -89,12 +89,12 @@ public static class DbSeeder
             Messaging()),
 
         [RoleNames.Agent] = Combine(
-            Read("candidates", "collaborators", "commissions", "loans", "notifications"),
+            Read("agents", "candidates", "collaborators", "commissions", "loans", "notifications"),
             Actions("collaborators", "update"),
             Messaging()),
 
         [RoleNames.Collaborator] = Combine(
-            Read("candidates", "commissions", "notifications"),
+            Read("agents", "candidates", "commissions", "notifications"),
             Messaging()),
     };
 
