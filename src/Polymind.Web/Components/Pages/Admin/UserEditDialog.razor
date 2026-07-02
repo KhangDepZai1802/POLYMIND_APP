@@ -1,9 +1,12 @@
 @using Microsoft.AspNetCore.Identity
 @using Polymind.Infrastructure.Identity
+@using Polymind.Web.Identity
 @inject UserManager<ApplicationUser> UserManager
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthState
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject TwoFactorStatusCache TwoFactorCache
 
 @* Dialog cho super admin chỉnh sửa 1 tài khoản: họ tên, tên đăng nhập (email), mật khẩu. *@
 <MudDialog>
@@ -26,6 +29,23 @@
                           Adornment="Adornment.End"
                           AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
                           OnAdornmentClick="@(() => _showPassword = !_showPassword)" />
+
+            <MudDivider Class="my-3" />
+            <div class="d-flex align-center justify-space-between flex-wrap" style="gap:8px">
+                <div>
+                    <MudText Typo="Typo.subtitle2"><b>Xác thực 2 lớp (2FA)</b></MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @(_twoFactorEnabled ? "Đang bật — nhân viên mất điện thoại thì đặt lại tại đây." : "Chưa bật — hệ thống sẽ yêu cầu cài ở lần đăng nhập tới.")
+                    </MudText>
+                </div>
+                @if (_twoFactorEnabled)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
+                               StartIcon="@Icons.Material.Filled.PhonelinkErase" OnClick="ResetTwoFactorAsync" Disabled="_saving">
+                        Đặt lại 2FA
+                    </MudButton>
+                }
+            </div>
         }
     </DialogContent>
     <DialogActions>
@@ -42,6 +62,7 @@
     private bool _saving;
     private bool _found;
     private bool _showPassword;
+    private bool _twoFactorEnabled;
     private string _fullName = "";
     private string _email = "";
     private string _password = "";
@@ -54,8 +75,46 @@
             _found = true;
             _fullName = user.FullName;
             _email = user.Email ?? user.UserName ?? "";
+            _twoFactorEnabled = await UserManager.GetTwoFactorEnabledAsync(user);
         }
         _loading = false;
+    }
+
+    // Nhân viên mất điện thoại/mã khôi phục: tắt 2FA + hủy key cũ → lần đăng nhập tới hệ thống bắt cài lại từ đầu.
+    private async Task ResetTwoFactorAsync()
+    {
+        var confirm = await DialogService.ShowMessageBoxAsync(
+            "Đặt lại 2FA?",
+            $"Tắt xác thực 2 lớp của \"{_fullName}\" và hủy key cũ. Lần đăng nhập tới, tài khoản này sẽ phải quét QR cài lại 2FA. Bạn có chắc chắn?",
+            yesText: "Đặt lại", cancelText: "Hủy");
+        if (confirm != true) return;
+
+        _saving = true;
+        try
+        {
+            var user = await UserManager.FindByIdAsync(UserId.ToString());
+            if (user is null)
+            {
+                Snackbar.Add("Không tìm thấy tài khoản.", Severity.Error);
+                return;
+            }
+
+            await UserManager.SetTwoFactorEnabledAsync(user, false);
+            await UserManager.ResetAuthenticatorKeyAsync(user);
+            TwoFactorCache.Invalidate(user.Id.ToString());
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+            db.AddAudit(await AuthState.GetUserIdAsync(), "reset_2fa", "users", user.Id,
+                new { TwoFactorEnabled = true }, new { TwoFactorEnabled = false });
+            await db.SaveChangesAsync();
+
+            _twoFactorEnabled = false;
+            Snackbar.Add("Đã đặt lại 2FA — tài khoản sẽ cài lại ở lần đăng nhập tới.", Severity.Success);
+        }
+        finally
+        {
+            _saving = false;
+        }
     }
 
     private async Task SaveAsync()

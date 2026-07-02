@@ -17,6 +17,9 @@ public class JobOrder : BaseEntity
     public string? Requirements { get; set; }
     public string? Benefits { get; set; } // Đãi ngộ của công ty tiếp nhận (ăn ở, bảo hiểm, tăng ca...)
     public string? Bonus { get; set; }     // Thưởng (thưởng ký HĐ, thưởng năm, thưởng chuyên cần...)
+    public JobCategory Category { get; set; } = JobCategory.OverseasJob;
+    public DateOnly? PostedDate { get; set; }           // ngày đăng job
+    public DateOnly? ApplicationDeadline { get; set; }  // hạn ứng tuyển — sắp hết hạn (≤7 ngày) hiển thị đỏ
     public DateOnly? RecruitmentStartDate { get; set; }
     public DateOnly? ExpectedDepartureDate { get; set; }
     public JobOrderStatus Status { get; set; } = JobOrderStatus.Recruiting;

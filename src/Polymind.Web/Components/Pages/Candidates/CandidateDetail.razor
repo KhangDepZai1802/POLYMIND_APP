@@ -730,8 +730,11 @@ else
         {
             _canAdvanceWorkflow = false;
             _workflowOwnerLabel = "";
+            // Job hết hạn ứng tuyển không nhận thêm ứng viên (góp ý Vietgroup).
+            var todayForDeadline = DateOnly.FromDateTime(DateTime.Today);
             _jobOrders = await db.JobOrders
-                .Where(j => j.Status != JobOrderStatus.Cancelled)
+                .Where(j => j.Status != JobOrderStatus.Cancelled
+                            && (j.ApplicationDeadline == null || j.ApplicationDeadline >= todayForDeadline))
                 .OrderByDescending(j => j.CreatedAt).ToListAsync();
         }
 
@@ -1034,6 +1037,16 @@ else
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
+
+            // Chặn cứng job hết hạn ứng tuyển (kể cả khi dropdown còn cache job cũ).
+            var jobInfo = await db.JobOrders.Where(j => j.Id == _selectedJobOrderId.Value)
+                .Select(j => new { j.Code, j.ApplicationDeadline }).FirstOrDefaultAsync();
+            if (jobInfo?.ApplicationDeadline is DateOnly deadline && deadline < DateOnly.FromDateTime(DateTime.Today))
+            {
+                Snackbar.Add($"Job {jobInfo.Code} đã hết hạn ứng tuyển ({deadline:dd/MM/yyyy}) — không thể gắn thêm ứng viên.", Severity.Warning);
+                return;
+            }
+
             var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
             var assignment = new CandidateJobOrder
             {

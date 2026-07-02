@@ -5,6 +5,7 @@ using Polymind.Domain.Enums;
 using Polymind.Infrastructure.Identity;
 using Polymind.Infrastructure.Persistence;
 using Polymind.Infrastructure.Persistence.Constants;
+using Polymind.Web.Display;
 
 namespace Polymind.Web.Notifications;
 
@@ -267,6 +268,47 @@ public class NotificationService(
                 recipients));
         }
 
+        // Nhắc chăm sóc lead (góp ý Vietgroup): lead đứng yên một trạng thái quá ngưỡng giờ
+        // (LeadCareRules) → nhắc tư vấn viên phụ trách + trưởng phòng tuyển dụng + super admin.
+        var now = DateTimeOffset.UtcNow;
+        var convertedLeadIds = (await db.Candidates.Where(c => c.LeadId != null)
+            .Select(c => c.LeadId!.Value).Distinct().ToListAsync()).ToHashSet();
+        var activeLeads = await db.Leads
+            .Where(l => l.Status != LeadStatus.Converted
+                        && l.Status != LeadStatus.Unsuitable
+                        && l.Status != LeadStatus.Cancelled)
+            .Select(l => new { l.Id, l.FullName, l.Status, l.CreatedAt, l.AppointmentAt, l.AssignedTo })
+            .ToListAsync();
+        activeLeads = activeLeads.Where(l => !convertedLeadIds.Contains(l.Id)).ToList();
+        if (activeLeads.Count > 0)
+        {
+            var staleLeadIds = activeLeads.Select(l => l.Id).ToList();
+            var lastStatusChanges = await db.LeadActivities
+                .Where(a => a.ActivityType == LeadActivityType.StatusChange && staleLeadIds.Contains(a.LeadId))
+                .GroupBy(a => a.LeadId)
+                .Select(g => new { LeadId = g.Key, At = g.Max(a => a.CreatedAt) })
+                .ToDictionaryAsync(x => x.LeadId, x => x.At);
+            var overseers = RoleUsers(roleRecipients, RoleNames.RecruitmentManager, RoleNames.SuperAdmin);
+            foreach (var l in activeLeads)
+            {
+                var lastChange = lastStatusChanges.GetValueOrDefault(l.Id, l.CreatedAt);
+                if (!LeadCareRules.TryGetOverdue(l.Status, lastChange, l.AppointmentAt, now, out var stalledHours))
+                    continue;
+
+                var recipients = (l.AssignedTo is not null
+                        ? new List<Guid> { l.AssignedTo.Value }
+                        : RoleUsers(roleRecipients, RoleNames.Recruiter, RoleNames.Consultant))
+                    .Concat(overseers)
+                    .Distinct()
+                    .ToList();
+                events.Add(new ReminderEvent(
+                    NotificationType.ReminderLeadCare, l.Id, "lead",
+                    $"Lead cần chăm sóc: {l.FullName}",
+                    $"Đứng ở trạng thái \"{Labels.Vi(l.Status)}\" đã {LeadCareRules.DurationLabel(stalledHours)} — {LeadCareRules.NextAction(l.Status)}.",
+                    recipients));
+            }
+        }
+
         var docCandidateIds = (await db.CandidateDocuments.Select(d => d.CandidateId).Distinct().ToListAsync()).ToHashSet();
         var needDocs = await db.CandidateJobOrders
             .Where(cjo => cjo.Status == CandidateJobOrderStatus.Active && cjo.CurrentStep >= WorkflowStep.Document)
@@ -310,9 +352,19 @@ public class NotificationService(
 
         var existing = await db.Notifications
             .Where(n => n.ReferenceId != null)
-            .Select(n => new { n.UserId, n.Type, n.ReferenceId, n.Channel })
+            .Select(n => new { n.UserId, n.Type, n.ReferenceId, n.Channel, n.IsRead, n.CreatedAt })
             .ToListAsync();
         var seen = existing.Select(x => (x.UserId, x.Type, x.ReferenceId!.Value, x.Channel)).ToHashSet();
+
+        // Nhắc chăm sóc lead được phép NHẮC LẠI khi lead vẫn đứng yên: chỉ chặn khi còn thông báo
+        // chưa đọc hoặc đã nhắc trong 24 giờ qua (các loại nhắc khác giữ nguyên: 1 lần / reference).
+        var leadCareCutoff = DateTimeOffset.UtcNow.AddHours(-24);
+        var leadCareBlocked = existing
+            .Where(x => x.Type == NotificationType.ReminderLeadCare)
+            .GroupBy(x => (x.UserId, ReferenceId: x.ReferenceId!.Value, x.Channel))
+            .Where(g => g.Any(x => !x.IsRead || x.CreatedAt >= leadCareCutoff))
+            .Select(g => g.Key)
+            .ToHashSet();
 
         var preferences = await db.NotificationPreferences.ToListAsync();
         var prefByUserType = preferences.ToDictionary(p => (p.UserId, p.Type));
@@ -328,7 +380,11 @@ public class NotificationService(
             {
                 foreach (var channel in ChannelsFor(prefByUserType.GetValueOrDefault((userId, reminder.Type))))
                 {
-                    if (!seen.Add((userId, reminder.Type, reminder.ReferenceId, channel))) continue;
+                    if (reminder.Type == NotificationType.ReminderLeadCare)
+                    {
+                        if (!leadCareBlocked.Add((userId, reminder.ReferenceId, channel))) continue;
+                    }
+                    else if (!seen.Add((userId, reminder.Type, reminder.ReferenceId, channel))) continue;
                     toAdd.Add(new Notification
                     {
                         UserId = userId,

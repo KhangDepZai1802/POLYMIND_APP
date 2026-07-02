@@ -35,13 +35,17 @@ else
             <MudPaper Class="pa-4" Elevation="1">
                 <div class="d-flex justify-space-between align-center mb-3" style="gap:8px">
                     <div class="d-flex align-center" style="gap:10px;min-width:0">
-                        <span style="font-size:2.2rem;line-height:1">@_country.Flag</span>
+                        <CountryFlag Style="_country" Size="40" />
                         <div style="min-width:0">
                             <MudText Typo="Typo.h6"><b>@(string.IsNullOrWhiteSpace(_job.CompanyName) ? _country.Name : _job.CompanyName)</b></MudText>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">@_job.Code</MudText>
                         </div>
                     </div>
-                    <MudChip T="string" Color="Labels.ColorOf(_job.Status)">@Labels.Vi(_job.Status)</MudChip>
+                    <div class="d-flex flex-column align-end" style="gap:4px">
+                        <MudChip T="string" Color="Labels.ColorOf(_job.Status)">@Labels.Vi(_job.Status)</MudChip>
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@Labels.ColorOf(_job.Category)"
+                                 Icon="@Labels.IconOf(_job.Category)">@Labels.Vi(_job.Category)</MudChip>
+                    </div>
                 </div>
                 <MudDivider Class="mb-3" />
                 <MudGrid>
@@ -49,6 +53,18 @@ else
                     @Field("Ngành nghề", _job.Field)
                     @Field("Nghiệp đoàn", _job.UnionName)
                     @Field("Số lượng", _job.Quantity.ToString())
+                    @Field("Ngày đăng", _job.PostedDate?.ToString("dd/MM/yyyy"))
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Hạn ứng tuyển</MudText>
+                        @if (_job.ApplicationDeadline is DateOnly dl)
+                        {
+                            var daysLeft = dl.DayNumber - DateOnly.FromDateTime(DateTime.Today).DayNumber;
+                            <MudText Typo="Typo.body2" Style="@(daysLeft <= 7 ? "color:var(--mud-palette-error);font-weight:600" : "")">
+                                @dl.ToString("dd/MM/yyyy")@(daysLeft < 0 ? " — đã hết hạn" : daysLeft <= 7 ? $" — còn {daysLeft} ngày" : "")
+                            </MudText>
+                        }
+                        else { <MudText Typo="Typo.body2">—</MudText> }
+                    </MudItem>
                     @Field("Bắt đầu tuyển", _job.RecruitmentStartDate?.ToString("dd/MM/yyyy"))
                     @Field("Dự kiến xuất cảnh", _job.ExpectedDepartureDate?.ToString("dd/MM/yyyy"))
                 </MudGrid>

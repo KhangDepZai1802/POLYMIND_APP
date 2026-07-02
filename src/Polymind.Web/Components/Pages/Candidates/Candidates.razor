@@ -35,7 +35,9 @@
                 @foreach (var c in _countries)
                 {
                     var st = CountryDisplay.Of(c);
-                    <MudSelectItem T="string" Value="@c">@st.Flag @st.Name</MudSelectItem>
+                    <MudSelectItem T="string" Value="@c">
+                        <div class="d-flex align-center" style="gap:8px"><CountryFlag Style="st" Size="20" /><span>@st.Name</span></div>
+                    </MudSelectItem>
                 }
             </MudSelect>
         </MudItem>
@@ -83,7 +85,7 @@
                 <TemplateColumn Title="Quốc gia">
                     <CellTemplate>
                         @{ var st = CountryDisplay.Of(context.Item.Country); }
-                        <span style="white-space:nowrap">@st.Flag @st.Name</span>
+                        <span style="white-space:nowrap"><CountryFlag Style="st" Size="20" /> @st.Name</span>
                     </CellTemplate>
                 </TemplateColumn>
                 <PropertyColumn Property="x => x.Field" Title="Nghề nghiệp" />
@@ -127,7 +129,7 @@
                     <div class="d-flex justify-space-between align-center" style="gap:8px">
                         <div style="min-width:0">
                             <MudText Typo="Typo.subtitle2" Style="font-weight:600">@r.FullName</MudText>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@r.ShortCode • @(r.Gender is Gender g ? Labels.Vi(g) : "—") • @st.Flag @st.Name @(string.IsNullOrWhiteSpace(r.Field) ? "" : $"• {r.Field}")</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@r.ShortCode • @(r.Gender is Gender g ? Labels.Vi(g) : "—") • <CountryFlag Style="st" Size="16" /> @st.Name @(string.IsNullOrWhiteSpace(r.Field) ? "" : $"• {r.Field}")</MudText>
                         </div>
                         @if (r.Step is null)
                         {

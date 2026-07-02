@@ -1,0 +1,17 @@
+@* Cờ quốc gia bằng ảnh SVG local (emoji cờ trên Windows chỉ hiện chữ viết tắt).
+   Dùng: <CountryFlag Style="CountryDisplay.Of(country)" Size="24" /> *@
+@if (Style.FlagUrl is string url)
+{
+    <img src="@url" alt="@Style.Name" class="country-flag" style="@($"width:{Size}px")" />
+}
+else
+{
+    <MudIcon Icon="@Icons.Material.Filled.Public" Color="Color.Primary" Style="@($"font-size:{Size}px;vertical-align:middle")" />
+}
+
+@code {
+    [Parameter] public CountryDisplay.CountryStyle Style { get; set; }
+
+    /// <summary>Bề rộng cờ (px); chiều cao theo tỉ lệ gốc của SVG.</summary>
+    [Parameter] public int Size { get; set; } = 24;
+}

@@ -93,8 +93,14 @@
             }
             Nav.NavigateTo(ReturnUrl ?? "/", forceLoad: true);
         }
+        else if (result.RequiresTwoFactor)
+        {
+            // Đúng mật khẩu + tài khoản đã bật 2FA → sang bước nhập mã Authenticator.
+            var returnUrl = string.IsNullOrEmpty(ReturnUrl) ? "/" : ReturnUrl;
+            Nav.NavigateTo($"/login-2fa?ReturnUrl={Uri.EscapeDataString(returnUrl)}", forceLoad: true);
+        }
         else if (result.IsLockedOut)
-            _error = "Tài khoản tạm khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau.";
+            _error = "Tài khoản tạm khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau 15 phút.";
         else
             _error = "Email hoặc mật khẩu không đúng.";
     }

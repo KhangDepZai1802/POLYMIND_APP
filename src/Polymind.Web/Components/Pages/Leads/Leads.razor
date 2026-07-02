@@ -81,6 +81,12 @@
                 <TemplateColumn Title="Trạng thái">
                     <CellTemplate>
                         <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(context.Item.Status)">@Labels.Vi(context.Item.Status)</MudChip>
+                        @if (CareOverdueHours(context.Item) is int oh)
+                        {
+                            <MudTooltip Text="@CareTooltip(context.Item, oh)">
+                                <MudIcon Icon="@Icons.Material.Filled.NotificationsActive" Color="Color.Error" Size="Size.Small" Class="ml-1 lead-care-bell" Style="vertical-align:middle" />
+                            </MudTooltip>
+                        }
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn Title="Ngày tạo">
@@ -109,7 +115,15 @@
                             <MudText Typo="Typo.subtitle2" Style="font-weight:600">@l.FullName</MudText>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">@Short(l.Code) • @(l.Gender is Gender g ? Labels.Vi(g) : "—") • @(string.IsNullOrWhiteSpace(l.Phone) ? "—" : l.Phone)</MudText>
                         </div>
-                        <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(l.Status)">@Labels.Vi(l.Status)</MudChip>
+                        <div class="d-flex align-center" style="gap:4px">
+                            <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(l.Status)">@Labels.Vi(l.Status)</MudChip>
+                            @if (CareOverdueHours(l) is int moh)
+                            {
+                                <MudTooltip Text="@CareTooltip(l, moh)">
+                                    <MudIcon Icon="@Icons.Material.Filled.NotificationsActive" Color="Color.Error" Size="Size.Small" Class="lead-care-bell" Style="vertical-align:middle" />
+                                </MudTooltip>
+                            }
+                        </div>
                     </div>
                     <div class="d-flex justify-space-between align-center mt-2" style="gap:8px">
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(l.Province) ? "—" : l.Province)</MudText>
@@ -141,9 +155,18 @@
 @code {
     private List<Lead> _leads = new();
     private Dictionary<Guid, string> _ctvNames = new();
+    private Dictionary<Guid, DateTimeOffset> _lastStatusChange = new();
     private string _search = "";
     private LeadStatus? _statusFilter;
     private LeadSource? _sourceFilter;
+
+    // Lead quá hạn chăm sóc (LeadCareRules) → trả số giờ đã đứng yên để hiện chuông cảnh báo đỏ.
+    private int? CareOverdueHours(Lead l)
+        => LeadCareRules.TryGetOverdue(l.Status, _lastStatusChange.GetValueOrDefault(l.Id, l.CreatedAt),
+            l.AppointmentAt, DateTimeOffset.UtcNow, out var hours) ? hours : null;
+
+    private static string CareTooltip(Lead l, int hours)
+        => $"Đứng ở trạng thái \"{Labels.Vi(l.Status)}\" đã {LeadCareRules.DurationLabel(hours)} — {LeadCareRules.NextAction(l.Status)}.";
 
     // Lead nguồn "Giới thiệu" + có CTV → hiển thị "CTV-<tên>"; còn lại trả null để dùng nhãn nguồn thường.
     private string? CtvLabel(Lead l)
@@ -200,6 +223,14 @@
         _leads = await db.Leads.Where(l => !convertedLeadIds.Contains(l.Id))
             .OrderByDescending(l => l.CreatedAt).ToListAsync();
         _ctvNames = await db.Collaborators.ToDictionaryAsync(c => c.Id, c => c.FullName);
+
+        // Lần đổi trạng thái gần nhất của từng lead — mốc tính "quá hạn chăm sóc".
+        var leadIds = _leads.Select(l => l.Id).ToList();
+        _lastStatusChange = await db.LeadActivities
+            .Where(a => a.ActivityType == LeadActivityType.StatusChange && leadIds.Contains(a.LeadId))
+            .GroupBy(a => a.LeadId)
+            .Select(g => new { LeadId = g.Key, At = g.Max(a => a.CreatedAt) })
+            .ToDictionaryAsync(x => x.LeadId, x => x.At);
     }
 
     private async Task OpenCreate()

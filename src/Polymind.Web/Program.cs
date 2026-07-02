@@ -77,6 +77,8 @@ builder.Services.AddHangfireServer();
 
 // Phạm vi dữ liệu Portal đại lý
 builder.Services.AddScoped<Polymind.Web.Identity.AgentScope>();
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<Polymind.Web.Identity.TwoFactorStatusCache>();
 
 // EF Core (PostgreSQL) + ASP.NET Core Identity
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -200,6 +202,25 @@ app.Use(async (context, next) =>
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// 2FA bắt buộc toàn hệ thống: tài khoản đăng nhập cookie nhưng chưa bật 2FA
+// chỉ được vào trang cài đặt 2FA / đăng xuất, mọi trang khác chuyển về /account/2fa-setup.
+app.Use(async (context, next) =>
+{
+    if (Polymind.Web.Identity.TwoFactorEnforcement.AppliesTo(context))
+    {
+        var userManager = context.RequestServices.GetRequiredService<UserManager<ApplicationUser>>();
+        var twoFactorCache = context.RequestServices.GetRequiredService<Polymind.Web.Identity.TwoFactorStatusCache>();
+        var userId = userManager.GetUserId(context.User);
+        if (userId is not null && !await twoFactorCache.IsEnabledAsync(userManager, userId))
+        {
+            context.Response.Redirect(Polymind.Web.Identity.TwoFactorEnforcement.SetupPath);
+            return;
+        }
+    }
+    await next();
+});
+
 app.UseHangfireDashboard("/hangfire", new DashboardOptions
 {
     Authorization = new[] { new HangfireDashboardAuthorizationFilter() }

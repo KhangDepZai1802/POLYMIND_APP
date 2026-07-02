@@ -55,7 +55,7 @@
                         <div class="d-flex justify-space-between align-center flex-wrap" style="gap:8px">
                             <div style="min-width:0">
                                 <MudText Typo="Typo.subtitle1" Style="font-weight:600">@row.CandidateName</MudText>
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@row.Code • @ct.Flag @ct.Name @(string.IsNullOrWhiteSpace(row.JobLabel) ? "" : $"• {row.JobLabel}")</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@row.Code • <CountryFlag Style="ct" Size="16" /> @ct.Name @(string.IsNullOrWhiteSpace(row.JobLabel) ? "" : $"• {row.JobLabel}")</MudText>
                             </div>
                             <div style="text-align:right">
                                 <MudText Typo="Typo.subtitle2" Style="font-weight:700">@($"{row.Paid:N0}") / @($"{row.TotalCost:N0} đ")</MudText>

@@ -1,0 +1,103 @@
+@page "/login-2fa"
+@layout EmptyLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using Polymind.Infrastructure.Identity
+@inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+@inject NavigationManager Nav
+
+<PageTitle>Xác thực 2 lớp — POLYMIND</PageTitle>
+
+<div class="login-page">
+    <div class="login-card" style="max-width:460px;margin-top:2rem">
+        <span class="pm-eyebrow">XÁC THỰC 2 LỚP</span>
+        <h2 class="login-card-title">Nhập mã bảo mật</h2>
+        <p class="login-card-sub">
+            Mở app <b>Authenticator</b> trên điện thoại và nhập mã 6 số của tài khoản
+            @(string.IsNullOrEmpty(_email) ? "" : $" {_email}").
+        </p>
+
+        <EditForm Model="Input" method="post" OnValidSubmit="VerifyAsync" FormName="login-2fa">
+            <DataAnnotationsValidator />
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <div class="login-error">@_error</div>
+            }
+
+            <label class="login-label">Mã 6 số</label>
+            <InputText @bind-Value="Input.Code" class="login-input" placeholder="Ví dụ: 123456" autocomplete="one-time-code" style="letter-spacing:4px;text-align:center;font-size:1.15rem" />
+
+            <label class="login-label" style="margin-top:.9rem">Hoặc mã khôi phục (khi mất điện thoại)</label>
+            <InputText @bind-Value="Input.RecoveryCode" class="login-input" placeholder="Mã khôi phục đã lưu khi bật 2FA" autocomplete="off" />
+
+            <button type="submit" class="login-btn">Xác nhận →</button>
+        </EditForm>
+
+        <p class="login-help"><a href="/login" style="color:#7d93ab">← Quay lại đăng nhập</a></p>
+    </div>
+
+    <AppFooter />
+</div>
+
+@code {
+    [SupplyParameterFromForm] private TwoFactorInput Input { get; set; } = default!;
+    [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
+
+    private string? _email;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new TwoFactorInput();
+        // Phải đi qua bước mật khẩu trước (cookie TwoFactorUserId); vào thẳng URL này thì quay về login.
+        var user = await SignInManager.GetTwoFactorAuthenticationUserAsync();
+        if (user is null)
+        {
+            Nav.NavigateTo("/login", forceLoad: true);
+            return;
+        }
+        _email = user.Email;
+    }
+
+    private async Task VerifyAsync()
+    {
+        var user = await SignInManager.GetTwoFactorAuthenticationUserAsync();
+        if (user is null)
+        {
+            Nav.NavigateTo("/login", forceLoad: true);
+            return;
+        }
+
+        SignInResult result;
+        var code = (Input.Code ?? "").Replace(" ", "").Replace("-", "");
+        if (!string.IsNullOrWhiteSpace(code))
+            result = await SignInManager.TwoFactorAuthenticatorSignInAsync(code, isPersistent: true, rememberClient: false);
+        else if (!string.IsNullOrWhiteSpace(Input.RecoveryCode))
+            result = await SignInManager.TwoFactorRecoveryCodeSignInAsync(Input.RecoveryCode.Trim());
+        else
+        {
+            _error = "Vui lòng nhập mã 6 số từ app Authenticator (hoặc mã khôi phục).";
+            return;
+        }
+
+        if (result.Succeeded)
+        {
+            user.LastLoginAt = DateTimeOffset.UtcNow;
+            await UserManager.UpdateAsync(user);
+            Nav.NavigateTo(ReturnUrl ?? "/", forceLoad: true);
+        }
+        else if (result.IsLockedOut)
+            _error = "Tài khoản tạm khóa do nhập sai nhiều lần. Vui lòng thử lại sau 15 phút.";
+        else
+            _error = "Mã không đúng hoặc đã hết hiệu lực — mã trên app đổi mỗi 30 giây, nhập mã đang hiển thị.";
+    }
+
+    private sealed class TwoFactorInput
+    {
+        public string? Code { get; set; }
+        public string? RecoveryCode { get; set; }
+    }
+}

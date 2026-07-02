@@ -1,0 +1,173 @@
+@page "/account/2fa-setup"
+@layout EmptyLayout
+@attribute [Authorize]
+@attribute [ExcludeFromInteractiveRouting]
+@using System.ComponentModel.DataAnnotations
+@using System.Text
+@using Microsoft.AspNetCore.Identity
+@using Polymind.Infrastructure.Identity
+@using Polymind.Web.Identity
+@using QRCoder
+@inject UserManager<ApplicationUser> UserManager
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject TwoFactorStatusCache TwoFactorCache
+@inject NavigationManager Nav
+
+<PageTitle>Bảo mật 2 lớp — POLYMIND</PageTitle>
+
+<div class="login-page">
+    <div class="login-card" style="max-width:520px;margin-top:2rem">
+        <span class="pm-eyebrow">BẢO MẬT 2 LỚP (2FA)</span>
+
+        @if (_recoveryCodes is not null)
+        {
+            <h2 class="login-card-title">Đã bật 2FA thành công ✅</h2>
+            <p class="login-card-sub">
+                Đây là <b>mã khôi phục</b> — dùng để đăng nhập khi mất điện thoại.
+                <b>Hãy chép lại và cất giữ cẩn thận</b>, mỗi mã chỉ dùng được 1 lần và chỉ hiển thị duy nhất lần này.
+            </p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#f4f8fd;border:1.5px dashed #D1E4FA;border-radius:12px;padding:14px;font-family:Consolas,monospace;font-size:1rem">
+                @foreach (var recoveryCode in _recoveryCodes)
+                {
+                    <div>@recoveryCode</div>
+                }
+            </div>
+            <a class="login-btn" style="display:block;text-align:center;text-decoration:none" href="/">Tôi đã lưu mã — vào hệ thống →</a>
+        }
+        else if (_alreadyEnabled)
+        {
+            <h2 class="login-card-title">2FA đang bật</h2>
+            <p class="login-card-sub">Tài khoản của bạn đã được bảo vệ bằng xác thực 2 lớp.</p>
+            <a class="login-btn" style="display:block;text-align:center;text-decoration:none" href="/">Vào hệ thống →</a>
+            <p class="login-help">Mất điện thoại/mã khôi phục? Liên hệ Super Admin để đặt lại 2FA.</p>
+        }
+        else
+        {
+            <h2 class="login-card-title">Cài đặt xác thực 2 lớp</h2>
+            <p class="login-card-sub">
+                Hệ thống yêu cầu <b>mọi tài khoản</b> bật 2FA. Làm theo 3 bước dưới đây (chỉ mất ~1 phút):
+            </p>
+
+            <ol style="padding-left:1.2rem;margin:0 0 1rem;font-size:.92rem;color:#33475b;line-height:1.55">
+                <li>Cài app <b>Google Authenticator</b> hoặc <b>Microsoft Authenticator</b> trên điện thoại (App Store / CH Play).</li>
+                <li>Mở app, bấm <b>+</b> → <b>Quét mã QR</b> và quét mã dưới đây.</li>
+                <li>Nhập <b>mã 6 số</b> app đang hiển thị vào ô bên dưới rồi bấm Kích hoạt.</li>
+            </ol>
+
+            <div style="text-align:center;margin-bottom:.8rem">
+                <img src="data:image/png;base64,@_qrBase64" alt="QR 2FA" style="width:190px;height:190px;border:1.5px solid #D1E4FA;border-radius:12px" />
+                <p style="font-size:.8rem;color:#7d93ab;margin:.5rem 0 0">
+                    Không quét được? Nhập tay mã: <b style="font-family:Consolas,monospace;letter-spacing:.5px">@_sharedKeyFormatted</b>
+                </p>
+            </div>
+
+            <EditForm Model="Input" method="post" OnValidSubmit="VerifyAsync" FormName="twofactor-setup">
+                <DataAnnotationsValidator />
+                @if (!string.IsNullOrEmpty(_error))
+                {
+                    <div class="login-error">@_error</div>
+                }
+                <label class="login-label">Mã 6 số từ app Authenticator</label>
+                <InputText @bind-Value="Input.Code" class="login-input" placeholder="Ví dụ: 123456" autocomplete="one-time-code" style="letter-spacing:4px;text-align:center;font-size:1.15rem" />
+                <ValidationMessage For="() => Input.Code" />
+                <button type="submit" class="login-btn">Kích hoạt 2FA →</button>
+            </EditForm>
+
+            <form action="/Account/Logout" method="post" style="margin-top:.9rem;text-align:center">
+                <AntiforgeryToken />
+                <button type="submit" style="background:none;border:none;color:#7d93ab;font-size:.82rem;cursor:pointer;text-decoration:underline">Đăng xuất</button>
+            </form>
+        }
+    </div>
+
+    <AppFooter />
+</div>
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+    [SupplyParameterFromForm] private CodeInput Input { get; set; } = default!;
+
+    private bool _alreadyEnabled;
+    private string _qrBase64 = "";
+    private string _sharedKeyFormatted = "";
+    private IEnumerable<string>? _recoveryCodes;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new CodeInput();
+        var user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is null)
+        {
+            Nav.NavigateTo("/login", forceLoad: true);
+            return;
+        }
+
+        _alreadyEnabled = await UserManager.GetTwoFactorEnabledAsync(user);
+        if (!_alreadyEnabled)
+            await LoadSharedKeyAndQrAsync(user);
+    }
+
+    private async Task LoadSharedKeyAndQrAsync(ApplicationUser user)
+    {
+        var key = await UserManager.GetAuthenticatorKeyAsync(user);
+        if (string.IsNullOrEmpty(key))
+        {
+            await UserManager.ResetAuthenticatorKeyAsync(user);
+            key = await UserManager.GetAuthenticatorKeyAsync(user);
+        }
+
+        _sharedKeyFormatted = FormatKey(key!);
+        var email = user.Email ?? user.UserName ?? "user";
+        var uri = $"otpauth://totp/{Uri.EscapeDataString("POLYMIND OLMS")}:{Uri.EscapeDataString(email)}" +
+                  $"?secret={key}&issuer={Uri.EscapeDataString("POLYMIND OLMS")}&digits=6";
+
+        using var generator = new QRCodeGenerator();
+        using var data = generator.CreateQrCode(uri, QRCodeGenerator.ECCLevel.Q);
+        _qrBase64 = Convert.ToBase64String(new PngByteQRCode(data).GetGraphic(6));
+    }
+
+    private async Task VerifyAsync()
+    {
+        var user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is null)
+        {
+            Nav.NavigateTo("/login", forceLoad: true);
+            return;
+        }
+
+        var code = (Input.Code ?? "").Replace(" ", "").Replace("-", "");
+        var valid = await UserManager.VerifyTwoFactorTokenAsync(user, UserManager.Options.Tokens.AuthenticatorTokenProvider, code);
+        if (!valid)
+        {
+            _error = "Mã không đúng hoặc đã hết hiệu lực. Nhập lại mã đang hiển thị trên app (mã đổi mỗi 30 giây).";
+            await LoadSharedKeyAndQrAsync(user);
+            return;
+        }
+
+        await UserManager.SetTwoFactorEnabledAsync(user, true);
+        _recoveryCodes = await UserManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 8);
+        TwoFactorCache.Set(user.Id.ToString(), true);
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.AddAudit(user.Id, "enable_2fa", "users", user.Id, null, new { TwoFactorEnabled = true });
+        await db.SaveChangesAsync();
+    }
+
+    private static string FormatKey(string key)
+    {
+        var sb = new StringBuilder();
+        for (var i = 0; i < key.Length; i += 4)
+        {
+            if (sb.Length > 0) sb.Append(' ');
+            sb.Append(key.AsSpan(i, Math.Min(4, key.Length - i)));
+        }
+        return sb.ToString().ToUpperInvariant();
+    }
+
+    private sealed class CodeInput
+    {
+        [Required(ErrorMessage = "Vui lòng nhập mã 6 số")]
+        public string Code { get; set; } = "";
+    }
+}

@@ -1325,3 +1325,25 @@ body,
         min-height: 190px;
     }
 }
+
+/* Chuông nhắc chăm sóc lead: rung nhẹ định kỳ để bắt mắt, rê chuột xem chi tiết */
+@keyframes lead-care-ring {
+    0%, 88%, 100% { transform: rotate(0); }
+    90% { transform: rotate(14deg); }
+    93% { transform: rotate(-10deg); }
+    96% { transform: rotate(6deg); }
+    98% { transform: rotate(-3deg); }
+}
+.lead-care-bell {
+    animation: lead-care-ring 3s ease-in-out infinite;
+    transform-origin: top center;
+    cursor: help;
+}
+
+/* Ảnh cờ quốc gia: bo góc + viền mảnh để cờ nền trắng (Nhật) không chìm */
+.country-flag {
+    display: inline-block;
+    vertical-align: middle;
+    border-radius: 3px;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.14), 0 1px 2px rgba(0,0,0,.12);
+}

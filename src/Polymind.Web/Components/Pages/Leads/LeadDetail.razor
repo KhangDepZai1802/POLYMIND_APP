@@ -33,6 +33,15 @@ else
         </div>
     </div>
 
+    @if (CareOverdueHours() is int careHours)
+    {
+        <MudAlert Severity="@(careHours >= CareThreshold * 2 ? Severity.Error : Severity.Warning)"
+                  Icon="@Icons.Material.Filled.NotificationsActive" Class="mb-3">
+            Lead đã đứng ở trạng thái "<b>@Labels.Vi(_lead.Status)</b>" @LeadCareRules.DurationLabel(careHours) —
+            <b>@LeadCareRules.NextAction(_lead.Status)</b>.
+        </MudAlert>
+    }
+
     <MudGrid>
         <MudItem xs="12" md="7">
             <MudPaper Class="pa-4 mb-4" Elevation="1">
@@ -163,7 +172,7 @@ else
 
                 <MudPaper Class="pa-4 mb-4" Elevation="1">
                     <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Lịch hẹn tư vấn</b></MudText>
-                    <MudDatePicker @bind-Date="_appointmentDate" Label="Ngày hẹn" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" Class="mb-2" Disabled="IsConverted" />
+                    <MudDatePicker @bind-Date="_appointmentDate" Label="Ngày hẹn" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" Class="mb-2" Disabled="IsConverted" MinDate="DateTime.Today" />
                     <MudTimePicker @bind-Time="_appointmentTime" Label="Giờ hẹn" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" Disabled="IsConverted" />
                     <MudButton Variant="Variant.Outlined" Color="@(IsConverted ? Color.Default : Color.Primary)" FullWidth="true" OnClick="SaveAppointment" Disabled="_busy" Style="@(IsConverted ? "opacity:.55" : "")">Lưu lịch hẹn</MudButton>
                     @if (_lead.AppointmentAt is not null)
@@ -424,6 +433,11 @@ else
                 var local = _appointmentDate.Value.Date + (_appointmentTime ?? TimeSpan.Zero);
                 // Lưu UTC offset 0 theo quy ước Postgres của dự án.
                 appt = new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local)).ToUniversalTime();
+                if (appt < DateTimeOffset.UtcNow)
+                {
+                    Snackbar.Add("Không thể đặt lịch hẹn ở ngày/giờ đã qua. Vui lòng chọn thời điểm trong tương lai.", Severity.Warning);
+                    return;
+                }
             }
             lead.AppointmentAt = appt;
             lead.UpdatedAt = DateTimeOffset.UtcNow;
@@ -675,6 +689,20 @@ else
         LeadActivityType.StatusChange => "Đổi trạng thái",
         _ => t.ToString()
     };
+
+    private int CareThreshold => _lead is null ? 0 : LeadCareRules.ThresholdHours(_lead.Status) ?? 0;
+
+    // Lead chưa chuyển ứng viên + đứng yên quá ngưỡng (LeadCareRules) → số giờ đã đứng yên để hiện banner nhắc.
+    private int? CareOverdueHours()
+    {
+        if (_lead is null || IsConverted) return null;
+        var lastChange = _activities
+            .Where(a => a.ActivityType == LeadActivityType.StatusChange)
+            .Select(a => (DateTimeOffset?)a.CreatedAt)
+            .FirstOrDefault() ?? _lead.CreatedAt; // _activities đã sắp mới nhất ở đầu
+        return LeadCareRules.TryGetOverdue(_lead.Status, lastChange, _lead.AppointmentAt, DateTimeOffset.UtcNow, out var hours)
+            ? hours : null;
+    }
 
     private RenderFragment Field(string label, string? value) =>@<MudItem xs="6">
         <MudText Typo="Typo.caption" Class="mud-text-secondary">@label</MudText>

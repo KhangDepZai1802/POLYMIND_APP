@@ -10,7 +10,7 @@
 
 <PageTitle>Jobs — POLYMIND</PageTitle>
 
-<PageHeader Eyebrow="TUYỂN DỤNG" Title="Jobs" Subtitle="@($"{Filtered.Count}/{_rows.Count} jobs")">
+<PageHeader Eyebrow="TUYỂN DỤNG" Title="Jobs" Subtitle="@($"{_rows.Count} jobs")">
     <Actions>
         <AuthorizeView Policy="job_orders:create">
             <Authorized>
@@ -28,22 +28,48 @@
 }
 else
 {
-    @* Bộ lọc/sắp xếp theo nước (có quốc kỳ) *@
-    <div class="job-country-filter d-flex flex-wrap align-center mb-4" style="gap:8px">
-        <MudText Typo="Typo.body2" Class="mud-text-secondary mr-1">Lọc theo nước:</MudText>
-        <MudChip T="string" Size="Size.Small" Variant="@(_country is null ? Variant.Filled : Variant.Outlined)"
-                 Color="Color.Primary" Class="country-filter-chip" OnClick="@(() => SetCountry(null))">🌐 Tất cả (@_rows.Count)</MudChip>
-        @foreach (var c in _countries)
-        {
-            var st = CountryDisplay.Of(c.Key);
-            <MudChip T="string" Size="Size.Small" Variant="@(_country == c.Key ? Variant.Filled : Variant.Outlined)"
-                     Color="st.Color" Class="country-filter-chip" OnClick="@(() => SetCountry(c.Key))">@st.Flag @st.Name (@c.Count)</MudChip>
-        }
+    @* Bộ lọc song song: nhóm việc làm + quốc gia (dropdown để gọn trên mobile, giữ icon/cờ trong item) *@
+    <div class="d-flex flex-wrap align-center mb-4" style="gap:12px">
+        <MudSelect T="JobCategory?" @bind-Value="_category" Label="Phân nhóm" Clearable="true" Placeholder="Tất cả"
+                   Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:230px;max-width:280px"
+                   ToStringFunc="@(c => c is null ? "" : Labels.Vi(c.Value))">
+            @foreach (var c in _categories)
+            {
+                <MudSelectItem T="JobCategory?" Value="@((JobCategory?)c.Key)">
+                    <div class="d-flex align-center" style="gap:8px">
+                        <MudIcon Icon="@Labels.IconOf(c.Key)" Size="Size.Small" Color="@Labels.ColorOf(c.Key)" />
+                        <span>@Labels.Vi(c.Key) (@c.Count)</span>
+                    </div>
+                </MudSelectItem>
+            }
+        </MudSelect>
+        <MudSelect T="string" @bind-Value="_country" Label="Quốc gia" Clearable="true" Placeholder="Tất cả"
+                   Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:210px;max-width:260px"
+                   ToStringFunc="@(c => string.IsNullOrWhiteSpace(c) ? "" : CountryDisplay.Of(c).Name)">
+            @foreach (var c in _countries)
+            {
+                var st = CountryDisplay.Of(c.Key);
+                <MudSelectItem T="string" Value="@c.Key">
+                    <div class="d-flex align-center" style="gap:8px">
+                        <CountryFlag Style="st" Size="22" />
+                        <span>@st.Name (@c.Count)</span>
+                    </div>
+                </MudSelectItem>
+            }
+        </MudSelect>
     </div>
 }
 
-<MudGrid>
-    @foreach (var j in Filtered)
+@* Hiển thị tách theo nhóm việc làm, thứ tự: trong nước → ngoài nước → du học *@
+@foreach (var group in Filtered.GroupBy(x => x.Category).OrderBy(g => Labels.RankOf(g.Key)))
+{
+    <div class="d-flex align-center mb-2 mt-1" style="gap:8px">
+        <MudIcon Icon="@Labels.IconOf(group.Key)" Color="@Labels.ColorOf(group.Key)" />
+        <MudText Typo="Typo.h6" Style="font-weight:700">@Labels.Vi(group.Key)</MudText>
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@Labels.ColorOf(group.Key)">@group.Count() job</MudChip>
+    </div>
+<MudGrid Class="mb-4">
+    @foreach (var j in group)
     {
         var country = CountryDisplay.Of(j.Country);
         var open = Labels.IsOpen(j.Status);
@@ -54,7 +80,7 @@ else
                 <MudCardContent>
                     <div class="d-flex justify-space-between align-center flex-wrap mb-2" style="gap:8px">
                         <div class="d-flex align-center" style="gap:8px;min-width:0">
-                            <span style="font-size:1.9rem;line-height:1">@country.Flag</span>
+                            <CountryFlag Style="country" Size="34" />
                             <MudChip T="string" Size="Size.Small" Color="country.Color">@country.Name</MudChip>
                         </div>
                         @if (open)
@@ -96,6 +122,15 @@ else
                                 <Money Amount="j.CostAmount" />
                             </div>
                         }
+                        @{ var dl = DeadlineInfo(j); }
+                        @if (dl.Text.Length > 0)
+                        {
+                            <div class="d-flex align-center" style="gap:6px">
+                                <MudIcon Icon="@Icons.Material.Filled.Event" Size="Size.Small" Color="@(dl.Urgent ? Color.Error : Color.Default)" />
+                                <MudText Typo="Typo.body2" Class="@(dl.Urgent ? "" : "mud-text-secondary")"
+                                         Style="@(dl.Urgent ? "color:var(--mud-palette-error);font-weight:600" : "")">@dl.Text</MudText>
+                            </div>
+                        }
                     </div>
 
                     <MudDivider Class="my-2" />
@@ -105,27 +140,47 @@ else
         </MudItem>
     }
 </MudGrid>
+}
 
 @code {
     private List<JobOrder> _rows = new();
     private List<(string Key, int Count)> _countries = new();
+    private List<(JobCategory Key, int Count)> _categories = new();
     private string? _country;
+    private JobCategory? _category;
 
     protected override async Task OnInitializedAsync() => await Load();
 
-    private List<JobOrder> Filtered => _country is null
-        ? _rows
-        : _rows.Where(j => string.Equals(j.Country, _country, StringComparison.OrdinalIgnoreCase)).ToList();
+    private List<JobOrder> Filtered => _rows
+        .Where(j => (_country is null || string.Equals(j.Country, _country, StringComparison.OrdinalIgnoreCase))
+                    && (_category is null || j.Category == _category))
+        .ToList();
 
-    private void SetCountry(string? c) => _country = c;
+    // Hạn ứng tuyển: còn ≤7 ngày hoặc đã quá hạn → tô đỏ (góp ý Vietgroup).
+    private static (string Text, bool Urgent) DeadlineInfo(JobOrder j)
+    {
+        var posted = j.PostedDate is DateOnly p ? $"Đăng {p:dd/MM/yyyy}" : null;
+        if (j.ApplicationDeadline is not DateOnly d)
+            return (posted ?? "", false);
+
+        var daysLeft = d.DayNumber - DateOnly.FromDateTime(DateTime.Today).DayNumber;
+        var deadline = daysLeft < 0
+            ? $"Hết hạn {d:dd/MM/yyyy}"
+            : daysLeft <= 7
+                ? $"Hạn {d:dd/MM/yyyy} (còn {daysLeft} ngày)"
+                : $"Hạn {d:dd/MM/yyyy}";
+        return (posted is null ? deadline : $"{posted} • {deadline}", daysLeft <= 7);
+    }
 
     private async Task Load()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         var rows = await db.JobOrders.OrderByDescending(j => j.CreatedAt).ToListAsync();
-        // Đơn "đang tuyển (mở)" nổi lên đầu, rồi gom theo quốc gia cho dễ nhìn.
+        // Sort theo nhóm việc làm (trong nước → ngoài nước → du học), rồi đơn "đang tuyển (mở)"
+        // nổi lên đầu, rồi gom theo quốc gia cho dễ nhìn.
         _rows = rows
-            .OrderByDescending(j => Labels.IsOpen(j.Status))
+            .OrderBy(j => Labels.RankOf(j.Category))
+            .ThenByDescending(j => Labels.IsOpen(j.Status))
             .ThenBy(j => CountryDisplay.Of(j.Country).Name)
             .ToList();
         _countries = _rows
@@ -133,6 +188,11 @@ else
             .Select(g => (Key: g.Key, Count: g.Count()))
             .OrderByDescending(x => x.Count)
             .ThenBy(x => CountryDisplay.Of(x.Key).Name)
+            .ToList();
+        _categories = _rows
+            .GroupBy(j => j.Category)
+            .Select(g => (Key: g.Key, Count: g.Count()))
+            .OrderBy(x => Labels.RankOf(x.Key))
             .ToList();
     }
 

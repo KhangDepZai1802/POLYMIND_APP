@@ -325,6 +325,45 @@ public static class DemoDataSeeder
             await db.SaveChangesAsync();
         }
 
+        // ---- Backfill ngày đăng/hạn ứng tuyển cho job cũ + job demo trong nước/du học (góp ý Vietgroup) ----
+        var jobsNeedingDates = await db.JobOrders.Where(j => j.PostedDate == null).ToListAsync();
+        if (jobsNeedingDates.Count > 0)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+            var i = 0;
+            foreach (var j in jobsNeedingDates)
+            {
+                j.PostedDate = j.RecruitmentStartDate ?? DateOnly.FromDateTime(j.CreatedAt.UtcDateTime);
+                // Xen kẽ vài job sắp hết hạn (≤7 ngày) để demo hiển thị ngày đỏ.
+                j.ApplicationDeadline ??= today.AddDays(i++ % 3 == 0 ? rnd.Next(1, 7) : rnd.Next(14, 60));
+                j.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+            await db.SaveChangesAsync();
+        }
+
+        if (!await db.JobOrders.AnyAsync(j => j.Category != JobCategory.OverseasJob))
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+            var domestic = NewJobOrder("Việt Nam", "", "VinFast Hải Phòng", "Lắp ráp ô tô", 40, adminId);
+            domestic.UnionName = null;
+            domestic.Category = JobCategory.DomesticJob;
+            domestic.SalaryDescription = "12-18 triệu/tháng";
+            domestic.CostAmount = null;
+            domestic.PostedDate = today.AddDays(-5);
+            domestic.ApplicationDeadline = today.AddDays(25);
+
+            var study = NewJobOrder("Nhật Bản", "", "Học viện Nhật ngữ Tokyo", "Du học sinh tiếng Nhật", 25, adminId);
+            study.UnionName = null;
+            study.Category = JobCategory.StudyAbroad;
+            study.SalaryDescription = "Làm thêm 28h/tuần";
+            study.CostAmount = 180_000_000;
+            study.PostedDate = today.AddDays(-10);
+            study.ApplicationDeadline = today.AddDays(5); // demo ngày đỏ sắp hết hạn
+
+            db.JobOrders.AddRange(domestic, study);
+            await db.SaveChangesAsync();
+        }
+
         var jobOrders = await db.JobOrders.ToDictionaryAsync(j => j.Id);
         var candAgent = await db.Candidates.ToDictionaryAsync(c => c.Id, c => c.AgentId);
 

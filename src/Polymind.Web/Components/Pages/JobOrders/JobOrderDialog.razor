@@ -7,7 +7,24 @@
     <DialogContent>
         <MudGrid>
             <MudItem xs="12" sm="6">
-                <MudTextField @bind-Value="_m.Country" Label="Quốc gia *" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" />
+                <MudSelect T="JobCategory" @bind-Value="_m.Category" Label="Nhóm việc làm" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var c in Enum.GetValues<JobCategory>().OrderBy(Labels.RankOf))
+                    {
+                        <MudSelectItem Value="@c">@Labels.Vi(c)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="string" @bind-Value="_m.Country" Label="Quốc gia *" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true"
+                           ToStringFunc="@(c => string.IsNullOrWhiteSpace(c) ? "" : CountryDisplay.Of(c).Name)">
+                    @foreach (var c in CountryOptions)
+                    {
+                        var st = CountryDisplay.Of(c);
+                        <MudSelectItem T="string" Value="@c">
+                            <div class="d-flex align-center" style="gap:8px"><CountryFlag Style="st" Size="22" /><span>@st.Name</span></div>
+                        </MudSelectItem>
+                    }
+                </MudSelect>
             </MudItem>
             <MudItem xs="12" sm="6">
                 <MudSelect T="JobOrderStatus" @bind-Value="_m.Status" Label="Trạng thái" Variant="Variant.Outlined" Margin="Margin.Dense">
@@ -34,6 +51,12 @@
             </MudItem>
             <MudItem xs="12" sm="6">
                 <MudNumericField @bind-Value="_m.CostAmount" Label="Chi phí (VNĐ)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Format="N0" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_m.PostedDate" Label="Ngày đăng" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_m.ApplicationDeadline" Label="Hạn ứng tuyển" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
             </MudItem>
             <MudItem xs="12" sm="6">
                 <MudDatePicker @bind-Date="_m.RecruitmentStartDate" Label="Ngày bắt đầu tuyển" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
@@ -71,6 +94,15 @@
     private readonly FormModel _m = new();
     private bool _saving;
     private bool IsEdit => JobOrderId is not null;
+
+    // Danh sách quốc gia cố định (đều có cờ trong img/flags). Việt Nam dành cho nhóm "việc làm trong nước".
+    private static readonly string[] FixedCountries = { "Nhật Bản", "Đài Loan", "Hàn Quốc", "Trung Quốc", "Singapore", "Việt Nam" };
+
+    // Job cũ có quốc gia ngoài danh sách (vd Đức) → thêm vào cuối để sửa job không bị mất giá trị.
+    private IEnumerable<string> CountryOptions =>
+        string.IsNullOrWhiteSpace(_m.Country) || FixedCountries.Contains(_m.Country)
+            ? FixedCountries
+            : FixedCountries.Append(_m.Country);
 
     protected override async Task OnInitializedAsync()
     {
@@ -154,12 +186,16 @@
         public string? Requirements { get; set; }
         public string? Benefits { get; set; }
         public string? Bonus { get; set; }
+        public DateTime? PostedDate { get; set; } = DateTime.Today; // job mới mặc định đăng hôm nay
+        public DateTime? ApplicationDeadline { get; set; }
         public DateTime? RecruitmentStartDate { get; set; }
         public DateTime? ExpectedDepartureDate { get; set; }
         public JobOrderStatus Status { get; set; } = JobOrderStatus.Recruiting;
+        public JobCategory Category { get; set; } = JobCategory.OverseasJob;
 
         public void LoadFrom(JobOrder j)
         {
+            Category = j.Category;
             Country = j.Country;
             CompanyName = j.CompanyName;
             UnionName = j.UnionName;
@@ -170,6 +206,8 @@
             Requirements = j.Requirements;
             Benefits = j.Benefits;
             Bonus = j.Bonus;
+            PostedDate = j.PostedDate?.ToDateTime(TimeOnly.MinValue);
+            ApplicationDeadline = j.ApplicationDeadline?.ToDateTime(TimeOnly.MinValue);
             RecruitmentStartDate = j.RecruitmentStartDate?.ToDateTime(TimeOnly.MinValue);
             ExpectedDepartureDate = j.ExpectedDepartureDate?.ToDateTime(TimeOnly.MinValue);
             Status = j.Status;
@@ -177,6 +215,7 @@
 
         public void ApplyTo(JobOrder j)
         {
+            j.Category = Category;
             j.Country = Country.Trim();
             j.CompanyName = CompanyName;
             j.UnionName = UnionName;
@@ -187,6 +226,8 @@
             j.Requirements = Requirements;
             j.Benefits = Benefits;
             j.Bonus = Bonus;
+            j.PostedDate = PostedDate is null ? null : DateOnly.FromDateTime(PostedDate.Value);
+            j.ApplicationDeadline = ApplicationDeadline is null ? null : DateOnly.FromDateTime(ApplicationDeadline.Value);
             j.RecruitmentStartDate = RecruitmentStartDate is null ? null : DateOnly.FromDateTime(RecruitmentStartDate.Value);
             j.ExpectedDepartureDate = ExpectedDepartureDate is null ? null : DateOnly.FromDateTime(ExpectedDepartureDate.Value);
             j.Status = Status;

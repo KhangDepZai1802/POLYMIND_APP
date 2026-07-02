@@ -68,6 +68,39 @@ public static class Labels
         _ => s.ToString()
     };
 
+    public static string Vi(JobCategory c) => c switch
+    {
+        JobCategory.DomesticJob => "Việc làm trong nước",
+        JobCategory.OverseasJob => "Việc làm ngoài nước",
+        JobCategory.StudyAbroad => "Du học",
+        _ => c.ToString()
+    };
+
+    public static Color ColorOf(JobCategory c) => c switch
+    {
+        JobCategory.DomesticJob => Color.Tertiary,
+        JobCategory.OverseasJob => Color.Primary,
+        JobCategory.StudyAbroad => Color.Secondary,
+        _ => Color.Default
+    };
+
+    public static string IconOf(JobCategory c) => c switch
+    {
+        JobCategory.DomesticJob => Icons.Material.Filled.HomeWork,
+        JobCategory.OverseasJob => Icons.Material.Filled.FlightTakeoff,
+        JobCategory.StudyAbroad => Icons.Material.Filled.School,
+        _ => Icons.Material.Filled.Work
+    };
+
+    /// <summary>Thứ tự hiển thị nhóm việc làm theo yêu cầu: trong nước → ngoài nước → du học.</summary>
+    public static int RankOf(JobCategory c) => c switch
+    {
+        JobCategory.DomesticJob => 0,
+        JobCategory.OverseasJob => 1,
+        JobCategory.StudyAbroad => 2,
+        _ => 3
+    };
+
     public static string Vi(JobOrderStatus s) => s switch
     {
         JobOrderStatus.Recruiting => "Đang tuyển",
@@ -324,6 +357,7 @@ public static class Labels
         NotificationType.ReminderVisa => "Nhắc visa",
         NotificationType.ReminderDeparture => "Nhắc xuất cảnh",
         NotificationType.CommissionPayment => "Chi hoa hồng",
+        NotificationType.ReminderLeadCare => "Nhắc chăm sóc lead",
         _ => t.ToString()
     };
 
@@ -335,6 +369,7 @@ public static class Labels
         NotificationType.ReminderVisa => Icons.Material.Filled.Approval,
         NotificationType.ReminderDeparture => Icons.Material.Filled.FlightTakeoff,
         NotificationType.CommissionPayment => Icons.Material.Filled.Handshake,
+        NotificationType.ReminderLeadCare => Icons.Material.Filled.NotificationsActive,
         _ => Icons.Material.Filled.Notifications
     };
 
@@ -345,6 +380,7 @@ public static class Labels
         NotificationType.ReminderDeparture => Color.Success,
         NotificationType.ReminderDocument => Color.Warning,
         NotificationType.CommissionPayment => Color.Secondary,
+        NotificationType.ReminderLeadCare => Color.Error,
         _ => Color.Default
     };
 }

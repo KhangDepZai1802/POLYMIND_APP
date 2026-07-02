@@ -20,6 +20,12 @@ public enum LeadActivityType
     Call, Note, Email, Sms, Zalo, Appointment, StatusChange
 }
 
+/// <summary>
+/// Nhóm việc làm (góp ý Vietgroup): ngoài nước / trong nước / du học.
+/// OverseasJob = 0 để các đơn hàng cũ (đều là XKLĐ) mặc định đúng nhóm.
+/// </summary>
+public enum JobCategory { OverseasJob, DomesticJob, StudyAbroad }
+
 /// <summary>Trạng thái đơn hàng tuyển dụng (mục 5.2).</summary>
 public enum JobOrderStatus
 {
@@ -95,7 +101,9 @@ public enum VisaStatus
 public enum NotificationType
 {
     ReminderDocument, ReminderPayment, ReminderInterview,
-    ReminderVisa, ReminderDeparture, CommissionPayment
+    ReminderVisa, ReminderDeparture, CommissionPayment,
+    /// <summary>Lead đứng yên một trạng thái quá ngưỡng giờ cho phép → nhắc người phụ trách chăm sóc (góp ý Vietgroup).</summary>
+    ReminderLeadCare
 }
 
 public enum NotificationChannel { Email, Sms, Zalo, InApp }
