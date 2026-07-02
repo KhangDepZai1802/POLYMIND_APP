@@ -85,7 +85,10 @@ public static class DemoDataSeeder
         // ---- Ứng viên: đảm bảo 12 hồ sơ để demo (đánh dấu 12 lead đầu là Converted) ----
         var convertedLeads = leads.Take(12).ToList();
         foreach (var l in convertedLeads) l.Status = LeadStatus.Converted;
-        var steps = Enum.GetValues<WorkflowStep>();
+        // Bước phụ 7.5 (ReselectJobOrder) chỉ vào được qua luồng rớt B8 — không seed ngẫu nhiên.
+        var steps = Enum.GetValues<WorkflowStep>()
+            .Where(s => s != WorkflowStep.ReselectJobOrder)
+            .ToArray();
         int c = 0;
         foreach (var lead in convertedLeads)
         {

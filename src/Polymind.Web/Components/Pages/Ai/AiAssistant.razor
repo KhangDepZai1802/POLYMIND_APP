@@ -180,7 +180,7 @@
         "Bạn ĐANG được cấp quyền truy cập dữ liệu nội bộ thật của hệ thống (xem phần 'DỮ LIỆU HỆ THỐNG' bên dưới) — " +
         "đây là công cụ quản trị nội bộ, KHÔNG phải dữ liệu công khai, nên bạn ĐƯỢC PHÉP dùng tên ứng viên và số liệu trong đó để trả lời. " +
         "TUYỆT ĐỐI KHÔNG trả lời rằng 'tôi không có quyền truy cập dữ liệu' — hãy dùng dữ liệu được cung cấp. " +
-        "Nhiệm vụ: trả lời nghiệp vụ XKLĐ, phân tích/xếp hạng ứng viên tiềm năng dựa trên tiến độ trong quy trình 17 bước " +
+        "Nhiệm vụ: trả lời nghiệp vụ XKLĐ, phân tích/xếp hạng ứng viên tiềm năng dựa trên tiến độ trong quy trình 20 bước " +
         "(ứng viên ở bước càng cao, tiến độ % càng lớn thì càng gần xuất cảnh → càng tiềm năng/ưu tiên), " +
         "lập kế hoạch hành động, gợi ý bước tiếp theo cho từng ứng viên, và tư vấn thị trường Nhật/Hàn/Đài Loan/Đức. " +
         "Trả lời bằng tiếng Việt, chính xác, thực tế. Khi liệt kê ứng viên hãy nêu tên + bước hiện tại + tiến độ. " +
@@ -223,7 +223,7 @@
         {
             var job = c.Cjo is null ? null : jobInfo.GetValueOrDefault(c.Cjo.JobOrderId);
             var step = c.Cjo?.CurrentStep;
-            var progress = c.Cjo is null ? 0 : (int)c.Cjo.CurrentStep * 100 / 17;
+            var progress = (int)WorkflowSteps.Progress(c.Cjo?.CurrentStep);
             return new
             {
                 c.FullName,

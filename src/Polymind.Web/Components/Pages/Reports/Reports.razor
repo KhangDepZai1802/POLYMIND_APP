@@ -77,7 +77,7 @@ else
         <StatCard Title="Tỷ lệ chuyển đổi" Value="@($"{_conversionRate:0.#}%")" Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Primary"
                   OnClick="@(() => ShowStat("Tỷ lệ chuyển đổi", $"{_conversionRate:0.#}%", Icons.Material.Filled.TrendingUp, Color.Primary, "Tỷ lệ lead đã chuyển thành ứng viên.", ConversionDetails()))" />
         <StatCard Title="Ứng viên đang xử lý" Value="@_activeCandidates.ToString("N0")" Icon="@Icons.Material.Filled.Groups" Color="Color.Secondary"
-                  OnClick="@(() => ShowStat("Ứng viên đang xử lý", _activeCandidates.ToString("N0"), Icons.Material.Filled.Groups, Color.Secondary, "Phân bố ứng viên theo bước hiện tại (17 bước).", StepDetails(), "/candidates", "Mở danh sách Ứng viên"))" />
+                  OnClick="@(() => ShowStat("Ứng viên đang xử lý", _activeCandidates.ToString("N0"), Icons.Material.Filled.Groups, Color.Secondary, "Phân bố ứng viên theo bước hiện tại (20 bước).", StepDetails(), "/candidates", "Mở danh sách Ứng viên"))" />
         <StatCard Title="Doanh thu (đã thu)" Value="@($"{_totalRevenue:N0} đ")" Icon="@Icons.Material.Filled.Payments" Color="Color.Success"
                   OnClick="@(() => ShowStat("Doanh thu (đã thu)", $"{_totalRevenue:N0} đ", Icons.Material.Filled.Payments, Color.Success, "Tổng tiền đã thu. Bảng dưới là doanh thu theo quốc gia.", RevenueCountryDetails()))" />
         <StatCard Title="Tổng chi phí" Value="@($"{_totalExpense:N0} đ")" Icon="@Icons.Material.Filled.MoneyOff" Color="Color.Error"
@@ -864,7 +864,7 @@ else
 
     private List<StatDetailDialog.Row> StepDetails() =>
         _byStep.OrderBy(x => (int)x.Key)
-            .Select(x => new StatDetailDialog.Row($"{(int)x.Key}. {Labels.Vi(x.Key)}", x.Value.ToString())).ToList();
+            .Select(x => new StatDetailDialog.Row($"{WorkflowSteps.No(x.Key)}. {Labels.Vi(x.Key)}", x.Value.ToString())).ToList();
 
     private List<StatDetailDialog.Row> MonthlyExpenseDetails() =>
         _months.Select(m => new StatDetailDialog.Row(m.Label, $"{m.Expense:N0} đ")).ToList();

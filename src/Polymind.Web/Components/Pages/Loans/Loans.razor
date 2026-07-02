@@ -38,7 +38,13 @@ else
         <MudItem xs="6" md="3">
             <MudPaper Class="pa-3" Elevation="1">
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">Đã giải ngân</MudText>
-                <MudText Typo="Typo.h5" Color="Color.Success"><b>@_disbursedCount</b></MudText>
+                <MudText Typo="Typo.h5" Color="Color.Info"><b>@_disbursedCount</b></MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Đã tất toán</MudText>
+                <MudText Typo="Typo.h5" Color="Color.Success"><b>@_settledCount</b></MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="6" md="3">
@@ -161,7 +167,7 @@ else
     private record LoanRow(Guid CandidateId, string CandidateName, string Code, LoanStatus Status,
         decimal? Amount, int? TermMonths, string? BankName, DateOnly? DisbursedDate);
 
-    private static readonly LoanStatus[] LoanStatusOptions = { LoanStatus.Borrowing, LoanStatus.Disbursed };
+    private static readonly LoanStatus[] LoanStatusOptions = { LoanStatus.Borrowing, LoanStatus.Disbursed, LoanStatus.Settled };
 
     private List<LoanRow> _rows = new();
     private bool _loading = true;
@@ -172,6 +178,7 @@ else
 
     private int _borrowingCount;
     private int _disbursedCount;
+    private int _settledCount;
     private decimal _disbursedAmount;
 
     private IEnumerable<LoanRow> Filtered => _rows.Where(r =>
@@ -230,7 +237,8 @@ else
 
         _borrowingCount = _rows.Count(r => r.Status == LoanStatus.Borrowing);
         _disbursedCount = _rows.Count(r => r.Status == LoanStatus.Disbursed);
-        _disbursedAmount = _rows.Where(r => r.Status == LoanStatus.Disbursed).Sum(r => r.Amount ?? 0m);
+        _settledCount = _rows.Count(r => r.Status == LoanStatus.Settled);
+        _disbursedAmount = _rows.Where(r => r.Status is LoanStatus.Disbursed or LoanStatus.Settled).Sum(r => r.Amount ?? 0m);
 
         _loading = false;
     }

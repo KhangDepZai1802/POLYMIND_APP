@@ -1,7 +1,11 @@
-@* Chip "bước hiện tại": màu chuyển mượt đỏ (bước 1) → xanh lá (bước 16); bước 17 = cầu vồng lấp lánh. *@
-@if ((int)Step >= 17)
+@* Chip "bước hiện tại": màu chuyển mượt đỏ (bước 1) → xanh lá (bước 19); bước 20 = cầu vồng lấp lánh; bước phụ 7.5 = cam cảnh báo. *@
+@if (Step >= WorkflowStep.Completed)
 {
     <span class="step-chip step-rainbow" title="@Labels.Vi(Step)">@Labels.Vi(Step)</span>
+}
+else if (Step == WorkflowStep.ReselectJobOrder)
+{
+    <span class="step-chip" style="background:#d97706" title="@Labels.Vi(Step)">7.5 @Labels.Vi(Step)</span>
 }
 else
 {
@@ -11,11 +15,11 @@ else
 @code {
     [Parameter] public WorkflowStep Step { get; set; }
 
-    // Bước 1..16 → sắc độ HSL 0° (đỏ) tới 120° (xanh lá), chuyển mượt.
+    // Bước hiển thị 1..19 → sắc độ HSL 0° (đỏ) tới 120° (xanh lá), chuyển mượt.
     private string Bg()
     {
-        var idx = (int)Step;                     // 1..16
-        var t = Math.Clamp((idx - 1) / 15.0, 0, 1);
+        var idx = int.TryParse(WorkflowSteps.No(Step), out var n) ? n : 1; // 1..19
+        var t = Math.Clamp((idx - 1) / (WorkflowSteps.MainCount - 1.0), 0, 1);
         var hue = t * 120;                       // 0 = đỏ, 120 = xanh lá
         return $"hsl({hue.ToString("0", System.Globalization.CultureInfo.InvariantCulture)}, 78%, 42%)";
     }

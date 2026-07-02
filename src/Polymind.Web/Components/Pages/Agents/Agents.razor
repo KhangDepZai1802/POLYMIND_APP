@@ -52,7 +52,7 @@
                         <th style="width:48px">#</th>
                         <th>Đại lý</th>
                         <th style="text-align:center">CTV</th>
-                        <th style="text-align:center">Ứng viên</th>
+                        <th style="text-align:center" title="Ứng viên đạt bước Đặt cọc trong tháng đang lọc">Ứng viên đặt cọc</th>
                         <th style="text-align:right">Hoa hồng</th>
                         <th style="text-align:right">Doanh số (đã thu)</th>
                     </tr>
@@ -103,7 +103,7 @@
                                     <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">Đại lý của tôi</MudChip>
                                 }
                             </div>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.CollaboratorCount CTV • @a.CandidateCount ứng viên</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.CollaboratorCount CTV • @a.CandidateCount ứng viên đặt cọc trong tháng</MudText>
                         </div>
                         <Money Amount="a.Revenue" />
                     </div>
@@ -133,7 +133,7 @@
                         <th style="width:48px">#</th>
                         <th>Cộng tác viên</th>
                         <th>Đại lý</th>
-                        <th style="text-align:center">Ứng viên</th>
+                        <th style="text-align:center" title="Ứng viên đạt bước Đặt cọc trong tháng đang lọc">Ứng viên đặt cọc</th>
                         <th style="text-align:center">Trạng thái</th>
                         <th style="text-align:right">Doanh số (đã thu)</th>
                     </tr>
@@ -182,7 +182,7 @@
                                     <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">Tôi</MudChip>
                                 }
                             </div>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@c.AgentName • @c.CandidateCount ứng viên</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@c.AgentName • @c.CandidateCount ứng viên đặt cọc trong tháng</MudText>
                         </div>
                         <Money Amount="c.Revenue" />
                     </div>
@@ -328,6 +328,17 @@
             .Select(g => new { AgentId = g.Key, Sum = g.Sum(x => x.CommissionAmount) })
             .ToDictionaryAsync(x => x.AgentId, x => x.Sum);
 
+        // Cột "Ứng viên" = ứng viên ĐẶT CỌC trong tháng đang lọc (bước Đặt cọc hoàn thành
+        // trong tháng — cùng thời điểm đại lý/CTV phát sinh hoa hồng). Sang tháng mới chưa có
+        // ai đặt cọc thì cột về 0.
+        var depositCandidateIds = (await db.WorkflowStepRecords
+            .Where(r => r.Step == WorkflowStep.Deposit
+                        && r.Status == WorkflowStepStatus.Completed
+                        && r.CompletedAt >= commissionStart && r.CompletedAt < commissionEnd)
+            .Select(r => r.CandidateJobOrder.CandidateId)
+            .ToListAsync())
+            .ToHashSet();
+
         decimal RevenueOfCandidate(Guid id) => paidByCandidate.GetValueOrDefault(id, 0m);
 
         // Bảng đại lý
@@ -337,7 +348,7 @@
             return new AgentBoardRow(
                 a.Id, a.Code, a.Name,
                 ctvs.Count(c => c.AgentId == a.Id && c.IsActive),
-                agentCands.Count,
+                agentCands.Count(c => depositCandidateIds.Contains(c.Id)),
                 commissionByAgent.GetValueOrDefault(a.Id, 0m),
                 agentCands.Sum(c => RevenueOfCandidate(c.Id)));
         })
@@ -360,7 +371,7 @@
                 c.Id, c.Code, c.FullName,
                 agentNames.GetValueOrDefault(c.AgentId, "—"),
                 c.IsActive,
-                ctvCands.Count,
+                ctvCands.Count(x => depositCandidateIds.Contains(x.Id)),
                 ctvCands.Sum(x => RevenueOfCandidate(x.Id)));
         })
         .OrderByDescending(x => x.Revenue).ThenByDescending(x => x.CandidateCount)

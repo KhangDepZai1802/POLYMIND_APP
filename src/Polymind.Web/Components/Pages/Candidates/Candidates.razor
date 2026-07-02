@@ -45,9 +45,9 @@
             <MudSelect T="WorkflowStep?" @bind-Value="_stepFilter" Label="Lọc theo bước" Variant="Variant.Outlined" Margin="Margin.Dense"
                        Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.FilterList" Clearable="true">
                 <MudSelectItem T="WorkflowStep?" Value="@(null)">Tất cả các bước</MudSelectItem>
-                @foreach (var s in Enum.GetValues<WorkflowStep>())
+                @foreach (var s in WorkflowSteps.Main)
                 {
-                    <MudSelectItem T="WorkflowStep?" Value="@s">@((int)s). @Labels.Vi(s)</MudSelectItem>
+                    <MudSelectItem T="WorkflowStep?" Value="@s">@(WorkflowSteps.No(s)). @Labels.Vi(s)</MudSelectItem>
                 }
             </MudSelect>
         </MudItem>
@@ -183,8 +183,8 @@
         || (r.Country?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false)
         || (r.Field?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false)));
 
-    // Xếp mặc định: ứng viên đang ở bước "Đăng ký" (bước 3 — cần tư vấn nhiều nhất để hoàn tất đăng ký) lên đầu;
-    // còn lại xếp theo thứ tự bước 1 → 17; ai chưa có bước xếp cuối.
+    // Xếp mặc định: ứng viên đang ở bước "Đăng ký" (bước 4 — cần tư vấn nhiều nhất để hoàn tất đăng ký) lên đầu;
+    // còn lại xếp theo thứ tự bước 1 → 20; ai chưa có bước xếp cuối.
     private IEnumerable<Row> Sorted => Filtered
         .OrderBy(r => r.Step == WorkflowStep.Registration ? 0 : 1)
         .ThenBy(r => r.Step.HasValue ? (int)r.Step.Value : int.MaxValue)
@@ -275,7 +275,7 @@
                 job?.Country,
                 job?.Field,
                 d.Cjo?.CurrentStep,
-                d.Cjo is null ? 0 : (int)d.Cjo.CurrentStep * 100.0 / 17);
+                WorkflowSteps.Progress(d.Cjo?.CurrentStep));
         }).ToList();
 
         // Bộ lọc quốc gia chỉ liệt kê các nước thực sự có trong bảng (tự cập nhật khi thêm Jobs nước mới).

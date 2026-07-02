@@ -49,22 +49,26 @@ public static class Labels
     public static string Vi(WorkflowStep s) => s switch
     {
         WorkflowStep.Lead => "Lead mới",
-        WorkflowStep.Consulting => "Tư vấn",
+        WorkflowStep.Contacted => "Đã liên hệ / Liên hệ lại",
+        WorkflowStep.Consulting => "Đã tư vấn",
         WorkflowStep.Registration => "Đăng ký",
         WorkflowStep.Deposit => "Đặt cọc",
         WorkflowStep.Document => "Hoàn thiện hồ sơ",
         WorkflowStep.HealthCheck => "Khám sức khỏe",
-        WorkflowStep.Orientation => "Học định hướng",
-        WorkflowStep.EntranceExam => "Thi tuyển",
+        WorkflowStep.ReselectJobOrder => "Chọn lại đơn hàng khác",
+        WorkflowStep.EntranceExam => "Thi tuyển / Phỏng vấn / Xét duyệt hồ sơ",
         WorkflowStep.Selected => "Trúng tuyển",
+        WorkflowStep.Orientation => "Học tiếng / Học định hướng / Học nghề",
         WorkflowStep.SignContract => "Ký hợp đồng",
+        WorkflowStep.CoeApplication => "Xin COE (Tư cách lưu trú)",
         WorkflowStep.VisaSubmit => "Nộp hồ sơ Visa",
         WorkflowStep.VisaApproved => "Đậu Visa",
-        WorkflowStep.FullPayment => "Thanh toán đủ",
+        WorkflowStep.FullPayment => "Thanh toán hoàn tất / Cam kết trả nợ",
         WorkflowStep.BookFlight => "Đặt vé máy bay",
         WorkflowStep.Departure => "Xuất cảnh",
         WorkflowStep.Arrived => "Đến nơi làm việc",
-        WorkflowStep.Completed => "Hoàn tất hồ sơ",
+        WorkflowStep.OverseasSupport => "Tương tác giai đoạn xứ người",
+        WorkflowStep.Completed => "Hoàn thành quy trình",
         _ => s.ToString()
     };
 
@@ -140,6 +144,7 @@ public static class Labels
         LoanStatus.NotBorrowed => "Đang vay",
         LoanStatus.Borrowing => "Đang vay",
         LoanStatus.Disbursed => "Đã giải ngân",
+        LoanStatus.Settled => "Đã tất toán",
         _ => s.ToString()
     };
 
@@ -147,7 +152,8 @@ public static class Labels
     {
         LoanStatus.NotBorrowed => Color.Warning,
         LoanStatus.Borrowing => Color.Warning,
-        LoanStatus.Disbursed => Color.Success,
+        LoanStatus.Disbursed => Color.Info,
+        LoanStatus.Settled => Color.Success,
         _ => Color.Default
     };
 
@@ -156,6 +162,7 @@ public static class Labels
         LoanStatus.NotBorrowed => Icons.Material.Filled.HourglassBottom,
         LoanStatus.Borrowing => Icons.Material.Filled.HourglassBottom,
         LoanStatus.Disbursed => Icons.Material.Filled.AccountBalanceWallet,
+        LoanStatus.Settled => Icons.Material.Filled.TaskAlt,
         _ => Icons.Material.Filled.AccountBalance
     };
 

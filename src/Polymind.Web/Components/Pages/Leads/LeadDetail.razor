@@ -202,7 +202,7 @@ else
                 @* Chưa có hồ sơ ứng viên — kể cả khi status đã là "Đã chuyển" (lead bị kẹt do đổi trạng thái thủ công) vẫn cho tạo. *@
                 <MudPaper Class="pa-4" Elevation="1">
                     <MudText Typo="Typo.subtitle1" Class="mb-2"><b>Chuyển thành ứng viên</b></MudText>
-                    <MudText Typo="Typo.body2" Class="mb-3 mud-text-secondary">Tạo hồ sơ ứng viên từ lead này và bắt đầu quy trình 17 bước.</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-3 mud-text-secondary">Tạo hồ sơ ứng viên từ lead này và bắt đầu quy trình 20 bước.</MudText>
                     @if (_lead.Status == LeadStatus.Converted)
                     {
                         <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
@@ -575,7 +575,7 @@ else
 
         var confirm = await DialogService.ShowMessageBoxAsync(
             "Chuyển thành ứng viên?",
-            $"Tạo hồ sơ ứng viên từ lead \"{_lead.FullName}\" và bắt đầu quy trình 17 bước. Bạn có chắc chắn?",
+            $"Tạo hồ sơ ứng viên từ lead \"{_lead.FullName}\" và bắt đầu quy trình 20 bước. Bạn có chắc chắn?",
             yesText: "Đồng ý", cancelText: "Hủy");
         if (confirm != true) return;
 

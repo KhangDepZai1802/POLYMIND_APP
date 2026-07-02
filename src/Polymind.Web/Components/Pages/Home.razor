@@ -22,7 +22,7 @@ else
         <StatCard Title="Lead mới hôm nay" Value="@_newLeadsToday.ToString()" Icon="@Icons.Material.Filled.FiberNew" Color="Color.Primary"
                   OnClick="@(() => ShowStat("Lead mới hôm nay", _newLeadsToday.ToString(), Icons.Material.Filled.FiberNew, Color.Primary, "Số lead phát sinh trong ngày hôm nay.", NewTodayDetails(), "/leads", "Mở danh sách Lead"))" />
         <StatCard Title="Ứng viên đang xử lý" Value="@_activeCandidates.ToString()" Icon="@Icons.Material.Filled.Groups" Color="Color.Secondary"
-                  OnClick="@(() => ShowStat("Ứng viên đang xử lý", _activeCandidates.ToString(), Icons.Material.Filled.Groups, Color.Secondary, "Phân bố ứng viên theo bước hiện tại trong quy trình 17 bước.", StepDetails(), "/candidates", "Mở danh sách Ứng viên"))" />
+                  OnClick="@(() => ShowStat("Ứng viên đang xử lý", _activeCandidates.ToString(), Icons.Material.Filled.Groups, Color.Secondary, "Phân bố ứng viên theo bước hiện tại trong quy trình 20 bước.", StepDetails(), "/candidates", "Mở danh sách Ứng viên"))" />
         <StatCard Title="Đã xuất cảnh" Value="@_departed.ToString()" Icon="@Icons.Material.Filled.FlightTakeoff" Color="Color.Success"
                   OnClick="@(() => ShowStat("Đã xuất cảnh", _departed.ToString(), Icons.Material.Filled.FlightTakeoff, Color.Success, "Số lượt ứng viên đã đến/qua bước Xuất cảnh. Bảng dưới là phễu tuyển dụng.", FunnelDetails()))" />
         <StatCard Title="Tỷ lệ chuyển đổi" Value="@($"{_conversionRate:0.#}%")" Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Warning"
@@ -313,7 +313,7 @@ else
 
     private List<StatDetailDialog.Row> StepDetails() =>
         _byStep.OrderBy(x => (int)x.Key)
-            .Select(x => new StatDetailDialog.Row($"{(int)x.Key}. {Labels.Vi(x.Key)}", x.Value.ToString())).ToList();
+            .Select(x => new StatDetailDialog.Row($"{WorkflowSteps.No(x.Key)}. {Labels.Vi(x.Key)}", x.Value.ToString())).ToList();
 
     private List<StatDetailDialog.Row> JobsByStatusDetails() =>
         _jobsByStatus.OrderByDescending(x => x.Value)

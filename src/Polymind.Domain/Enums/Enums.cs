@@ -32,13 +32,36 @@ public enum JobOrderStatus
     Recruiting, FullProfiles, Interviewing, Closed, Cancelled
 }
 
-/// <summary>17 bước workflow ứng viên (mục 6.1 / docs 02 mục 5). Giá trị = thứ tự bước.</summary>
+/// <summary>
+/// Quy trình 20 bước hồ sơ ứng viên (góp ý Vietgroup 07/2026) + bước phụ 7.5 khi rớt thi tuyển.
+/// Giá trị = thứ tự trong luồng; DB lưu dạng TEXT (tên member) nên đổi giá trị số an toàn,
+/// nhưng đổi TÊN member phải kèm migration UPDATE dữ liệu cũ.
+/// Tên member cũ (17 bước) được giữ nguyên để dữ liệu cũ tự map: Consulting → "Đã tư vấn" (B3),
+/// Orientation → "Học tiếng/định hướng/nghề" (B10), Completed → "Hoàn thành quy trình" (B20).
+/// </summary>
 public enum WorkflowStep
 {
-    Lead = 1, Consulting = 2, Registration = 3, Deposit = 4, Document = 5,
-    HealthCheck = 6, Orientation = 7, EntranceExam = 8, Selected = 9, SignContract = 10,
-    VisaSubmit = 11, VisaApproved = 12, FullPayment = 13, BookFlight = 14, Departure = 15,
-    Arrived = 16, Completed = 17
+    Lead = 1,              // B1  Lead mới
+    Contacted = 2,         // B2  Đã liên hệ / Liên hệ lại
+    Consulting = 3,        // B3  Đã tư vấn
+    Registration = 4,      // B4  Đăng ký
+    Deposit = 5,           // B5  Đặt cọc
+    Document = 6,          // B6  Hoàn thiện hồ sơ
+    HealthCheck = 7,       // B7  Khám sức khỏe
+    ReselectJobOrder = 8,  // B7.5 Chọn lại đơn hàng khác — chỉ dùng khi rớt B8; sang B8 phải gắn đơn MỚI
+    EntranceExam = 9,      // B8  Thi tuyển / Phỏng vấn / Xét duyệt hồ sơ
+    Selected = 10,         // B9  Trúng tuyển
+    Orientation = 11,      // B10 Học tiếng / Học định hướng / Học nghề (nếu cần)
+    SignContract = 12,     // B11 Ký hợp đồng
+    CoeApplication = 13,   // B12 Xin COE (Tư cách lưu trú)
+    VisaSubmit = 14,       // B13 Nộp hồ sơ Visa
+    VisaApproved = 15,     // B14 Đậu Visa
+    FullPayment = 16,      // B15 Thanh toán hoàn tất / Cam kết trả nợ
+    BookFlight = 17,       // B16 Đặt vé máy bay
+    Departure = 18,        // B17 Xuất cảnh
+    Arrived = 19,          // B18 Đến nơi làm việc
+    OverseasSupport = 20,  // B19 Tương tác giai đoạn xứ người (nhật ký nhiều năm)
+    Completed = 21         // B20 Hoàn thành quy trình (khi hết nghĩa vụ: vay tất toán, hết hỗ trợ)
 }
 
 /// <summary>Trạng thái xử lý của một bước workflow.</summary>
@@ -115,5 +138,6 @@ public enum LoanStatus
 {
     NotBorrowed, // Legacy: không dùng trên UI; không có record Loan nghĩa là chưa có khoản vay
     Borrowing,   // Đang vay (đã đăng ký/đang làm thủ tục, chưa giải ngân)
-    Disbursed    // Đã giải ngân
+    Disbursed,   // Đã giải ngân
+    Settled      // Đã tất toán — điều kiện để hồ sơ được chuyển B20 "Hoàn thành quy trình"
 }
