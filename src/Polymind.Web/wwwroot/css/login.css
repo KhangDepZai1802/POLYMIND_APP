@@ -20,6 +20,19 @@
 /* Footer đi LIỀN dưới thẻ (khoảng cách cố định) → không thừa khi màn hình quá dài */
 .login-page > .app-footer { margin-top: 1.5rem; flex: 0 0 auto; }
 
+/* Thẻ đứng MỘT MÌNH (2FA: cài đặt + nhập mã) — không có hero cạnh bên.
+   Dùng flex canh giữa để không dính lề trái ở desktop (rule .login-card{margin:0} chỉ
+   dành cho thẻ nằm trong .login-shell). Canh giữa đồng nhất mọi màn hình: PC/laptop/iPad/điện thoại. */
+.login-solo {
+    flex: 0 0 auto;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    padding: 1.5rem 1rem 0;
+    box-sizing: border-box;
+}
+.login-solo .login-card { margin: 0; }
+
 /* ----- Hero navy ----- */
 .login-hero {
     position: relative;
