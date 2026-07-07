@@ -19,6 +19,15 @@ public interface IDocumentStorage
         IBrowserFile file,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Tải lên tin nhắn thoại (ghi âm) từ dữ liệu nhị phân do trình duyệt (MediaRecorder) tạo.</summary>
+    Task<UploadedDocumentObject> UploadMessageAudioAsync(
+        Guid senderId,
+        Guid recipientId,
+        byte[] data,
+        string contentType,
+        string extension,
+        CancellationToken cancellationToken = default);
+
     Task<string> GetDownloadUrlAsync(
         string objectKey,
         CancellationToken cancellationToken = default);

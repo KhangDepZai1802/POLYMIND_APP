@@ -1,0 +1,95 @@
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IAuthorizationService AuthorizationService
+@inject ISnackbar Snackbar
+
+@* Cập nhật tiến trình một mảng đào tạo (Học tiếng / Chuyên môn) của ứng viên. *@
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.subtitle2" Class="mb-2">
+            <MudIcon Icon="@Labels.IconOf(Track)" Size="Size.Small" Class="mr-1" />@Labels.Vi(Track)
+        </MudText>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudSwitch T="bool" @bind-Value="_enrolled" Color="Color.Primary" Label="Có học mảng này" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_level" Label="Cấp độ (vd N5 → N4)" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="!_enrolled" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudNumericField T="int" @bind-Value="_progress" Label="Tiến độ (%)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="100" Disabled="!_enrolled" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_note" Label="Ghi chú" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" Disabled="!_enrolled" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Hủy</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="_saving" OnClick="SaveAsync">Lưu</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid CandidateId { get; set; }
+    [Parameter] public TrainingTrack Track { get; set; }
+
+    private bool _enrolled = true;
+    private string? _level;
+    private int _progress;
+    private string? _note;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var rec = await db.TrainingRecords.AsNoTracking()
+            .FirstOrDefaultAsync(r => r.CandidateId == CandidateId && r.Track == Track);
+        if (rec is not null)
+        {
+            _enrolled = rec.IsEnrolled;
+            _level = rec.LevelLabel;
+            _progress = rec.ProgressPercent;
+            _note = rec.Note;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            if (!(await AuthorizationService.AuthorizeAsync(authState.User, null, "training:update")).Succeeded)
+            {
+                Snackbar.Add("Bạn không có quyền cập nhật tiến trình đào tạo.", Severity.Warning);
+                return;
+            }
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+            var rec = await db.TrainingRecords.FirstOrDefaultAsync(r => r.CandidateId == CandidateId && r.Track == Track);
+            var isNew = rec is null;
+            if (rec is null)
+            {
+                rec = new TrainingRecord { CandidateId = CandidateId, Track = Track, CreatedBy = actorId };
+                db.TrainingRecords.Add(rec);
+            }
+            rec.IsEnrolled = _enrolled;
+            rec.LevelLabel = string.IsNullOrWhiteSpace(_level) ? null : _level.Trim();
+            rec.ProgressPercent = Math.Clamp(_progress, 0, 100);
+            rec.Note = string.IsNullOrWhiteSpace(_note) ? null : _note.Trim();
+            rec.UpdatedAt = DateTimeOffset.UtcNow;
+
+            db.AddAudit(actorId, isNew ? "create" : "update", "training", rec.Id, null, new { rec.CandidateId, rec.Track, rec.ProgressPercent });
+            await db.SaveChangesAsync();
+            Snackbar.Add("Đã cập nhật tiến trình đào tạo.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

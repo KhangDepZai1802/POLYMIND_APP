@@ -141,3 +141,32 @@ public enum LoanStatus
     Disbursed,   // Đã giải ngân
     Settled      // Đã tất toán — điều kiện để hồ sơ được chuyển B20 "Hoàn thành quy trình"
 }
+
+/// <summary>
+/// Loại khoản nợ (góp ý Vietgroup 07/2026): vay ngân hàng hoặc nợ trực tiếp công ty.
+/// Bank = 0 để hồ sơ vay cũ mặc định đúng nhóm ngân hàng.
+/// </summary>
+public enum LoanKind
+{
+    Bank,    // Vay ngân hàng (có BankName, lãi suất ngân hàng)
+    Company  // Nợ công ty (VG cho đi dù không vay được; lãi suất & cam kết riêng)
+}
+
+/// <summary>Trạng thái một kỳ trả góp của khoản nợ (trừ dần vào lương).</summary>
+public enum LoanRepaymentStatus { Pending, Partial, Paid, Overdue }
+
+/// <summary>
+/// Hai mảng đào tạo tách riêng (góp ý Vietgroup 07/2026): học tiếng vs chuyên môn/nghề.
+/// Có người cần mảng này mà không cần mảng kia.
+/// </summary>
+public enum TrainingTrack
+{
+    Language,   // Học tiếng
+    Vocational  // Chuyên môn / Học nghề
+}
+
+/// <summary>
+/// Mức đánh giá 4 tiêu chí học viên (Chuyên cần / Chuyên môn / Kỷ luật / Tài chính).
+/// Dùng cho phiếu đánh giá định kỳ; thang điểm chi tiết tinh chỉnh khi Vietgroup gửi giáo trình.
+/// </summary>
+public enum EvaluationRating { Weak, Average, Good, Excellent }

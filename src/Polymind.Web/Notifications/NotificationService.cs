@@ -352,23 +352,27 @@ public class NotificationService(
 
         var existing = await db.Notifications
             .Where(n => n.ReferenceId != null)
-            .Select(n => new { n.UserId, n.Type, n.ReferenceId, n.Channel, n.IsRead, n.CreatedAt })
+            .Select(n => new { n.UserId, n.Type, n.ReferenceId, n.Channel })
             .ToListAsync();
         var seen = existing.Select(x => (x.UserId, x.Type, x.ReferenceId!.Value, x.Channel)).ToHashSet();
 
-        // Nhắc chăm sóc lead được phép NHẮC LẠI khi lead vẫn đứng yên: chỉ chặn khi còn thông báo
-        // chưa đọc hoặc đã nhắc trong 24 giờ qua (các loại nhắc khác giữ nguyên: 1 lần / reference).
+        // Nhắc chăm sóc lead được phép NHẮC LẠI khi lead vẫn đứng yên. Do ràng buộc UNIQUE
+        // (UserId, Type, ReferenceId, Channel) chỉ cho phép 1 hàng/khóa → KHÔNG chèn hàng mới
+        // (sẽ vỡ khóa 23505). Thay vào đó CẬP NHẬT hàng cũ: bỏ qua nếu còn chưa đọc hoặc mới nhắc
+        // trong 24h; ngược lại reset về chưa đọc + làm mới nội dung/thời điểm để nổi lên lại.
         var leadCareCutoff = DateTimeOffset.UtcNow.AddHours(-24);
-        var leadCareBlocked = existing
-            .Where(x => x.Type == NotificationType.ReminderLeadCare)
-            .GroupBy(x => (x.UserId, ReferenceId: x.ReferenceId!.Value, x.Channel))
-            .Where(g => g.Any(x => !x.IsRead || x.CreatedAt >= leadCareCutoff))
-            .Select(g => g.Key)
-            .ToHashSet();
+        var leadCareRows = await db.Notifications
+            .Where(n => n.Type == NotificationType.ReminderLeadCare && n.ReferenceId != null)
+            .ToListAsync();
+        var leadCareByKey = leadCareRows
+            .GroupBy(n => (n.UserId, ReferenceId: n.ReferenceId!.Value, n.Channel))
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(n => n.CreatedAt).First());
+        var leadCareTouched = new HashSet<(Guid UserId, Guid ReferenceId, NotificationChannel Channel)>();
 
         var preferences = await db.NotificationPreferences.ToListAsync();
         var prefByUserType = preferences.ToDictionary(p => (p.UserId, p.Type));
         var toAdd = new List<Notification>();
+        var revived = 0;
 
         foreach (var reminder in eventList)
         {
@@ -382,9 +386,26 @@ public class NotificationService(
                 {
                     if (reminder.Type == NotificationType.ReminderLeadCare)
                     {
-                        if (!leadCareBlocked.Add((userId, reminder.ReferenceId, channel))) continue;
+                        var key = (userId, reminder.ReferenceId, channel);
+                        if (!leadCareTouched.Add(key)) continue; // đã xử lý trong lượt này
+                        if (leadCareByKey.TryGetValue(key, out var row))
+                        {
+                            // Còn chưa đọc hoặc mới nhắc trong 24h → chưa nhắc lại.
+                            if (!row.IsRead || row.CreatedAt >= leadCareCutoff) continue;
+                            var now = DateTimeOffset.UtcNow;
+                            row.IsRead = false;
+                            row.ReadAt = null;
+                            row.SentAt = null;
+                            row.CreatedAt = now;
+                            row.UpdatedAt = now;
+                            row.Title = reminder.Title;
+                            row.Body = reminder.Body;
+                            revived++;
+                            continue;
+                        }
+                        // Chưa từng nhắc lead này → chèn mới bên dưới.
                     }
-                    else if (!seen.Add((userId, reminder.Type, reminder.ReferenceId, channel))) continue;
+                    if (!seen.Add((userId, reminder.Type, reminder.ReferenceId, channel))) continue;
                     toAdd.Add(new Notification
                     {
                         UserId = userId,
@@ -400,10 +421,19 @@ public class NotificationService(
             }
         }
 
-        if (toAdd.Count == 0) return 0;
-        db.Notifications.AddRange(toAdd);
-        await db.SaveChangesAsync();
-        return toAdd.Count;
+        if (toAdd.Count == 0 && revived == 0) return 0;
+        if (toAdd.Count > 0) db.Notifications.AddRange(toAdd);
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex)
+        {
+            // Chèn song song từ nhiều phiên có thể vẫn vỡ khóa unique — nuốt lỗi trùng để trang không sập.
+            logger.LogWarning(ex, "Bỏ qua thông báo trùng khóa khi sinh reminder");
+            return 0;
+        }
+        return toAdd.Count + revived;
     }
 
     private static IEnumerable<NotificationChannel> ChannelsFor(NotificationPreference? pref)

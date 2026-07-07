@@ -654,7 +654,13 @@
         p.UpdatedAt = DateTimeOffset.UtcNow;
         db.AddAudit(actorId, "approve", "payments", p.Id, oldValue, new { p.Status, p.PaidDate, p.ApprovedBy });
         await db.SaveChangesAsync();
+
+        // Chia hoa hồng theo giai đoạn đóng tiền: giai đoạn vừa đóng có thể kích hoạt 1 lát hoa hồng.
+        var newCommissions = await Polymind.Web.Commissions.CommissionEngine.EnsureAsync(db, p.CandidateId, actorId);
+        if (newCommissions > 0) await db.SaveChangesAsync();
+
         Snackbar.Add($"Đã ghi nhận {(p.Stage is PaymentStage st ? Labels.Vi(st) : "khoản thu")}", Severity.Success);
+        if (newCommissions > 0) Snackbar.Add($"Đã phát sinh {newCommissions} lát hoa hồng cho đại lý.", Severity.Info);
         await Load();
     }
 

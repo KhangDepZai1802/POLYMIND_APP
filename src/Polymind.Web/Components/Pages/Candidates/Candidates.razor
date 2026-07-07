@@ -56,7 +56,7 @@
     @* Desktop: bảng đầy đủ *@
     <MudHidden Breakpoint="Breakpoint.SmAndDown">
         <MudDataGrid T="Row" Items="Sorted" Hover="true" Dense="true" Striped="true"
-                     RowClick="@(args => Nav.NavigateTo($"/candidates/{args.Item.Id}"))" Class="cursor-pointer mt-2">
+                     RowClick="@(args => Nav.NavigateTo($"/candidates/{args.Item.Id}"))" Class="cursor-pointer mt-2 candidate-table">
             <Columns>
                 <PropertyColumn Property="x => x.ShortCode" Title="Mã" />
                 <PropertyColumn Property="x => x.FullName" Title="Họ tên" />
@@ -85,7 +85,7 @@
                 <TemplateColumn Title="Quốc gia">
                     <CellTemplate>
                         @{ var st = CountryDisplay.Of(context.Item.Country); }
-                        <span style="white-space:nowrap"><CountryFlag Style="st" Size="20" /> @st.Name</span>
+                        <span style="white-space:nowrap" title="@st.Name"><CountryFlag Style="st" Size="20" /> <span class="laptop-hide-inline">@st.Name</span></span>
                     </CellTemplate>
                 </TemplateColumn>
                 <PropertyColumn Property="x => x.Field" Title="Nghề nghiệp" />
@@ -103,7 +103,7 @@
                 </TemplateColumn>
                 <TemplateColumn Title="Tiến độ">
                     <CellTemplate>
-                        <div class="d-flex align-center" style="min-width:120px">
+                        <div class="d-flex align-center candidate-progress-cell">
                             <MudProgressLinear Color="Color.Success" Value="@context.Item.Progress" Class="flex-grow-1 mr-2" Style="height:8px" Rounded="true" />
                             <MudText Typo="Typo.caption">@($"{context.Item.Progress:0}%")</MudText>
                         </div>
@@ -253,6 +253,9 @@
             query = query.Where(c => c.AgentId == scope.AgentId);
         else if (scope.IsCollaboratorOnly)
             query = query.Where(c => c.CollaboratorId == scope.CollaboratorId);
+        else if (scope.IsSelfScoped)
+            // Phụ huynh / Học viên chỉ thấy đúng ứng viên gắn với tài khoản (null = không thấy gì).
+            query = query.Where(c => c.OwnerUserId != null && c.Id == scope.OwnedCandidateId);
 
         var data = await query
             .Select(c => new

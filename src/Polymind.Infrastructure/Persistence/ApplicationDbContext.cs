@@ -38,6 +38,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<TrainingRecord> TrainingRecords => Set<TrainingRecord>();
+    public DbSet<TrainingEvaluation> TrainingEvaluations => Set<TrainingEvaluation>();
+    public DbSet<LoanRepayment> LoanRepayments => Set<LoanRepayment>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -82,6 +85,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
             e.HasIndex(x => x.CccdNumber);
             e.HasIndex(x => x.PassportNumber);
             e.HasIndex(x => x.ConsultantId);
+            e.HasIndex(x => x.OwnerUserId);
         });
 
         b.Entity<Payment>(e =>
@@ -159,6 +163,25 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
         });
 
         b.Entity<WorkflowStepRecord>().HasIndex(x => x.CandidateJobOrderId);
+
+        b.Entity<TrainingRecord>(e =>
+        {
+            e.HasIndex(x => new { x.CandidateId, x.Track }).IsUnique();
+        });
+
+        b.Entity<TrainingEvaluation>(e =>
+        {
+            e.HasIndex(x => x.CandidateId);
+            e.HasIndex(x => x.EvaluationDate);
+        });
+
+        b.Entity<LoanRepayment>(e =>
+        {
+            e.HasIndex(x => x.LoanId);
+            e.HasIndex(x => x.Status);
+            e.Property(x => x.Amount).HasPrecision(15, 2);
+            e.Property(x => x.PaidAmount).HasPrecision(15, 2);
+        });
 
         b.Entity<Notification>(e =>
         {

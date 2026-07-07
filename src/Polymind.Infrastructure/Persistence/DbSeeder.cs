@@ -38,7 +38,7 @@ public static class DbSeeder
     {
         [RoleNames.Director] = Combine(
             Read("dashboard", "leads", "candidates", "job_orders", "payments", "expenses", "receipts",
-                "agents", "collaborators", "commissions", "loans", "visas", "flights", "reports", "users", "roles", "notifications", "audit"),
+                "agents", "collaborators", "commissions", "loans", "visas", "flights", "reports", "users", "roles", "notifications", "audit", "training"),
             Actions("commissions", "approve"),
             Actions("reports", "create", "read"),
             Messaging()),
@@ -48,6 +48,7 @@ public static class DbSeeder
             Actions("candidates", "create", "read", "update"),
             Actions("collaborators", "create", "read", "update"),
             Actions("loans", "create", "read", "update"),
+            Crud("training"),
             Read("dashboard", "job_orders", "agents", "reports", "notifications"),
             Messaging()),
 
@@ -63,6 +64,7 @@ public static class DbSeeder
             Actions("leads", "create", "read", "update"),
             Actions("candidates", "create", "read", "update"),
             Actions("loans", "create", "read", "update"),
+            Crud("training"),
             Read("dashboard", "job_orders", "agents", "collaborators", "notifications"),
             Messaging()),
 
@@ -89,13 +91,22 @@ public static class DbSeeder
             Messaging()),
 
         [RoleNames.Agent] = Combine(
-            Read("agents", "candidates", "collaborators", "commissions", "loans", "notifications"),
+            Read("agents", "candidates", "collaborators", "commissions", "loans", "notifications", "training"),
             Actions("collaborators", "update"),
             Messaging()),
 
         [RoleNames.Collaborator] = Combine(
-            Read("agents", "candidates", "commissions", "notifications"),
+            Read("agents", "candidates", "commissions", "notifications", "training"),
             Messaging()),
+
+        // Phụ huynh: quyền thiết lập GIỐNG hệt CTV (góp ý Vietgroup §3).
+        [RoleNames.Parent] = Combine(
+            Read("agents", "candidates", "commissions", "notifications", "training"),
+            Messaging()),
+
+        // Học viên: chỉ xem dữ liệu của chính mình (bó hẹp bằng Candidate.OwnerUserId ở AgentScope).
+        [RoleNames.Student] = Combine(
+            Read("candidates", "training", "notifications")),
     };
 
     /// <summary>Quyền nhắn tin nội bộ: ai cũng đọc + gửi được (phân quyền người-nhận xử lý ở tầng service/UI).</summary>

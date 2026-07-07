@@ -13,6 +13,8 @@ public static class RoleNames
     public const string Accountant = "accountant";
     public const string Agent = "agent";
     public const string Collaborator = "collaborator";
+    public const string Parent = "parent";   // Phụ huynh — quyền giống CTV (góp ý Vietgroup)
+    public const string Student = "student";  // Học viên — chỉ xem dữ liệu của chính mình
 
     public static readonly IReadOnlyDictionary<string, string> All = new Dictionary<string, string>
     {
@@ -26,5 +28,7 @@ public static class RoleNames
         [Accountant] = "Kế toán",
         [Agent] = "Đại lý",
         [Collaborator] = "Cộng tác viên",
+        [Parent] = "Phụ huynh",
+        [Student] = "Học viên",
     };
 }

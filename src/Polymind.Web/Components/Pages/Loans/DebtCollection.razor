@@ -1,0 +1,270 @@
+@page "/debt-collection"
+@attribute [Authorize(Policy = "loans:read")]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject AgentScope AgentScope
+@inject ISnackbar Snackbar
+
+<PageTitle>Thu nợ — POLYMIND</PageTitle>
+
+<PageHeader Eyebrow="TÀI CHÍNH" Title="Thu nợ công ty" Subtitle="@($"{_owing.Count} hồ sơ còn nợ • {_settled.Count} đã tất toán")">
+    <Actions>
+        <MudButton Class="entity-action-button" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AccountBalance" Href="/loans">
+            Hồ sơ vay
+        </MudButton>
+    </Actions>
+</PageHeader>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudGrid Class="mb-4">
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Hồ sơ còn nợ</MudText>
+                <MudText Typo="Typo.h5" Color="Color.Warning"><b>@_owing.Count</b></MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Tổng còn phải thu</MudText>
+                <MudText Typo="Typo.h6" Color="Color.Error"><b>@($"{_totalOutstanding:N0} đ")</b></MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Đã thu (các kỳ)</MudText>
+                <MudText Typo="Typo.h6" Color="Color.Success"><b>@($"{_totalPaid:N0} đ")</b></MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Đã tất toán</MudText>
+                <MudText Typo="Typo.h5" Color="Color.Success"><b>@_settled.Count</b></MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    @if (_owing.Count == 0 && _settled.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Dense="true">
+            Chưa có hồ sơ <b>nợ công ty</b> nào có lịch trả góp. Trang này chỉ thu nợ với người <b>vay tiền công ty</b>
+            (người vay ngân hàng trả cho ngân hàng, không hiện ở đây). Tạo khoản <b>Nợ công ty</b> và bật
+            <b>Tạo lịch trả góp</b> ở trang <b>Hỗ trợ vay</b>.
+        </MudAlert>
+    }
+    else
+    {
+        <MudText Typo="Typo.h6" Class="mb-2">Đang còn nợ</MudText>
+        @if (_owing.Count == 0)
+        {
+            <MudAlert Severity="Severity.Success" Dense="true" Class="mb-4">Không có hồ sơ nào còn nợ.</MudAlert>
+        }
+        else
+        {
+            @foreach (var d in _owing)
+            {
+                @DebtCard(d)
+            }
+        }
+
+        @if (_settled.Count > 0)
+        {
+            <MudText Typo="Typo.h6" Class="mb-2 mt-4">Đã tất toán</MudText>
+            @foreach (var d in _settled)
+            {
+                @DebtCard(d)
+            }
+        }
+    }
+}
+
+@code {
+    private record InstallmentRow(Guid Id, int No, DateOnly DueDate, decimal Amount, decimal PaidAmount, LoanRepaymentStatus Status);
+    private record DebtRow(Guid LoanId, Guid CandidateId, string CandidateName, string Code, LoanKind Kind,
+        LoanStatus Status, decimal Total, decimal Paid, decimal Outstanding, List<InstallmentRow> Installments);
+
+    private List<DebtRow> _owing = new();
+    private List<DebtRow> _settled = new();
+    private decimal _totalOutstanding;
+    private decimal _totalPaid;
+    private bool _loading = true;
+    private bool _canUpdate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _canUpdate = (await AuthorizationService.AuthorizeAsync(authState.User, null, "loans:update")).Succeeded
+            && BusinessRoleAccess.CanEditLoan(authState.User);
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        _loading = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var scope = await AgentScope.GetAsync();
+
+        // CHỈ thu nợ với NỢ CÔNG TY: người vay ngân hàng đã đóng đủ bên trang Tài chính,
+        // họ trả góp cho NGÂN HÀNG chứ không nợ công ty → không hiện ở trang Thu nợ.
+        var loanQuery = db.Loans.AsNoTracking().Where(l => l.Kind == LoanKind.Company);
+        if (scope.IsAgentOnly)
+            loanQuery = loanQuery.Where(l => db.Candidates.Any(c => c.Id == l.CandidateId && c.AgentId == scope.AgentId));
+
+        var loans = await loanQuery.ToListAsync();
+        var loanIds = loans.Select(l => l.Id).ToList();
+        var repayments = await db.LoanRepayments.AsNoTracking()
+            .Where(r => loanIds.Contains(r.LoanId))
+            .OrderBy(r => r.InstallmentNo)
+            .ToListAsync();
+        var byLoan = repayments.GroupBy(r => r.LoanId).ToDictionary(g => g.Key, g => g.ToList());
+
+        var candidateIds = loans.Select(l => l.CandidateId).Distinct().ToList();
+        var candidates = await db.Candidates.AsNoTracking()
+            .Where(c => candidateIds.Contains(c.Id))
+            .Select(c => new { c.Id, c.FullName, c.Code })
+            .ToDictionaryAsync(c => c.Id);
+
+        var rows = new List<DebtRow>();
+        foreach (var l in loans)
+        {
+            if (!candidates.TryGetValue(l.CandidateId, out var c)) continue;
+            var insts = byLoan.TryGetValue(l.Id, out var list) ? list : new List<LoanRepayment>();
+            if (insts.Count == 0 && (l.Amount ?? 0m) <= 0m) continue; // không có lịch & không có số nợ → bỏ qua
+
+            var total = insts.Count > 0 ? insts.Sum(r => r.Amount) : (l.Amount ?? 0m);
+            var paid = insts.Sum(r => r.PaidAmount);
+            var outstanding = Math.Max(0m, total - paid);
+            rows.Add(new DebtRow(l.Id, c.Id, c.FullName, c.Code, l.Kind, l.Status, total, paid, outstanding,
+                insts.Select(r => new InstallmentRow(r.Id, r.InstallmentNo, r.DueDate, r.Amount, r.PaidAmount, r.Status)).ToList()));
+        }
+
+        _owing = rows.Where(r => r.Outstanding > 0m && r.Status != LoanStatus.Settled).OrderBy(r => r.CandidateName).ToList();
+        _settled = rows.Where(r => r.Outstanding <= 0m || r.Status == LoanStatus.Settled).OrderBy(r => r.CandidateName).ToList();
+        _totalOutstanding = _owing.Sum(r => r.Outstanding);
+        _totalPaid = rows.Sum(r => r.Paid);
+        _loading = false;
+    }
+
+    private RenderFragment DebtCard(DebtRow d) =>@<MudPaper Class="pa-3 mb-2" Elevation="1">
+        @{
+            var paidCount = d.Installments.Count(i => i.Status == LoanRepaymentStatus.Paid);
+            var next = d.Installments.Where(i => i.Status != LoanRepaymentStatus.Paid).OrderBy(i => i.No).FirstOrDefault();
+            var pct = d.Total > 0 ? (double)(d.Paid / d.Total * 100m) : 0;
+            var expanded = _expanded.Contains(d.LoanId);
+        }
+        <div class="d-flex justify-space-between align-center flex-wrap" style="gap:8px">
+            <div style="min-width:0;cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/candidates/{d.CandidateId}"))">
+                <MudText Typo="Typo.subtitle2" Style="font-weight:600">@d.CandidateName
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Labels.ColorOf(d.Kind)" Class="ml-1">@Labels.Vi(d.Kind)</MudChip>
+                </MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@d.Code</MudText>
+            </div>
+            <div class="text-right">
+                <MudText Typo="Typo.body2">Còn nợ: <b style="@(d.Outstanding > 0 ? "color:var(--mud-palette-error)" : "color:var(--mud-palette-success)")">@($"{d.Outstanding:N0} đ")</b></MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Đã thu @($"{d.Paid:N0}") / @($"{d.Total:N0}") đ</MudText>
+            </div>
+        </div>
+
+        @if (d.Installments.Count > 0)
+        {
+            <div class="d-flex align-center mt-2" style="gap:8px">
+                <MudProgressLinear Color="Color.Success" Value="@pct" Class="flex-grow-1" Style="height:8px" Rounded="true" />
+                <MudText Typo="Typo.caption" Style="white-space:nowrap">@paidCount/@d.Installments.Count kỳ</MudText>
+            </div>
+            <div class="d-flex align-center justify-space-between flex-wrap mt-1" style="gap:8px">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @if (next is not null)
+                    {
+                        <text>Kỳ tới: kỳ @next.No • hạn @next.DueDate.ToString("dd/MM/yyyy") • @($"{next.Amount:N0}") đ</text>
+                    }
+                    else
+                    {
+                        <text>Đã thu đủ tất cả các kỳ.</text>
+                    }
+                </MudText>
+                <div class="d-flex" style="gap:6px">
+                    @if (_canUpdate && next is not null)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Check"
+                                   OnClick="@(() => MarkPaid(next.Id))">Thu kỳ tới</MudButton>
+                    }
+                    <MudButton Size="Size.Small" Variant="Variant.Text" EndIcon="@(expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                               OnClick="@(() => ToggleExpand(d.LoanId))">@(expanded ? "Ẩn lịch" : "Xem lịch")</MudButton>
+                </div>
+            </div>
+
+            <MudCollapse Expanded="expanded">
+                <div class="table-scroll-x mt-2">
+                    <MudSimpleTable Dense="true" Hover="true">
+                        <thead>
+                            <tr><th>Kỳ</th><th>Hạn</th><th style="text-align:right">Phải trả</th><th style="text-align:right">Đã trả</th><th>Trạng thái</th><th style="text-align:right">Thao tác</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var i in d.Installments)
+                            {
+                                <tr>
+                                    <td>@i.No</td>
+                                    <td>@i.DueDate.ToString("dd/MM/yyyy")</td>
+                                    <td style="text-align:right">@($"{i.Amount:N0}")</td>
+                                    <td style="text-align:right">@($"{i.PaidAmount:N0}")</td>
+                                    <td><MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(i.Status)">@Labels.Vi(i.Status)</MudChip></td>
+                                    <td style="text-align:right">
+                                        @if (_canUpdate && i.Status != LoanRepaymentStatus.Paid)
+                                        {
+                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success" StartIcon="@Icons.Material.Filled.Check"
+                                                       OnClick="@(() => MarkPaid(i.Id))">Đã thu</MudButton>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </div>
+            </MudCollapse>
+        }
+        else
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">Chưa có lịch trả góp — mở hồ sơ vay để tạo lịch.</MudText>
+        }
+    </MudPaper>;
+
+    private readonly HashSet<Guid> _expanded = new();
+    private void ToggleExpand(Guid loanId)
+    {
+        if (!_expanded.Add(loanId)) _expanded.Remove(loanId);
+    }
+
+    private async Task MarkPaid(Guid installmentId)
+    {
+        if (!_canUpdate) { Snackbar.Add("Bạn không có quyền thu nợ.", Severity.Warning); return; }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var inst = await db.LoanRepayments.FirstOrDefaultAsync(r => r.Id == installmentId);
+        if (inst is null) { await Load(); return; }
+
+        inst.PaidAmount = inst.Amount;
+        inst.PaidDate = DateOnly.FromDateTime(DateTime.UtcNow);
+        inst.Status = LoanRepaymentStatus.Paid;
+        inst.UpdatedAt = DateTimeOffset.UtcNow;
+
+        // Nếu tất cả kỳ của khoản vay đã thu đủ → tự chuyển khoản vay sang "Đã tất toán".
+        var all = await db.LoanRepayments.Where(r => r.LoanId == inst.LoanId).ToListAsync();
+        var loan = await db.Loans.FirstOrDefaultAsync(l => l.Id == inst.LoanId);
+        var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+        if (loan is not null && all.All(r => r.Status == LoanRepaymentStatus.Paid))
+        {
+            loan.Status = LoanStatus.Settled;
+            loan.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+        db.AddAudit(actorId, "update", "loans", inst.LoanId, null, new { installment = inst.InstallmentNo, inst.PaidAmount });
+        await db.SaveChangesAsync();
+        Snackbar.Add("Đã ghi nhận thu nợ.", Severity.Success);
+        await Load();
+    }
+}

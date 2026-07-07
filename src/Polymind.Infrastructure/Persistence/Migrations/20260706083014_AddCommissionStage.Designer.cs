@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Polymind.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Polymind.Infrastructure.Persistence;
 namespace Polymind.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260706083014_AddCommissionStage")]
+    partial class AddCommissionStage
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -551,10 +554,6 @@ namespace Polymind.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("occupation");
 
-                    b.Property<Guid?>("OwnerUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("owner_user_id");
-
                     b.Property<DateOnly?>("PassportExpiry")
                         .HasColumnType("date")
                         .HasColumnName("passport_expiry");
@@ -591,9 +590,6 @@ namespace Polymind.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ConsultantId")
                         .HasDatabaseName("ix_candidates_consultant_id");
-
-                    b.HasIndex("OwnerUserId")
-                        .HasDatabaseName("ix_candidates_owner_user_id");
 
                     b.HasIndex("PassportNumber")
                         .HasDatabaseName("ix_candidates_passport_number");

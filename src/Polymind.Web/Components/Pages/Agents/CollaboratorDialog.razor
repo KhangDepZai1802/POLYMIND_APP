@@ -16,8 +16,8 @@
                 <MudTextField @bind-Value="_m.Email" Label="Email" Variant="Variant.Outlined" Margin="Margin.Dense" />
             </MudItem>
             <MudItem xs="12" sm="6">
-                <MudNumericField T="decimal" @bind-Value="_m.CommissionSharePercentage" Label="% hoa hồng CTV" Variant="Variant.Outlined" Margin="Margin.Dense"
-                                 Min="0" Max="100" Step="5" Adornment="Adornment.End" AdornmentText="%" />
+                <MudNumericField T="decimal" @bind-Value="_m.CommissionSharePercentage" Label="% hoa hồng CTV (30-40%)" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                 Min="30" Max="40" Step="1" HelperText="CTV nhận 30-40% hoa hồng của đại lý" Adornment="Adornment.End" AdornmentText="%" />
             </MudItem>
             <MudItem xs="12" sm="6">
                 <MudSwitch T="bool" @bind-Value="_m.IsActive" Color="Color.Success" Label="@(_m.IsActive ? "Đang hoạt động" : "Ngừng hoạt động")" />
@@ -126,7 +126,8 @@
         return result.Succeeded;
     }
 
-    private static decimal ClampPercentage(decimal value) => Math.Clamp(value, 0m, 100m);
+    // CTV chỉ nhận 30-40% hoa hồng đại lý (góp ý Vietgroup).
+    private static decimal ClampPercentage(decimal value) => Math.Clamp(value, 30m, 40m);
 
     private sealed class FormModel
     {
@@ -135,7 +136,7 @@
         public string? Email { get; set; }
         public string? Address { get; set; }
         public string? Note { get; set; }
-        public decimal CommissionSharePercentage { get; set; } = 50m;
+        public decimal CommissionSharePercentage { get; set; } = 35m;
         public bool IsActive { get; set; } = true;
     }
 }

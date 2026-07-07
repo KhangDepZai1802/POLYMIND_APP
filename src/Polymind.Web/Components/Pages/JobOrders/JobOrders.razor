@@ -28,8 +28,11 @@
 }
 else
 {
-    @* Bộ lọc song song: nhóm việc làm + quốc gia (dropdown để gọn trên mobile, giữ icon/cờ trong item) *@
+    @* Bộ lọc song song: tìm kiếm + nhóm việc làm + quốc gia (dropdown để gọn trên mobile, giữ icon/cờ trong item) *@
     <div class="d-flex flex-wrap align-center mb-4" style="gap:12px">
+        <MudTextField @bind-Value="_search" Placeholder="Tìm mã, công ty, nghề, quốc gia..." Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Style="min-width:240px;max-width:320px" Clearable="true" />
         <MudSelect T="JobCategory?" @bind-Value="_category" Label="Phân nhóm" Clearable="true" Placeholder="Tất cả"
                    Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:230px;max-width:280px"
                    ToStringFunc="@(c => c is null ? "" : Labels.Vi(c.Value))">
@@ -148,13 +151,22 @@ else
     private List<(JobCategory Key, int Count)> _categories = new();
     private string? _country;
     private JobCategory? _category;
+    private string _search = "";
 
     protected override async Task OnInitializedAsync() => await Load();
 
     private List<JobOrder> Filtered => _rows
         .Where(j => (_country is null || string.Equals(j.Country, _country, StringComparison.OrdinalIgnoreCase))
-                    && (_category is null || j.Category == _category))
+                    && (_category is null || j.Category == _category)
+                    && (string.IsNullOrWhiteSpace(_search) || MatchesSearch(j, _search.Trim())))
         .ToList();
+
+    private static bool MatchesSearch(JobOrder j, string kw)
+    {
+        bool C(string? s) => !string.IsNullOrWhiteSpace(s) && s.Contains(kw, StringComparison.OrdinalIgnoreCase);
+        return C(j.Code) || C(j.CompanyName) || C(j.Country) || C(j.Field)
+            || (!string.IsNullOrWhiteSpace(j.Country) && C(CountryDisplay.Of(j.Country).Name));
+    }
 
     // Hạn ứng tuyển: còn ≤7 ngày hoặc đã quá hạn → tô đỏ (góp ý Vietgroup).
     private static (string Text, bool Urgent) DeadlineInfo(JobOrder j)

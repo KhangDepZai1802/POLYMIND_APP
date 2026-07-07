@@ -26,7 +26,7 @@
                 <MudTextField @bind-Value="_m.Country" Label="Áp dụng cho quốc gia (để trống = mọi quốc gia)" Variant="Variant.Outlined" Margin="Margin.Dense" />
             </MudItem>
             <MudItem xs="12" sm="6">
-                <MudNumericField @bind-Value="_m.Percentage" Label="% hoa hồng" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="100" Adornment="Adornment.End" AdornmentText="%" />
+                <MudNumericField @bind-Value="_m.Percentage" Label="% hoa hồng" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="100" HelperText="Tổng 3 mốc nên trong khoảng 3-5% số tiền ứng viên đóng" Adornment="Adornment.End" AdornmentText="%" />
             </MudItem>
             <MudItem xs="12" sm="6">
                 <MudNumericField @bind-Value="_m.FixedAmount" Label="Hoặc số tiền cố định (đ)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />

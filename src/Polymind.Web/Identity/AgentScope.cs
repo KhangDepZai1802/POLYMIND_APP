@@ -19,7 +19,9 @@ public readonly record struct AgentScopeInfo(
     string? AgentName,
     bool IsCollaboratorOnly,
     Guid? CollaboratorId,
-    string? CollaboratorName)
+    string? CollaboratorName,
+    bool IsSelfScoped = false,
+    Guid? OwnedCandidateId = null)
 {
     public bool IsPartnerOnly => IsAgentOnly || IsCollaboratorOnly;
 }
@@ -50,15 +52,26 @@ public class AgentScope(
         var hasStaffRole = StaffRoles.Any(user.IsInRole);
         var isAgentOnly = user.IsInRole(RoleNames.Agent) && !hasStaffRole;
         var isCollaboratorOnly = !isAgentOnly && user.IsInRole(RoleNames.Collaborator) && !hasStaffRole;
+        // Phụ huynh / Học viên: chỉ được xem đúng ứng viên gắn với tài khoản (Candidate.OwnerUserId).
+        var isSelfScoped = !isAgentOnly && !isCollaboratorOnly && !hasStaffRole
+            && (user.IsInRole(RoleNames.Parent) || user.IsInRole(RoleNames.Student));
         Guid? agentId = null;
         string? agentName = null;
         Guid? collaboratorId = null;
         string? collaboratorName = null;
+        Guid? ownedCandidateId = null;
 
-        if ((isAgentOnly || isCollaboratorOnly) && Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+        if ((isAgentOnly || isCollaboratorOnly || isSelfScoped) && Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
         {
             await using var db = await dbFactory.CreateDbContextAsync();
-            if (isAgentOnly)
+            if (isSelfScoped)
+            {
+                ownedCandidateId = await db.Candidates
+                    .Where(c => c.OwnerUserId == userId)
+                    .Select(c => (Guid?)c.Id)
+                    .FirstOrDefaultAsync();
+            }
+            else if (isAgentOnly)
             {
                 var agent = await db.Agents
                     .Where(a => a.UserId == userId)
@@ -86,7 +99,8 @@ public class AgentScope(
             }
         }
 
-        var info = new AgentScopeInfo(isAgentOnly, agentId, agentName, isCollaboratorOnly, collaboratorId, collaboratorName);
+        var info = new AgentScopeInfo(isAgentOnly, agentId, agentName, isCollaboratorOnly, collaboratorId, collaboratorName,
+            isSelfScoped, ownedCandidateId);
         _cached = info;
         return info;
     }

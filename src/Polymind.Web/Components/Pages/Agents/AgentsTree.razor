@@ -1,0 +1,112 @@
+@page "/agents/tree"
+@attribute [Authorize(Policy = "agents:read")]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject AgentScope AgentScope
+
+<PageTitle>Sơ đồ cây Đại lý/CTV — POLYMIND</PageTitle>
+
+<PageHeader Eyebrow="HỆ THỐNG" Title="Sơ đồ cây Đại lý & Cộng tác viên" Subtitle="@($"{_agents.Count} đại lý • {_agents.Sum(a => a.Ctvs.Count)} CTV")">
+    <Actions>
+        <MudButton Class="entity-action-button" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Handshake" Href="/agents">
+            Danh sách đại lý
+        </MudButton>
+    </Actions>
+</PageHeader>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Class="pa-4" Elevation="1">
+        <div class="org-tree">
+            <div class="org-node org-company">
+                <MudIcon Icon="@Icons.Material.Filled.Business" Class="mr-2" />
+                <b>Công ty POLYMIND</b>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary ml-2">@_agents.Count đại lý</MudText>
+            </div>
+            <div class="org-children">
+                @foreach (var a in _agents)
+                {
+                    <div class="org-branch">
+                        <div class="org-node org-agent" style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/agents/{a.Id}"))">
+                            <MudIcon Icon="@Icons.Material.Filled.Storefront" Color="Color.Primary" Size="Size.Small" class="mr-2" />
+                            <b>@a.Name</b>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Class="ml-2">@a.Code</MudChip>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary ml-2">@a.Ctvs.Count CTV • @a.CandidateCount ứng viên</MudText>
+                        </div>
+                        @if (a.Ctvs.Count > 0)
+                        {
+                            <div class="org-children">
+                                @foreach (var c in a.Ctvs)
+                                {
+                                    <div class="org-node org-ctv">
+                                        <MudIcon Icon="@Icons.Material.Filled.Diversity3" Color="Color.Secondary" Size="Size.Small" class="mr-2" />
+                                        <span>CTV-@c.Name</span>
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Class="ml-2">@c.Code</MudChip>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary ml-2">@c.CandidateCount ứng viên</MudText>
+                                        @if (!c.IsActive)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-1">Ngừng</MudChip>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </MudPaper>
+}
+
+<style>
+    .org-tree { --org-line: var(--mud-palette-lines-default); }
+    .org-children { margin-left: 20px; border-left: 2px solid var(--org-line); padding-left: 16px; }
+    .org-node { display: flex; align-items: center; flex-wrap: wrap; padding: 6px 8px; border-radius: 8px; }
+    .org-branch { margin-top: 6px; }
+    .org-company { background: var(--mud-palette-primary-hover); font-size: 1.05rem; }
+    .org-agent:hover { background: var(--mud-palette-action-default-hover); }
+</style>
+
+@code {
+    private record CtvNode(Guid Id, string Name, string Code, bool IsActive, int CandidateCount);
+    private record AgentNode(Guid Id, string Name, string Code, int CandidateCount, List<CtvNode> Ctvs);
+
+    private List<AgentNode> _agents = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var scope = await AgentScope.GetAsync();
+        if (scope.IsPartnerOnly || scope.IsSelfScoped) { Nav.NavigateTo("/agents"); return; }
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        _loading = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var agents = await db.Agents.AsNoTracking().OrderBy(a => a.Code).Select(a => new { a.Id, a.Name, a.Code }).ToListAsync();
+        var ctvs = await db.Collaborators.AsNoTracking().OrderBy(c => c.Code)
+            .Select(c => new { c.Id, c.FullName, c.Code, c.AgentId, c.IsActive }).ToListAsync();
+
+        var candByAgent = await db.Candidates.AsNoTracking().Where(c => c.AgentId != null)
+            .GroupBy(c => c.AgentId!.Value).Select(g => new { AgentId = g.Key, Count = g.Count() }).ToListAsync();
+        var candByCtv = await db.Candidates.AsNoTracking().Where(c => c.CollaboratorId != null)
+            .GroupBy(c => c.CollaboratorId!.Value).Select(g => new { CtvId = g.Key, Count = g.Count() }).ToListAsync();
+        var agentCand = candByAgent.ToDictionary(x => x.AgentId, x => x.Count);
+        var ctvCand = candByCtv.ToDictionary(x => x.CtvId, x => x.Count);
+
+        _agents = agents.Select(a => new AgentNode(
+            a.Id, a.Name, a.Code,
+            agentCand.GetValueOrDefault(a.Id),
+            ctvs.Where(c => c.AgentId == a.Id)
+                .Select(c => new CtvNode(c.Id, c.FullName, c.Code, c.IsActive, ctvCand.GetValueOrDefault(c.Id)))
+                .ToList()))
+            .ToList();
+        _loading = false;
+    }
+}

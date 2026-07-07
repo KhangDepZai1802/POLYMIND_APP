@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = "candidates:read")]
 @using Polymind.Web.Components.Pages.Loans
 @using Polymind.Web.Components.Pages.Ai
+@using Polymind.Web.Components.Pages.Training
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
 @inject IDialogService DialogService
@@ -28,6 +29,10 @@ else
         <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/candidates"))">Quay lại</MudButton>
         <div class="d-flex flex-wrap" style="gap:8px">
             <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.AutoAwesome" OnClick="OpenAiAnalysis">Phân tích AI</MudButton>
+            @if (_canManageStudentAccount)
+            {
+                <MudButton Class="entity-action-button" Variant="Variant.Outlined" Color="Color.Tertiary" StartIcon="@Icons.Material.Filled.School" OnClick="OpenStudentAccount">Tài khoản Học viên</MudButton>
+            }
             @if (_canEditCandidateProfile)
             {
                 <MudButton Class="entity-action-button" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenEdit">Sửa thông tin</MudButton>
@@ -104,14 +109,21 @@ else
                     <MudAvatar Color="Color.Primary" Size="Size.Large" Class="mr-3">@_candidate.FullName[..1]</MudAvatar>
                     <div>
                         <MudText Typo="Typo.h6"><b>@_candidate.FullName</b></MudText>
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@_candidate.Code</MudText>
+                        <div class="d-flex align-center" style="gap:6px">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@_candidate.Code</MudText>
+                            @{ var _titled = PersonTitle.IsTitled(_cjo?.CurrentStep); var _student = PersonTitle.IsStudent(_cjo?.CurrentStep, _jobCategory); }
+                            <MudChip T="string" Size="Size.Small" Color="@(_titled ? (_student ? Color.Info : Color.Success) : Color.Default)"
+                                     Icon="@(!_titled ? Icons.Material.Filled.PersonOutline : _student ? Icons.Material.Filled.School : Icons.Material.Filled.Badge)">
+                                @PersonTitle.Of(_cjo?.CurrentStep, _jobCategory)
+                            </MudChip>
+                        </div>
                     </div>
                 </div>
                 <MudDivider Class="mb-3" />
 
                 <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Thông tin cá nhân</b></MudText>
                 <MudGrid>
-                    @Field("Số điện thoại", _candidate.Phone)
+                    @Field("Số điện thoại", MaskPhone(_candidate.Phone))
                     @Field("Giới tính", _candidate.Gender is null ? null : Labels.Vi(_candidate.Gender.Value))
                     @Field("Ngày sinh", _candidate.Dob?.ToString("dd/MM/yyyy"))
                     @Field("Hôn nhân", _candidate.MaritalStatus is null ? null : Labels.Vi(_candidate.MaritalStatus.Value))
@@ -139,7 +151,7 @@ else
                     <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Liên hệ khẩn cấp</b></MudText>
                     <MudGrid>
                         @Field("Người liên hệ", _candidate.EmergencyContactName)
-                        @Field("SĐT", _candidate.EmergencyContactPhone)
+                        @Field("SĐT", MaskPhone(_candidate.EmergencyContactPhone))
                         @Field("Quan hệ", _candidate.EmergencyContactRelation)
                     </MudGrid>
                 }
@@ -154,7 +166,7 @@ else
                     <MudGrid>
                         @Field("Họ tên", _candidate.GuardianName)
                         @Field("Quan hệ", _candidate.GuardianRelation)
-                        @Field("SĐT", _candidate.GuardianPhone)
+                        @Field("SĐT", MaskPhone(_candidate.GuardianPhone))
                         @Field("CCCD", _candidate.GuardianCccd)
                         @Field("Nghề nghiệp", _candidate.GuardianOccupation)
                     </MudGrid>
@@ -482,6 +494,59 @@ else
                     }
                 </MudPaper>
             }
+
+            @if (_canReadTraining)
+            {
+                @* Thẻ tóm tắt — chi tiết & phiếu đánh giá nằm ở module Đào tạo (/training). *@
+                <MudPaper Class="pa-4 mt-4" Elevation="1">
+                    <div class="d-flex justify-space-between align-center mb-3">
+                        <div class="d-flex align-center" style="gap:8px">
+                            <MudIcon Icon="@Icons.Material.Filled.School" Color="Color.Primary" />
+                            <MudText Typo="Typo.subtitle1"><b>Đào tạo</b></MudText>
+                        </div>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" EndIcon="@Icons.Material.Filled.ChevronRight"
+                                   Href="@($"/training/{Id}")">Xem chi tiết đào tạo</MudButton>
+                    </div>
+
+                    @foreach (var t in new[] { _trainingLang, _trainingVoc })
+                    {
+                        <div class="mb-3">
+                            <MudText Typo="Typo.body2"><MudIcon Icon="@Labels.IconOf(t.Track)" Size="Size.Small" Class="mr-1" /><b>@Labels.Vi(t.Track)</b></MudText>
+                            @if (t.Enrolled)
+                            {
+                                <MudProgressLinear Color="Color.Success" Value="t.Progress" Class="my-1" Style="height:8px;border-radius:4px" />
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    @t.Progress% @(string.IsNullOrWhiteSpace(t.Level) ? "" : $"• {t.Level}")
+                                </MudText>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Chưa học / đơn hàng không yêu cầu.</MudText>
+                            }
+                        </div>
+                    }
+
+                    <MudDivider Class="my-2" />
+                    @{ var _lastEval = _trainingEvals.FirstOrDefault(); }
+                    @if (_lastEval is null)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Chưa có báo cáo/phiếu đánh giá nào. Vào module Đào tạo để ghi nhận.</MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Class="mb-1"><b>Báo cáo gần nhất</b> — @_trainingEvals.Count phiếu</MudText>
+                        <MudPaper Class="pa-2" Elevation="0" Outlined="true">
+                            <MudText Typo="Typo.caption"><b>@_lastEval.Date.ToString("dd/MM/yyyy")</b>@(_lastEval.Track is null ? " • Chung" : $" • {Labels.Vi(_lastEval.Track.Value)}")</MudText>
+                            <div class="d-flex flex-wrap mt-1" style="gap:4px">
+                                <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(_lastEval.Attendance)">Chuyên cần: @Labels.Vi(_lastEval.Attendance)</MudChip>
+                                <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(_lastEval.Professional)">Chuyên môn: @Labels.Vi(_lastEval.Professional)</MudChip>
+                                <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(_lastEval.Discipline)">Kỷ luật: @Labels.Vi(_lastEval.Discipline)</MudChip>
+                                <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(_lastEval.Financial)">Tài chính: @Labels.Vi(_lastEval.Financial)</MudChip>
+                            </div>
+                        </MudPaper>
+                    }
+                </MudPaper>
+            }
         </MudItem>
 
         <MudItem xs="12" md="7">
@@ -743,6 +808,7 @@ else
     private Candidate? _candidate;
     private CandidateJobOrder? _cjo;
     private string? _country;
+    private JobCategory? _jobCategory;
     private Guid? _consultantId;
     private string _consultantName = "—";
     private Guid? _collaboratorId;
@@ -784,6 +850,19 @@ else
     private decimal? _loanInterestRate;
     private DateOnly? _loanDisbursedDate;
     private string? _loanNote;
+
+    private bool _canReadTraining;
+    private bool _canManageStudentAccount;
+    private bool _maskPhone; // CTV không được xem SĐT ứng viên (góp ý Vietgroup)
+    private TrainingTrackView _trainingLang = new(TrainingTrack.Language, false, null, 0);
+    private TrainingTrackView _trainingVoc = new(TrainingTrack.Vocational, false, null, 0);
+    private List<TrainingEvalView> _trainingEvals = new();
+
+    private record TrainingTrackView(TrainingTrack Track, bool Enrolled, string? Level, int Progress);
+    private record TrainingEvalView(Guid Id, TrainingTrack? Track, DateOnly Date,
+        EvaluationRating Attendance, EvaluationRating Professional, EvaluationRating Discipline, EvaluationRating Financial,
+        string? Note, List<TrainingAttachmentView> Attachments);
+    private record TrainingAttachmentView(string FileName, string? ContentType, string? Url);
 
     private List<JobOrder> _jobOrders = new();
     private List<CandidatePaymentRow> _payments = new();
@@ -848,6 +927,8 @@ else
         _canReadLoan = await HasPermission("loans:read");
         _canUpdateLoan = await HasPermission("loans:update") && BusinessRoleAccess.CanEditLoan(authState.User);
         _canDeleteLoan = await HasPermission("loans:delete") && BusinessRoleAccess.CanDeleteLoan(authState.User);
+        _canReadTraining = await HasPermission("training:read");
+        _canManageStudentAccount = await HasPermission("users:create");
         _canAssignJobOrder = WorkflowStepAccess.CanAssignJobOrder(authState.User);
         await Load();
     }
@@ -861,12 +942,14 @@ else
         // Đại lý chỉ được xem ứng viên do mình giới thiệu (spec §2.8).
         var scope = await AgentScope.GetAsync();
         if ((scope.IsAgentOnly && _candidate.AgentId != scope.AgentId)
-            || (scope.IsCollaboratorOnly && _candidate.CollaboratorId != scope.CollaboratorId))
+            || (scope.IsCollaboratorOnly && _candidate.CollaboratorId != scope.CollaboratorId)
+            || (scope.IsSelfScoped && scope.OwnedCandidateId != _candidate.Id))
         {
             _accessDenied = true;
             _candidate = null;
             return;
         }
+        _maskPhone = scope.IsCollaboratorOnly;
         // Người phụ trách: Tư vấn viên (tài khoản role consultant) + Cộng tác viên (nguồn giới thiệu).
         _consultantId = _candidate.ConsultantId;
         if (_consultantId is not null)
@@ -897,11 +980,17 @@ else
             _hasOpenLoan = loan is not null && loan.Status != LoanStatus.Settled;
         }
 
+        if (_canReadTraining)
+            await LoadTrainingAsync(db);
+
         _cjo = await db.CandidateJobOrders.Where(j => j.CandidateId == Id)
             .OrderByDescending(j => j.CreatedAt).FirstOrDefaultAsync();
         if (_cjo is not null)
         {
-            _country = await db.JobOrders.Where(j => j.Id == _cjo.JobOrderId).Select(j => j.Country).FirstOrDefaultAsync();
+            var jobMeta = await db.JobOrders.Where(j => j.Id == _cjo.JobOrderId)
+                .Select(j => new { j.Country, j.Category }).FirstOrDefaultAsync();
+            _country = jobMeta?.Country;
+            _jobCategory = jobMeta?.Category;
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
             _canAdvanceWorkflow = WorkflowStepAccess.CanAdvance(authState.User, _cjo.CurrentStep);
             _workflowOwnerLabel = WorkflowStepAccess.OwnerLabel(_cjo.CurrentStep);
@@ -1040,6 +1129,63 @@ else
             Snackbar.Add("Đã cập nhật hồ sơ vay", Severity.Success);
             await Load();
         }
+    }
+
+    private async Task LoadTrainingAsync(ApplicationDbContext db)
+    {
+        var records = await db.TrainingRecords.AsNoTracking()
+            .Where(r => r.CandidateId == Id).ToListAsync();
+        TrainingTrackView ToView(TrainingTrack t)
+        {
+            var r = records.FirstOrDefault(x => x.Track == t);
+            return r is null ? new TrainingTrackView(t, false, null, 0)
+                             : new TrainingTrackView(t, r.IsEnrolled, r.LevelLabel, r.ProgressPercent);
+        }
+        _trainingLang = ToView(TrainingTrack.Language);
+        _trainingVoc = ToView(TrainingTrack.Vocational);
+
+        var evals = await db.TrainingEvaluations.AsNoTracking()
+            .Where(e => e.CandidateId == Id)
+            .OrderByDescending(e => e.EvaluationDate).ThenByDescending(e => e.CreatedAt)
+            .Take(20).ToListAsync();
+
+        var views = new List<TrainingEvalView>();
+        foreach (var e in evals)
+        {
+            var atts = new List<TrainingAttachmentView>();
+            if (!string.IsNullOrWhiteSpace(e.AttachmentsJson))
+            {
+                try
+                {
+                    var items = System.Text.Json.JsonSerializer.Deserialize<List<TrainingEvaluationDialog.AttachmentInfo>>(e.AttachmentsJson) ?? new();
+                    foreach (var a in items)
+                    {
+                        string? url = null;
+                        try { url = await DocumentStorage.GetDownloadUrlAsync(a.ObjectKey); } catch { url = null; }
+                        atts.Add(new TrainingAttachmentView(a.FileName, a.ContentType, url));
+                    }
+                }
+                catch { /* JSON hỏng → bỏ qua minh chứng */ }
+            }
+            views.Add(new TrainingEvalView(e.Id, e.Track, e.EvaluationDate,
+                e.Attendance, e.Professional, e.Discipline, e.Financial, e.Note, atts));
+        }
+        _trainingEvals = views;
+    }
+
+    private async Task OpenStudentAccount()
+    {
+        if (!_canManageStudentAccount || _candidate is null) return;
+        var parameters = new DialogParameters<StudentAccountDialog>
+        {
+            { x => x.CandidateId, Id },
+            { x => x.CandidateCode, _candidate.Code },
+            { x => x.CandidateName, _candidate.FullName },
+        };
+        var dialog = await DialogService.ShowAsync<StudentAccountDialog>("Tài khoản Học viên", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+            await Load();
     }
 
     private async Task ShowConsultant(Guid id)
@@ -1393,7 +1539,9 @@ else
             cjo.UpdatedAt = DateTimeOffset.UtcNow;
             if (next == WorkflowStep.Completed) cjo.Status = CandidateJobOrderStatus.Completed;
 
-            var newCommissions = await EnsureCommissionsAsync(db, cjo, _candidate?.AgentId, actorId);
+            // Hoa hồng nay phát sinh theo GIAI ĐOẠN ĐÓNG TIỀN (xem CommissionEngine) — gọi ở đây chỉ
+            // tạo lát cho các giai đoạn ứng viên ĐÃ đóng, tránh double so với trigger ở trang Tài chính.
+            var newCommissions = await Polymind.Web.Commissions.CommissionEngine.EnsureAsync(db, cjo.CandidateId, actorId);
             db.AddAudit(actorId, "advance_step", "candidate_job_orders", cjo.Id, new
             {
                 CurrentStep = completed,
@@ -1722,72 +1870,12 @@ else
         await Load();
     }
 
-    // Mốc hoa hồng ↔ bước workflow tương ứng (mục 8.3).
-    private static readonly (CommissionMilestone Milestone, WorkflowStep Step)[] CommissionMilestones =
+    /// <summary>Ẩn SĐT với CTV: chỉ hiện 3 số cuối (góp ý Vietgroup — tránh lộ thông tin/cạnh tranh).</summary>
+    private string? MaskPhone(string? phone)
     {
-        (CommissionMilestone.Deposit, WorkflowStep.Deposit),
-        (CommissionMilestone.Selected, WorkflowStep.Selected),
-        (CommissionMilestone.Departure, WorkflowStep.Departure),
-    };
-
-    /// <summary>Tự sinh hoa hồng cho các mốc đã đạt (nếu ứng viên có đại lý và có cấu hình). Idempotent.</summary>
-    private static async Task<int> EnsureCommissionsAsync(ApplicationDbContext db, CandidateJobOrder cjo, Guid? agentId, Guid actorId)
-    {
-        if (agentId is null) return 0;
-        var jo = await db.JobOrders.FirstOrDefaultAsync(j => j.Id == cjo.JobOrderId);
-        if (jo is null) return 0;
-        var baseAmount = jo.CostAmount ?? 0m;
-        var configs = await db.AgentCommissionConfigs.Where(c => c.AgentId == agentId.Value).ToListAsync();
-
-        var created = 0;
-        foreach (var (milestone, step) in CommissionMilestones)
-        {
-            if ((int)cjo.CurrentStep < (int)step) continue;
-
-            // Không lọc theo JobOrderId: ứng viên đổi đơn ở bước 7.5 không được phát sinh lại
-            // mốc hoa hồng đã hưởng (đặt cọc/trúng tuyển chỉ tính 1 lần cho mỗi ứng viên).
-            var exists = await db.AgentCommissions.AnyAsync(c =>
-                c.AgentId == agentId.Value && c.CandidateId == cjo.CandidateId &&
-                c.Milestone == milestone);
-            if (exists) continue;
-
-            // Ưu tiên cấu hình theo đúng đơn hàng / quốc gia, rồi tới cấu hình chung.
-            var cfg = configs.Where(c => c.Milestone == milestone)
-                .OrderByDescending(c => c.JobOrderId == cjo.JobOrderId)
-                .ThenByDescending(c => c.Country == jo.Country)
-                .FirstOrDefault();
-            if (cfg is null) continue;
-
-            var amount = cfg.Percentage.HasValue
-                ? baseAmount * cfg.Percentage.Value / 100m
-                : (cfg.FixedAmount ?? 0m);
-
-            var commission = new AgentCommission
-            {
-                AgentId = agentId.Value,
-                CandidateId = cjo.CandidateId,
-                JobOrderId = cjo.JobOrderId,
-                ConfigId = cfg.Id,
-                Milestone = milestone,
-                BaseAmount = baseAmount,
-                CommissionAmount = amount,
-                Status = CommissionStatus.Pending,
-            };
-            db.AgentCommissions.Add(commission);
-            db.AddAudit(actorId, "create", "agent_commissions", commission.Id, null, new
-            {
-                commission.AgentId,
-                commission.CandidateId,
-                commission.JobOrderId,
-                commission.ConfigId,
-                commission.Milestone,
-                commission.BaseAmount,
-                commission.CommissionAmount,
-                commission.Status,
-            });
-            created++;
-        }
-        return created;
+        if (!_maskPhone || string.IsNullOrWhiteSpace(phone)) return phone;
+        var digits = phone.Trim();
+        return digits.Length <= 3 ? "•••" : $"••• ••• {digits[^3..]}";
     }
 
     private async Task<bool> HasPermission(string permission)

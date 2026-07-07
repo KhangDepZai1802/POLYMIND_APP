@@ -42,6 +42,7 @@ public class Candidate : BaseEntity
     public Guid? AgentId { get; set; }
     public Guid? CollaboratorId { get; set; } // CTV trực tiếp giới thiệu (thuộc đại lý AgentId) — chỉ ứng viên do CTV giới thiệu
     public Guid? ConsultantId { get; set; } // Tư vấn viên theo sát ứng viên (tài khoản role consultant) — 1 TVV : nhiều ứng viên
+    public Guid? OwnerUserId { get; set; } // Tài khoản Học viên (self-only) gắn với chính ứng viên này; null = chưa gắn
     public Guid CreatedBy { get; set; }
 
     public ICollection<CandidateDocument> Documents { get; set; } = new List<CandidateDocument>();

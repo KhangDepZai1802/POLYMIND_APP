@@ -11,7 +11,9 @@ public sealed class MinioDocumentStorage(IOptions<MinioStorageOptions> options) 
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".pdf", ".jpg", ".jpeg", ".png", ".webp",
-        ".doc", ".docx", ".xls", ".xlsx"
+        ".doc", ".docx", ".xls", ".xlsx",
+        // Tin nhắn thoại (ghi âm)
+        ".webm", ".ogg", ".mp3", ".m4a", ".wav"
     };
 
     private readonly MinioStorageOptions _options = options.Value;
@@ -46,6 +48,44 @@ public sealed class MinioDocumentStorage(IOptions<MinioStorageOptions> options) 
             BuildStoredFileName(file));
 
         return await UploadObjectAsync(objectKey, file, cancellationToken);
+    }
+
+    public async Task<UploadedDocumentObject> UploadMessageAudioAsync(
+        Guid senderId,
+        Guid recipientId,
+        byte[] data,
+        string contentType,
+        string extension,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateOptions();
+        if (data is null || data.Length == 0)
+            throw new InvalidOperationException("Ghi âm rỗng.");
+        if (data.Length > _options.MaxUploadBytes)
+            throw new InvalidOperationException($"Ghi âm vượt quá giới hạn {_options.MaxUploadBytes / 1024 / 1024:N0} MB.");
+
+        var ext = extension.StartsWith('.') ? extension.ToLowerInvariant() : "." + extension.ToLowerInvariant();
+        if (!AllowedExtensions.Contains(ext))
+            throw new InvalidOperationException("Định dạng ghi âm không hỗ trợ.");
+
+        var storedName = $"{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}{ext}";
+        var objectKey = string.Join('/', "messages", senderId.ToString("N"), recipientId.ToString("N"), storedName);
+        var displayName = $"ghi-am-{DateTime.UtcNow:yyyyMMdd-HHmmss}{ext}";
+        var ct = string.IsNullOrWhiteSpace(contentType) ? "audio/webm" : contentType;
+
+        var client = BuildClient();
+        await EnsureBucketAsync(client, cancellationToken);
+
+        using var stream = new MemoryStream(data);
+        var args = new PutObjectArgs()
+            .WithBucket(_options.Bucket)
+            .WithObject(objectKey)
+            .WithStreamData(stream)
+            .WithObjectSize(data.Length)
+            .WithContentType(ct);
+
+        await client.PutObjectAsync(args, cancellationToken);
+        return new UploadedDocumentObject(objectKey, displayName, data.Length, ct);
     }
 
     private async Task<UploadedDocumentObject> UploadObjectAsync(

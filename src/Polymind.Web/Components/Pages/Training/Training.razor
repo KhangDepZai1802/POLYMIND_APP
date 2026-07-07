@@ -1,0 +1,225 @@
+@page "/training"
+@attribute [Authorize(Policy = "training:read")]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject AgentScope AgentScope
+
+<PageTitle>Đào tạo — POLYMIND</PageTitle>
+
+<PageHeader Eyebrow="ĐÀO TẠO" Title="Quản lý Đào tạo" Subtitle="@($"{_rows.Count} học viên/lao động đang trong quá trình đào tạo")" />
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudGrid Class="mb-4">
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Đang đào tạo</MudText>
+                <MudText Typo="Typo.h5" Color="Color.Primary"><b>@_rows.Count</b></MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Tiến độ trung bình</MudText>
+                <MudText Typo="Typo.h5" Color="Color.Success"><b>@($"{_avgProgress:0}%")</b></MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Đã hoàn tất đào tạo</MudText>
+                <MudText Typo="Typo.h5" Color="Color.Success"><b>@_rows.Count(r => r.OverallProgress >= 100)</b></MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Có phiếu đánh giá</MudText>
+                <MudText Typo="Typo.h5" Color="Color.Info"><b>@_rows.Count(r => r.EvaluationCount > 0)</b></MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudPaper Elevation="1" Class="pa-4">
+        <MudTextField @bind-Value="_search" Placeholder="Tìm tên, mã học viên..." Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" />
+
+        @if (!Filtered.Any())
+        {
+            <MudAlert Severity="Severity.Info" Dense="true">Chưa có học viên/lao động nào trong quá trình đào tạo.</MudAlert>
+        }
+        else
+        {
+            @* Desktop: bảng đầy đủ *@
+            <MudHidden Breakpoint="Breakpoint.SmAndDown">
+                <MudSimpleTable Hover="true" Dense="true" Striped="true" Class="cursor-pointer">
+                    <thead>
+                        <tr>
+                            <th>Mã</th><th>Họ tên</th><th>Danh xưng</th>
+                            <th style="min-width:150px">@Labels.Vi(TrainingTrack.Language)</th>
+                            <th style="min-width:150px">@Labels.Vi(TrainingTrack.Vocational)</th>
+                            <th>Tiến độ chung</th><th>Phiếu gần nhất</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in Filtered)
+                        {
+                            <tr style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/training/{r.Id}"))">
+                                <td>@r.ShortCode</td>
+                                <td>@r.FullName</td>
+                                <td>@TitleChip(r)</td>
+                                <td>@TrackCell(r.LanguageEnrolled, r.LanguageProgress)</td>
+                                <td>@TrackCell(r.VocationalEnrolled, r.VocationalProgress)</td>
+                                <td style="min-width:120px">
+                                    <div class="d-flex align-center">
+                                        <MudProgressLinear Color="Color.Primary" Value="@r.OverallProgress" Class="flex-grow-1 mr-2" Style="height:8px" Rounded="true" />
+                                        <MudText Typo="Typo.caption">@($"{r.OverallProgress:0}%")</MudText>
+                                    </div>
+                                </td>
+                                <td>
+                                    @if (r.LastEvaluation is DateOnly d)
+                                    {
+                                        <MudText Typo="Typo.caption">@d.ToString("dd/MM/yyyy") <span class="mud-text-secondary">(@r.EvaluationCount)</span></MudText>
+                                    }
+                                    else { <span class="mud-text-secondary">—</span> }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudHidden>
+
+            @* Mobile: thẻ *@
+            <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+                @foreach (var r in Filtered)
+                {
+                    <MudPaper Class="mobile-card pa-3 mt-2" Elevation="0" Style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/training/{r.Id}"))">
+                        <div class="d-flex justify-space-between align-center" style="gap:8px">
+                            <div style="min-width:0">
+                                <MudText Typo="Typo.subtitle2" Style="font-weight:600">@r.FullName</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@r.ShortCode</MudText>
+                            </div>
+                            @TitleChip(r)
+                        </div>
+                        <div class="mt-2">@TrackCell(r.LanguageEnrolled, r.LanguageProgress, Labels.Vi(TrainingTrack.Language))</div>
+                        <div class="mt-1">@TrackCell(r.VocationalEnrolled, r.VocationalProgress, Labels.Vi(TrainingTrack.Vocational))</div>
+                        <div class="d-flex align-center mt-2" style="gap:8px">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="min-width:70px">Chung</MudText>
+                            <MudProgressLinear Color="Color.Primary" Value="@r.OverallProgress" Class="flex-grow-1" Style="height:8px" Rounded="true" />
+                            <MudText Typo="Typo.caption">@($"{r.OverallProgress:0}%")</MudText>
+                        </div>
+                    </MudPaper>
+                }
+            </MudHidden>
+        }
+    </MudPaper>
+}
+
+@code {
+    private record Row(Guid Id, string ShortCode, string FullName, WorkflowStep? Step, JobCategory? Category,
+        bool LanguageEnrolled, int LanguageProgress, bool VocationalEnrolled, int VocationalProgress,
+        double OverallProgress, int EvaluationCount, DateOnly? LastEvaluation);
+
+    private List<Row> _rows = new();
+    private string _search = "";
+    private bool _loading = true;
+    private double _avgProgress;
+
+    private IEnumerable<Row> Filtered => _rows.Where(r =>
+        string.IsNullOrWhiteSpace(_search)
+        || r.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase)
+        || r.ShortCode.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private static string Short(string code)
+    {
+        var i = code.LastIndexOf('-');
+        return i >= 0 && i < code.Length - 1 ? "#" + code[(i + 1)..] : code;
+    }
+
+    private RenderFragment TitleChip(Row r) =>@<MudChip T="string" Size="Size.Small"
+        Color="@(PersonTitle.IsTitled(r.Step) ? (PersonTitle.IsStudent(r.Step, r.Category) ? Color.Info : Color.Success) : Color.Default)"
+        Icon="@(!PersonTitle.IsTitled(r.Step) ? Icons.Material.Filled.PersonOutline : PersonTitle.IsStudent(r.Step, r.Category) ? Icons.Material.Filled.School : Icons.Material.Filled.Badge)">
+        @PersonTitle.Of(r.Step, r.Category)
+    </MudChip>;
+
+    private RenderFragment TrackCell(bool enrolled, int progress, string? label = null) =>@<div>
+        @if (enrolled)
+        {
+            <div class="d-flex align-center" style="gap:8px">
+                @if (label is not null) { <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="min-width:70px">@label</MudText> }
+                <MudProgressLinear Color="Color.Success" Value="@progress" Class="flex-grow-1" Style="height:8px;min-width:60px" Rounded="true" />
+                <MudText Typo="Typo.caption">@progress%</MudText>
+            </div>
+        }
+        else
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">@(label is null ? "—" : $"{label}: không học")</MudText>
+        }
+    </div>;
+
+    private async Task Load()
+    {
+        _loading = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var scope = await AgentScope.GetAsync();
+
+        var query = db.Candidates.AsQueryable();
+        if (scope.IsAgentOnly) query = query.Where(c => c.AgentId == scope.AgentId);
+        else if (scope.IsCollaboratorOnly) query = query.Where(c => c.CollaboratorId == scope.CollaboratorId);
+        else if (scope.IsSelfScoped) query = query.Where(c => c.OwnerUserId != null && c.Id == scope.OwnedCandidateId);
+
+        var candidates = await query
+            .Select(c => new
+            {
+                c.Id, c.Code, c.FullName,
+                Cjo = c.JobOrders.OrderByDescending(j => j.CreatedAt).FirstOrDefault()
+            })
+            .ToListAsync();
+        var candIds = candidates.Select(c => c.Id).ToList();
+
+        var records = await db.TrainingRecords.AsNoTracking()
+            .Where(r => candIds.Contains(r.CandidateId)).ToListAsync();
+        var recByCand = records.GroupBy(r => r.CandidateId).ToDictionary(g => g.Key, g => g.ToList());
+
+        var evalAgg = await db.TrainingEvaluations.AsNoTracking()
+            .Where(e => candIds.Contains(e.CandidateId))
+            .GroupBy(e => e.CandidateId)
+            .Select(g => new { CandidateId = g.Key, Count = g.Count(), Last = g.Max(e => e.EvaluationDate) })
+            .ToDictionaryAsync(x => x.CandidateId);
+
+        var jobCategories = await db.JobOrders.AsNoTracking()
+            .ToDictionaryAsync(j => j.Id, j => j.Category);
+
+        var rows = new List<Row>();
+        foreach (var c in candidates)
+        {
+            var recs = recByCand.GetValueOrDefault(c.Id) ?? new();
+            var lang = recs.FirstOrDefault(r => r.Track == TrainingTrack.Language);
+            var voc = recs.FirstOrDefault(r => r.Track == TrainingTrack.Vocational);
+            var agg = evalAgg.GetValueOrDefault(c.Id);
+            var step = c.Cjo?.CurrentStep;
+
+            // "Đang đào tạo": có bản ghi đào tạo, có phiếu đánh giá, hoặc đang ở bước Học tiếng/định hướng/nghề.
+            var inTraining = recs.Count > 0 || agg is not null || step == WorkflowStep.Orientation;
+            if (!inTraining) continue;
+
+            var enrolledProgress = new List<int>();
+            if (lang?.IsEnrolled == true) enrolledProgress.Add(lang.ProgressPercent);
+            if (voc?.IsEnrolled == true) enrolledProgress.Add(voc.ProgressPercent);
+            var overall = enrolledProgress.Count > 0 ? enrolledProgress.Average() : 0;
+
+            rows.Add(new Row(c.Id, Short(c.Code), c.FullName, step,
+                c.Cjo is null ? null : jobCategories.GetValueOrDefault(c.Cjo.JobOrderId),
+                lang?.IsEnrolled ?? false, lang?.ProgressPercent ?? 0,
+                voc?.IsEnrolled ?? false, voc?.ProgressPercent ?? 0,
+                overall, agg?.Count ?? 0, agg?.Last));
+        }
+
+        _rows = rows.OrderByDescending(r => r.LastEvaluation ?? DateOnly.MinValue).ThenBy(r => r.FullName).ToList();
+        _avgProgress = _rows.Count > 0 ? _rows.Average(r => r.OverallProgress) : 0;
+        _loading = false;
+    }
+}

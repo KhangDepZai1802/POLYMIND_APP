@@ -1,0 +1,131 @@
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IAuthorizationService AuthorizationService
+@inject IDocumentStorage DocumentStorage
+@inject ISnackbar Snackbar
+
+@* Phiếu đánh giá học viên định kỳ theo 4 tiêu chí + minh chứng (góp ý Vietgroup). *@
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="TrainingTrack?" @bind-Value="_track" Label="Mảng đánh giá" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                    <MudSelectItem T="TrainingTrack?" Value="@((TrainingTrack?)null)">Đánh giá chung</MudSelectItem>
+                    <MudSelectItem T="TrainingTrack?" Value="@((TrainingTrack?)TrainingTrack.Language)">@Labels.Vi(TrainingTrack.Language)</MudSelectItem>
+                    <MudSelectItem T="TrainingTrack?" Value="@((TrainingTrack?)TrainingTrack.Vocational)">@Labels.Vi(TrainingTrack.Vocational)</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_date" Label="Ngày đánh giá" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+
+            <MudItem xs="12" sm="6">@RatingSelect("Chuyên cần", _attendance, v => _attendance = v)</MudItem>
+            <MudItem xs="12" sm="6">@RatingSelect("Chuyên môn", _professional, v => _professional = v)</MudItem>
+            <MudItem xs="12" sm="6">@RatingSelect("Kỷ luật", _discipline, v => _discipline = v)</MudItem>
+            <MudItem xs="12" sm="6">@RatingSelect("Tài chính", _financial, v => _financial = v)</MudItem>
+
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_note" Label="Nhận xét" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudText Typo="Typo.body2" Class="mb-1"><b>Minh chứng</b> (ảnh/PDF tiến độ bài học)</MudText>
+                <InputFile OnChange="OnFilesSelected" accept="image/*,application/pdf" multiple />
+                @if (_files.Count > 0)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">Đã chọn @_files.Count tệp: @string.Join(", ", _files.Select(f => f.Name))</MudText>
+                }
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Hủy</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="_saving" OnClick="SaveAsync">Lưu phiếu</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid CandidateId { get; set; }
+
+    private TrainingTrack? _track;
+    private DateTime? _date = DateTime.Today;
+    private EvaluationRating _attendance = EvaluationRating.Good;
+    private EvaluationRating _professional = EvaluationRating.Good;
+    private EvaluationRating _discipline = EvaluationRating.Good;
+    private EvaluationRating _financial = EvaluationRating.Good;
+    private string? _note;
+    private List<IBrowserFile> _files = new();
+    private bool _saving;
+
+    private void OnFilesSelected(InputFileChangeEventArgs args)
+    {
+        _files = args.GetMultipleFiles(maximumFileCount: 10).ToList();
+    }
+
+    private RenderFragment RatingSelect(string label, EvaluationRating value, Action<EvaluationRating> setter) =>@<MudSelect T="EvaluationRating" Value="value" ValueChanged="setter" Label="@label" Variant="Variant.Outlined" Margin="Margin.Dense">
+        @foreach (var r in Enum.GetValues<EvaluationRating>())
+        {
+            <MudSelectItem T="EvaluationRating" Value="@r">@Labels.Vi(r)</MudSelectItem>
+        }
+    </MudSelect>;
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            if (!(await AuthorizationService.AuthorizeAsync(authState.User, null, "training:create")).Succeeded)
+            {
+                Snackbar.Add("Bạn không có quyền thêm phiếu đánh giá.", Severity.Warning);
+                return;
+            }
+
+            var attachments = new List<AttachmentInfo>();
+            if (_files.Count > 0)
+            {
+                foreach (var f in _files)
+                {
+                    try
+                    {
+                        var up = await DocumentStorage.UploadAsync(CandidateId, DocumentType.Other, f);
+                        attachments.Add(new AttachmentInfo(up.ObjectKey, up.FileName, up.ContentType));
+                    }
+                    catch (Exception ex)
+                    {
+                        Snackbar.Add($"Không tải được tệp {f.Name}: {ex.Message}", Severity.Warning);
+                    }
+                }
+            }
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+            var eval = new TrainingEvaluation
+            {
+                CandidateId = CandidateId,
+                Track = _track,
+                EvaluationDate = DateOnly.FromDateTime(_date ?? DateTime.Today),
+                Attendance = _attendance,
+                Professional = _professional,
+                Discipline = _discipline,
+                Financial = _financial,
+                Note = string.IsNullOrWhiteSpace(_note) ? null : _note.Trim(),
+                AttachmentsJson = attachments.Count > 0
+                    ? System.Text.Json.JsonSerializer.Serialize(attachments)
+                    : null,
+                CreatedBy = actorId,
+            };
+            db.TrainingEvaluations.Add(eval);
+            db.AddAudit(actorId, "create", "training", eval.Id, null, new { eval.CandidateId, eval.Track, eval.EvaluationDate });
+            await db.SaveChangesAsync();
+            Snackbar.Add("Đã lưu phiếu đánh giá.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    public record AttachmentInfo(string ObjectKey, string FileName, string? ContentType);
+}

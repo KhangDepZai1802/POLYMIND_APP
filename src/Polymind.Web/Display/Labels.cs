@@ -166,11 +166,83 @@ public static class Labels
         _ => Icons.Material.Filled.AccountBalance
     };
 
+    public static string Vi(LoanKind k) => k switch
+    {
+        LoanKind.Bank => "Vay ngân hàng",
+        LoanKind.Company => "Nợ công ty",
+        _ => k.ToString()
+    };
+
+    public static Color ColorOf(LoanKind k) => k switch
+    {
+        LoanKind.Bank => Color.Info,
+        LoanKind.Company => Color.Warning,
+        _ => Color.Default
+    };
+
+    public static string IconOf(LoanKind k) => k switch
+    {
+        LoanKind.Bank => Icons.Material.Filled.AccountBalance,
+        LoanKind.Company => Icons.Material.Filled.Business,
+        _ => Icons.Material.Filled.AccountBalance
+    };
+
+    public static string Vi(LoanRepaymentStatus s) => s switch
+    {
+        LoanRepaymentStatus.Pending => "Chưa thu",
+        LoanRepaymentStatus.Partial => "Thu một phần",
+        LoanRepaymentStatus.Paid => "Đã thu",
+        LoanRepaymentStatus.Overdue => "Quá hạn",
+        _ => s.ToString()
+    };
+
+    public static Color ColorOf(LoanRepaymentStatus s) => s switch
+    {
+        LoanRepaymentStatus.Paid => Color.Success,
+        LoanRepaymentStatus.Partial => Color.Info,
+        LoanRepaymentStatus.Pending => Color.Warning,
+        LoanRepaymentStatus.Overdue => Color.Error,
+        _ => Color.Default
+    };
+
+    public static string Vi(TrainingTrack t) => t switch
+    {
+        TrainingTrack.Language => "Học tiếng",
+        TrainingTrack.Vocational => "Chuyên môn",
+        _ => t.ToString()
+    };
+
+    public static string IconOf(TrainingTrack t) => t switch
+    {
+        TrainingTrack.Language => Icons.Material.Filled.Translate,
+        TrainingTrack.Vocational => Icons.Material.Filled.Engineering,
+        _ => Icons.Material.Filled.School
+    };
+
+    /// <summary>4 tiêu chí đánh giá học viên (Chuyên cần / Chuyên môn / Kỷ luật / Tài chính).</summary>
+    public static string Vi(EvaluationRating r) => r switch
+    {
+        EvaluationRating.Weak => "Yếu",
+        EvaluationRating.Average => "Trung bình",
+        EvaluationRating.Good => "Khá",
+        EvaluationRating.Excellent => "Tốt",
+        _ => r.ToString()
+    };
+
+    public static Color ColorOf(EvaluationRating r) => r switch
+    {
+        EvaluationRating.Excellent => Color.Success,
+        EvaluationRating.Good => Color.Info,
+        EvaluationRating.Average => Color.Warning,
+        EvaluationRating.Weak => Color.Error,
+        _ => Color.Default
+    };
+
     public static string Vi(Gender g) => g switch
     {
         Gender.Male => "Nam",
         Gender.Female => "Nữ",
-        Gender.Other => "Khác",
+        Gender.Other => "Không đề cập",
         _ => g.ToString()
     };
 

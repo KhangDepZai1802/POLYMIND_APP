@@ -30,8 +30,16 @@
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">Chỉ hiển thị ứng viên chưa có khoản vay.</MudText>
                     }
                 </MudItem>
-                <MudItem xs="12">
-                    <MudSelect T="LoanStatus" @bind-Value="_status" Label="Tình trạng vay" Variant="Variant.Outlined" Margin="Margin.Dense">
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="LoanKind" Value="_kind" ValueChanged="OnKindChanged" Label="Loại khoản nợ" Variant="Variant.Outlined" Margin="Margin.Dense">
+                        @foreach (var k in LoanKindOptions)
+                        {
+                            <MudSelectItem T="LoanKind" Value="@k">@Labels.Vi(k)</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="LoanStatus" @bind-Value="_status" Label="Tình trạng" Variant="Variant.Outlined" Margin="Margin.Dense">
                         @foreach (var s in LoanStatusOptions)
                         {
                             <MudSelectItem T="LoanStatus" Value="@s">@Labels.Vi(s)</MudSelectItem>
@@ -39,23 +47,59 @@
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" sm="6">
-                    <MudNumericField T="decimal?" @bind-Value="_amount" Label="Số tiền vay (đ)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Format="N0" />
+                    <MudNumericField T="decimal?" @bind-Value="_amount" Label="@(_kind == LoanKind.Company ? "Số tiền nợ (đ)" : "Số tiền vay (đ)")" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Format="N0" />
                 </MudItem>
                 <MudItem xs="12" sm="6">
-                    <MudNumericField T="int?" @bind-Value="_termMonths" Label="Thời hạn vay (tháng)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+                    <MudNumericField T="int?" @bind-Value="_termMonths" Label="Thời hạn (tháng)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
                 </MudItem>
-                <MudItem xs="12" sm="6">
-                    <MudTextField @bind-Value="_bankName" Label="Ngân hàng cho vay" Variant="Variant.Outlined" Margin="Margin.Dense" />
-                </MudItem>
+                @if (_kind == LoanKind.Bank)
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_bankName" Label="Ngân hàng cho vay" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                }
                 <MudItem xs="12" sm="6">
                     <MudNumericField T="decimal?" @bind-Value="_interestRate" Label="Lãi suất (%/năm)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+                    @if (_kind == LoanKind.Company)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Tổng phải thu = gốc + lãi (lãi = gốc × %/năm × số tháng / 12), chia đều theo kỳ.</MudText>
+                    }
                 </MudItem>
                 <MudItem xs="12" sm="6">
                     <MudDatePicker @bind-Date="_disbursedDate" Label="Ngày giải ngân" Variant="Variant.Outlined" Margin="Margin.Dense" />
                 </MudItem>
+                @if (_kind == LoanKind.Company)
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudNumericField T="decimal?" @bind-Value="_monthlyDeduction" Label="Trừ lương mỗi kỳ (đ)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Format="N0" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudDatePicker @bind-Date="_deductionStart" Label="Bắt đầu trừ lương" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                }
                 <MudItem xs="12">
-                    <MudTextField @bind-Value="_note" Label="Ghi chú" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+                    <MudTextField @bind-Value="_note" Label="@(_kind == LoanKind.Company ? "Cam kết trả nợ / ghi chú" : "Ghi chú")" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
                 </MudItem>
+                @if (_kind == LoanKind.Company)
+                {
+                    <MudItem xs="12">
+                        <MudCheckBox T="bool" @bind-Value="_generateSchedule" Dense="true"
+                                     Label="Tạo lịch trả góp (trừ dần vào lương) theo gốc + lãi + thời hạn" />
+                        @if (_existingInstallments > 0)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Đã có @_existingInstallments kỳ trả góp — tạo mới sẽ thay thế các kỳ CHƯA thu.</MudText>
+                        }
+                    </MudItem>
+                }
+                else
+                {
+                    <MudItem xs="12">
+                        <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">
+                            Vay ngân hàng chỉ lưu thông tin (số tiền, ngân hàng, lãi suất, ngày giải ngân). Người vay tự trả cho ngân hàng
+                            nên <b>không</b> có lịch trả góp và <b>không</b> hiện ở trang Thu nợ.
+                        </MudAlert>
+                    </MudItem>
+                }
             </MudGrid>
         }
     </DialogContent>
@@ -70,19 +114,26 @@
     [Parameter] public Guid CandidateId { get; set; }
 
     private static readonly LoanStatus[] LoanStatusOptions = { LoanStatus.Borrowing, LoanStatus.Disbursed, LoanStatus.Settled };
+    private static readonly LoanKind[] LoanKindOptions = { LoanKind.Bank, LoanKind.Company };
 
     private bool _loading = true;
     private bool _saving;
     private bool _candidateLocked;
     private CandidateChoice? _selectedCandidate;
     private string _candidateName = "—";
+    private LoanKind _kind = LoanKind.Bank;
     private LoanStatus _status = LoanStatus.Borrowing;
     private decimal? _amount;
     private int? _termMonths;
     private string? _bankName;
     private decimal? _interestRate;
+    private decimal? _monthlyDeduction;
+    private DateTime? _deductionStart;
     private DateTime? _disbursedDate;
     private string? _note;
+    private bool _generateSchedule;
+    private int _existingInstallments;
+    private decimal _orderCost; // chi phí đơn hàng ứng viên đang gắn — gợi ý số tiền nợ công ty
 
     protected override async Task OnInitializedAsync()
     {
@@ -99,17 +150,22 @@
             .FirstOrDefaultAsync();
         _selectedCandidate = candidate;
         _candidateName = candidate?.Name ?? "—";
+        _orderCost = await GetOrderCostAsync(db, CandidateId);
 
         var loan = await db.Loans.OrderByDescending(l => l.CreatedAt).FirstOrDefaultAsync(l => l.CandidateId == CandidateId);
         if (loan is not null)
         {
+            _kind = loan.Kind;
             _status = loan.Status == LoanStatus.NotBorrowed ? LoanStatus.Borrowing : loan.Status;
             _amount = loan.Amount;
             _termMonths = loan.TermMonths;
             _bankName = loan.BankName;
             _interestRate = loan.InterestRate;
+            _monthlyDeduction = loan.MonthlyDeductionAmount;
+            _deductionStart = loan.DeductionStartDate?.ToDateTime(TimeOnly.MinValue);
             _disbursedDate = loan.DisbursedDate?.ToDateTime(TimeOnly.MinValue);
             _note = loan.Note;
+            _existingInstallments = await db.LoanRepayments.CountAsync(r => r.LoanId == loan.Id);
         }
         _loading = false;
     }
@@ -150,23 +206,43 @@
                 db.Loans.Add(loan);
             }
 
+            loan.Kind = _kind;
             loan.Status = _status;
             loan.Amount = _amount;
             loan.TermMonths = _termMonths;
-            loan.BankName = string.IsNullOrWhiteSpace(_bankName) ? null : _bankName.Trim();
+            loan.BankName = _kind == LoanKind.Company || string.IsNullOrWhiteSpace(_bankName) ? null : _bankName.Trim();
             loan.InterestRate = _interestRate;
             loan.DisbursedDate = _disbursedDate is null ? null : DateOnly.FromDateTime(_disbursedDate.Value);
             loan.Note = string.IsNullOrWhiteSpace(_note) ? null : _note.Trim();
             loan.UpdatedAt = DateTimeOffset.UtcNow;
 
+            if (_kind == LoanKind.Bank)
+            {
+                // Vay ngân hàng chỉ lưu thông tin: không trừ lương, không lịch trả góp (người vay tự trả ngân hàng).
+                loan.MonthlyDeductionAmount = null;
+                loan.DeductionStartDate = null;
+                var oldReps = await db.LoanRepayments.Where(r => r.LoanId == loan.Id).ToListAsync();
+                if (oldReps.Count > 0) db.LoanRepayments.RemoveRange(oldReps);
+            }
+            else
+            {
+                loan.MonthlyDeductionAmount = _monthlyDeduction;
+                loan.DeductionStartDate = _deductionStart is null ? null : DateOnly.FromDateTime(_deductionStart.Value);
+            }
+
             db.AddAudit(actorId, isNew ? "create" : "update", "loans", loan.Id, null, new
             {
                 loan.CandidateId,
+                loan.Kind,
                 loan.Status,
                 loan.Amount,
                 loan.TermMonths,
                 loan.BankName,
             });
+
+            if (_generateSchedule && _kind == LoanKind.Company)
+                await RegenerateScheduleAsync(db, loan);
+
             await db.SaveChangesAsync();
             Snackbar.Add("Đã lưu hồ sơ vay.", Severity.Success);
             MudDialog.Close(DialogResult.Ok(true));
@@ -177,11 +253,92 @@
         }
     }
 
-    private void OnCandidateChanged(CandidateChoice? candidate)
+    /// <summary>Sinh lịch trả góp (trừ dần vào lương): giữ các kỳ đã thu, thay các kỳ chưa thu bằng lịch mới theo số dư còn lại.</summary>
+    private async Task RegenerateScheduleAsync(ApplicationDbContext db, Loan loan)
+    {
+        var principal = _amount ?? 0m;
+        var term = _termMonths ?? 0;
+        if (principal <= 0m || term <= 0)
+        {
+            Snackbar.Add("Cần nhập Số tiền và Thời hạn (tháng) để tạo lịch trả góp.", Severity.Warning);
+            return;
+        }
+
+        // Nợ công ty thu GỐC + LÃI: lãi đơn = gốc × (%/năm) × số tháng / 12; tổng chia đều theo kỳ.
+        var rate = _interestRate ?? 0m;
+        var interest = Math.Round(principal * rate / 100m * term / 12m, 0, MidpointRounding.AwayFromZero);
+        var total = principal + interest;
+
+        var existing = await db.LoanRepayments.Where(r => r.LoanId == loan.Id).ToListAsync();
+        var kept = existing.Where(r => r.PaidAmount > 0m).OrderBy(r => r.InstallmentNo).ToList();
+        var toRemove = existing.Where(r => r.PaidAmount <= 0m).ToList();
+        if (toRemove.Count > 0) db.LoanRepayments.RemoveRange(toRemove);
+
+        var paidTotal = kept.Sum(r => r.PaidAmount);
+        var remaining = Math.Max(0m, total - paidTotal);
+        var monthsLeft = Math.Max(1, term - kept.Count);
+        var startNo = kept.Count == 0 ? 1 : kept.Max(r => r.InstallmentNo) + 1;
+        var startDate = _deductionStart is not null
+            ? DateOnly.FromDateTime(_deductionStart.Value)
+            : DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var per = Math.Round(remaining / monthsLeft, 0, MidpointRounding.AwayFromZero);
+        for (var i = 0; i < monthsLeft; i++)
+        {
+            var isLast = i == monthsLeft - 1;
+            var amt = isLast ? remaining - per * (monthsLeft - 1) : per;
+            db.LoanRepayments.Add(new LoanRepayment
+            {
+                LoanId = loan.Id,
+                InstallmentNo = startNo + i,
+                DueDate = startDate.AddMonths(kept.Count + i),
+                Amount = amt,
+                PaidAmount = 0m,
+                Status = LoanRepaymentStatus.Pending,
+            });
+        }
+    }
+
+    private async Task OnCandidateChanged(CandidateChoice? candidate)
     {
         _selectedCandidate = candidate;
         CandidateId = candidate?.Id ?? Guid.Empty;
         _candidateName = candidate?.Name ?? "—";
+        _orderCost = 0m;
+        if (candidate is not null)
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            _orderCost = await GetOrderCostAsync(db, candidate.Id);
+        }
+        MaybePrefillCompanyAmount();
+    }
+
+    private void OnKindChanged(LoanKind kind)
+    {
+        _kind = kind;
+        MaybePrefillCompanyAmount();
+    }
+
+    // Nợ công ty: gợi ý số tiền = chi phí đơn hàng ứng viên đang gắn (cho sửa).
+    private void MaybePrefillCompanyAmount()
+    {
+        if (_kind == LoanKind.Company && (_amount is null || _amount <= 0m) && _orderCost > 0m)
+            _amount = _orderCost;
+    }
+
+    private static async Task<decimal> GetOrderCostAsync(ApplicationDbContext db, Guid candidateId)
+    {
+        if (candidateId == Guid.Empty) return 0m;
+        var latestJobId = await db.CandidateJobOrders
+            .Where(cjo => cjo.CandidateId == candidateId)
+            .OrderByDescending(cjo => cjo.CreatedAt)
+            .Select(cjo => (Guid?)cjo.JobOrderId)
+            .FirstOrDefaultAsync();
+        if (latestJobId is null) return 0m;
+        var cost = await db.JobOrders.Where(j => j.Id == latestJobId.Value)
+            .Select(j => j.CostAmount)
+            .FirstOrDefaultAsync();
+        return cost ?? 0m;
     }
 
     private async Task<IEnumerable<CandidateChoice>> SearchCandidates(string value, CancellationToken token)

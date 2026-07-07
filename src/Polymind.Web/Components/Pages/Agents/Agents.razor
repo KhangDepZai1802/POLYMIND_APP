@@ -22,6 +22,9 @@
         </MudSelect>
         @if (!_isPartnerOnly)
         {
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AccountTree" Href="/agents/tree">
+                Sơ đồ cây
+            </MudButton>
             <AuthorizeView Policy="agents:create">
                 <Authorized>
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">
@@ -113,7 +116,9 @@
     }
 </MudPaper>
 
-@* ===== Bảng thi đua 2: Doanh số CTV (mọi đại lý) ===== *@
+@* ===== Bảng thi đua 2: Doanh số CTV (mọi đại lý) — ẨN với tài khoản CTV (bỏ thi đua giữa CTV, góp ý Vietgroup) ===== *@
+@if (!_isCollaboratorOnly)
+{
 <MudPaper Elevation="1" Class="pa-4 mb-4">
     <div class="d-flex align-center mb-3" style="gap:8px">
         <MudIcon Icon="@Icons.Material.Filled.MilitaryTech" Color="Color.Secondary" />
@@ -191,6 +196,7 @@
         </MudHidden>
     }
 </MudPaper>
+}
 
 @if (!_isPartnerOnly)
 {

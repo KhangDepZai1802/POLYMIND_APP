@@ -22,6 +22,11 @@
             <MudNavLink Href="/jobs" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.WorkOutline">Jobs</MudNavLink>
         </Authorized>
     </AuthorizeView>
+    <AuthorizeView Policy="training:read">
+        <Authorized>
+            <MudNavLink Href="/training" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.School">Đào tạo</MudNavLink>
+        </Authorized>
+    </AuthorizeView>
     <AuthorizeView Policy="payments:read">
         <Authorized>
             <MudNavLink Href="/finance" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Payments">Tài chính</MudNavLink>
@@ -30,6 +35,11 @@
     <AuthorizeView Policy="loans:read">
         <Authorized>
             <MudNavLink Href="/loans" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountBalance">Hỗ trợ vay</MudNavLink>
+        </Authorized>
+    </AuthorizeView>
+    <AuthorizeView Policy="loans:update">
+        <Authorized>
+            <MudNavLink Href="/debt-collection" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.RequestQuote">Thu nợ</MudNavLink>
         </Authorized>
     </AuthorizeView>
     <AuthorizeView Policy="agents:read">
@@ -63,11 +73,7 @@
             <MudNavLink Href="/messages" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Forum">Tin nhắn</MudNavLink>
         </Authorized>
     </AuthorizeView>
-    <AuthorizeView Policy="notifications:read">
-        <Authorized>
-            <MudNavLink Href="/notifications" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Notifications">Thông báo</MudNavLink>
-        </Authorized>
-    </AuthorizeView>
+    @* Bỏ mục "Thông báo" khỏi menu trái theo yêu cầu — chỉ truy cập qua icon chuông 🔔 ở góc trên bên phải. *@
     <MudNavLink Href="/guide" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.MenuBook">Hướng dẫn sử dụng</MudNavLink>
     @if (!_isPartnerOnly)
     {

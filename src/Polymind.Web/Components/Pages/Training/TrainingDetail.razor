@@ -1,0 +1,259 @@
+@page "/training/{Id:guid}"
+@attribute [Authorize(Policy = "training:read")]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject IDocumentStorage DocumentStorage
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject AgentScope AgentScope
+@inject ISnackbar Snackbar
+
+<PageTitle>Đào tạo — @_candidateName</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (!_found)
+{
+    <MudAlert Severity="Severity.Warning">Không tìm thấy học viên/lao động này hoặc bạn không có quyền xem.</MudAlert>
+    <MudButton Class="mt-3" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack" Href="/training">Về danh sách đào tạo</MudButton>
+}
+else
+{
+    <div class="d-flex align-center mb-3" style="gap:8px">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/training" title="Về danh sách đào tạo" />
+        <MudIcon Icon="@Icons.Material.Filled.School" Color="Color.Primary" />
+        <div>
+            <MudText Typo="Typo.h6"><b>@_candidateName</b></MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                @_candidateCode
+                <MudChip T="string" Size="Size.Small" Class="ml-1"
+                         Color="@(PersonTitle.IsTitled(_step) ? (PersonTitle.IsStudent(_step, _category) ? Color.Info : Color.Success) : Color.Default)">
+                    @PersonTitle.Of(_step, _category)
+                </MudChip>
+            </MudText>
+        </div>
+        <MudSpacer />
+        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Person" Href="@($"/candidates/{Id}")">Hồ sơ ứng viên</MudButton>
+    </div>
+
+    <MudGrid>
+        @* ---- Cột trái: tiến trình 2 mảng đào tạo ---- *@
+        <MudItem xs="12" md="5">
+            <MudPaper Class="pa-4 mb-4" Elevation="1">
+                <div class="d-flex justify-space-between align-center mb-2">
+                    <MudText Typo="Typo.subtitle1"><b>Tiến trình đào tạo</b></MudText>
+                    @if (_canCreate)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.RateReview"
+                                   OnClick="OpenAddEvaluation">Thêm báo cáo tuần</MudButton>
+                    }
+                </div>
+                @foreach (var t in new[] { _lang, _voc })
+                {
+                    <div class="mb-3">
+                        <div class="d-flex justify-space-between align-center">
+                            <MudText Typo="Typo.body2"><MudIcon Icon="@Labels.IconOf(t.Track)" Size="Size.Small" Class="mr-1" /><b>@Labels.Vi(t.Track)</b></MudText>
+                            @if (_canManage)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenTrackEdit(t.Track))" title="Cập nhật tiến trình" />
+                            }
+                        </div>
+                        @if (t.Enrolled)
+                        {
+                            <MudProgressLinear Color="Color.Success" Value="t.Progress" Class="my-1" Style="height:10px;border-radius:5px" />
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                @t.Progress% @(string.IsNullOrWhiteSpace(t.Level) ? "" : $"• {t.Level}")
+                            </MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Chưa học / đơn hàng không yêu cầu.</MudText>
+                        }
+                    </div>
+                }
+            </MudPaper>
+        </MudItem>
+
+        @* ---- Cột phải: quá trình học theo TỪNG TUẦN ---- *@
+        <MudItem xs="12" md="7">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Quá trình học theo tuần</b></MudText>
+                @if (_weeks.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true">Chưa có báo cáo tuần nào. Bấm <b>Thêm báo cáo tuần</b> để ghi nhận quá trình học.</MudAlert>
+                }
+                else
+                {
+                    <MudTimeline TimelinePosition="TimelinePosition.Start">
+                        @foreach (var w in _weeks)
+                        {
+                            <MudTimelineItem Color="Color.Primary" Size="Size.Small">
+                                <MudText Typo="Typo.subtitle2"><b>Tuần @w.Label</b> <span class="mud-text-secondary">• @w.Items.Count báo cáo</span></MudText>
+                                @foreach (var e in w.Items)
+                                {
+                                    <MudPaper Class="pa-2 my-2" Elevation="0" Outlined="true">
+                                        <MudText Typo="Typo.caption"><b>@e.Date.ToString("dd/MM/yyyy")</b>@(e.Track is null ? " • Chung" : $" • {Labels.Vi(e.Track.Value)}")</MudText>
+                                        <div class="d-flex flex-wrap mt-1" style="gap:4px">
+                                            <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(e.Attendance)">Chuyên cần: @Labels.Vi(e.Attendance)</MudChip>
+                                            <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(e.Professional)">Chuyên môn: @Labels.Vi(e.Professional)</MudChip>
+                                            <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(e.Discipline)">Kỷ luật: @Labels.Vi(e.Discipline)</MudChip>
+                                            <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(e.Financial)">Tài chính: @Labels.Vi(e.Financial)</MudChip>
+                                        </div>
+                                        @if (!string.IsNullOrWhiteSpace(e.Note))
+                                        {
+                                            <MudText Typo="Typo.caption" Class="d-block mt-1">@e.Note</MudText>
+                                        }
+                                        @if (e.Attachments.Count > 0)
+                                        {
+                                            <div class="d-flex flex-wrap mt-1" style="gap:8px">
+                                                @foreach (var a in e.Attachments.Where(a => !string.IsNullOrEmpty(a.Url)))
+                                                {
+                                                    <MudLink Href="@a.Url" Target="_blank" Typo="Typo.caption">
+                                                        <MudIcon Icon="@Icons.Material.Filled.AttachFile" Size="Size.Small" />@a.FileName
+                                                    </MudLink>
+                                                }
+                                            </div>
+                                        }
+                                    </MudPaper>
+                                }
+                            </MudTimelineItem>
+                        }
+                    </MudTimeline>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private bool _loading = true;
+    private bool _found;
+    private bool _canManage;
+    private bool _canCreate;
+    private string _candidateName = "";
+    private string _candidateCode = "";
+    private WorkflowStep? _step;
+    private JobCategory? _category;
+
+    private TrackView _lang = new(TrainingTrack.Language, false, null, 0);
+    private TrackView _voc = new(TrainingTrack.Vocational, false, null, 0);
+    private List<WeekGroup> _weeks = new();
+
+    private record TrackView(TrainingTrack Track, bool Enrolled, string? Level, int Progress);
+    private record EvalView(Guid Id, TrainingTrack? Track, DateOnly Date,
+        EvaluationRating Attendance, EvaluationRating Professional, EvaluationRating Discipline, EvaluationRating Financial,
+        string? Note, List<AttachView> Attachments);
+    private record AttachView(string FileName, string? ContentType, string? Url);
+    private record WeekGroup(string Label, List<EvalView> Items);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _canManage = (await AuthorizationService.AuthorizeAsync(authState.User, null, "training:update")).Succeeded;
+        _canCreate = (await AuthorizationService.AuthorizeAsync(authState.User, null, "training:create")).Succeeded;
+        await Load();
+    }
+
+    private static DateOnly WeekStart(DateOnly d)
+    {
+        int diff = ((int)d.DayOfWeek + 6) % 7; // Monday = 0
+        return d.AddDays(-diff);
+    }
+
+    private async Task Load()
+    {
+        _loading = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var scope = await AgentScope.GetAsync();
+
+        var query = db.Candidates.AsNoTracking().Where(c => c.Id == Id);
+        if (scope.IsAgentOnly) query = query.Where(c => c.AgentId == scope.AgentId);
+        else if (scope.IsCollaboratorOnly) query = query.Where(c => c.CollaboratorId == scope.CollaboratorId);
+        else if (scope.IsSelfScoped) query = query.Where(c => c.OwnerUserId != null && c.Id == scope.OwnedCandidateId);
+
+        var candidate = await query.Select(c => new { c.Id, c.FullName, c.Code }).FirstOrDefaultAsync();
+        if (candidate is null) { _found = false; _loading = false; return; }
+        _found = true;
+        _candidateName = candidate.FullName;
+        _candidateCode = candidate.Code;
+
+        var cjo = await db.CandidateJobOrders.AsNoTracking()
+            .Where(j => j.CandidateId == Id).OrderByDescending(j => j.CreatedAt).FirstOrDefaultAsync();
+        _step = cjo?.CurrentStep;
+        if (cjo is not null)
+            _category = await db.JobOrders.Where(j => j.Id == cjo.JobOrderId).Select(j => (JobCategory?)j.Category).FirstOrDefaultAsync();
+
+        var records = await db.TrainingRecords.AsNoTracking().Where(r => r.CandidateId == Id).ToListAsync();
+        TrackView ToView(TrainingTrack t)
+        {
+            var r = records.FirstOrDefault(x => x.Track == t);
+            return r is null ? new TrackView(t, false, null, 0) : new TrackView(t, r.IsEnrolled, r.LevelLabel, r.ProgressPercent);
+        }
+        _lang = ToView(TrainingTrack.Language);
+        _voc = ToView(TrainingTrack.Vocational);
+
+        var evals = await db.TrainingEvaluations.AsNoTracking()
+            .Where(e => e.CandidateId == Id)
+            .OrderByDescending(e => e.EvaluationDate).ThenByDescending(e => e.CreatedAt)
+            .ToListAsync();
+
+        var views = new List<EvalView>();
+        foreach (var e in evals)
+        {
+            var atts = new List<AttachView>();
+            if (!string.IsNullOrWhiteSpace(e.AttachmentsJson))
+            {
+                try
+                {
+                    var items = System.Text.Json.JsonSerializer.Deserialize<List<TrainingEvaluationDialog.AttachmentInfo>>(e.AttachmentsJson) ?? new();
+                    foreach (var a in items)
+                    {
+                        string? url = null;
+                        try { url = await DocumentStorage.GetDownloadUrlAsync(a.ObjectKey); } catch { url = null; }
+                        atts.Add(new AttachView(a.FileName, a.ContentType, url));
+                    }
+                }
+                catch { /* JSON hỏng → bỏ qua */ }
+            }
+            views.Add(new EvalView(e.Id, e.Track, e.EvaluationDate,
+                e.Attendance, e.Professional, e.Discipline, e.Financial, e.Note, atts));
+        }
+
+        _weeks = views
+            .GroupBy(v => WeekStart(v.Date))
+            .OrderByDescending(g => g.Key)
+            .Select(g => new WeekGroup(
+                $"{g.Key:dd/MM} – {g.Key.AddDays(6):dd/MM/yyyy}",
+                g.OrderByDescending(v => v.Date).ToList()))
+            .ToList();
+
+        _loading = false;
+    }
+
+    private async Task OpenTrackEdit(TrainingTrack track)
+    {
+        if (!_canManage) return;
+        var parameters = new DialogParameters<TrainingTrackDialog>
+        {
+            { x => x.CandidateId, Id },
+            { x => x.Track, track },
+        };
+        var dialog = await DialogService.ShowAsync<TrainingTrackDialog>($"Tiến trình — {Labels.Vi(track)}", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled) await Load();
+    }
+
+    private async Task OpenAddEvaluation()
+    {
+        if (!_canCreate) return;
+        var parameters = new DialogParameters<TrainingEvaluationDialog> { { x => x.CandidateId, Id } };
+        var dialog = await DialogService.ShowAsync<TrainingEvaluationDialog>("Báo cáo / phiếu đánh giá tuần", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled) await Load();
+    }
+}

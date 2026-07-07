@@ -120,7 +120,7 @@ else
                                 {
                                     <td>@(c.CollaboratorName ?? "—")</td>
                                 }
-                                <td>@(string.IsNullOrWhiteSpace(c.Phone) ? "—" : c.Phone)</td>
+                                <td>@MaskPhone(c.Phone)</td>
                             </tr>
                         }
                     </tbody>
@@ -357,6 +357,15 @@ else
     {
         var i = code.LastIndexOf('-');
         return i >= 0 && i < code.Length - 1 ? "#" + code[(i + 1)..] : code;
+    }
+
+    /// <summary>CTV không được xem SĐT ứng viên (góp ý Vietgroup — tránh lộ thông tin/cạnh tranh).</summary>
+    private string MaskPhone(string? phone)
+    {
+        if (string.IsNullOrWhiteSpace(phone)) return "—";
+        if (!_isCollaboratorPortal) return phone;
+        var d = phone.Trim();
+        return d.Length <= 3 ? "•••" : $"••• ••• {d[^3..]}";
     }
 
     private async Task OpenCtvDialog(Guid ctvId)

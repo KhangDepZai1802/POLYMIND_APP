@@ -6,6 +6,8 @@
 @inject ISnackbar Snackbar
 @inject IDocumentStorage DocumentStorage
 @inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 <PageTitle>Tin nhắn — POLYMIND</PageTitle>
 
@@ -91,6 +93,10 @@
                                         {
                                             <img class="chat-attachment-image" src="@m.Attachment.Url" alt="@m.Attachment.FileName" />
                                         }
+                                        else if (m.Attachment.IsAudio && !string.IsNullOrWhiteSpace(m.Attachment.Url))
+                                        {
+                                            <audio controls preload="none" src="@m.Attachment.Url" style="max-width:220px;height:36px"></audio>
+                                        }
                                         <div class="chat-attachment-row">
                                             <MudIcon Icon="@AttachmentIcon(m.Attachment)" Size="Size.Small" />
                                             <div class="chat-attachment-text">
@@ -119,16 +125,30 @@
                         <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="ClearAttachment" />
                     </div>
                 }
+                @if (_recordedAudio is not null)
+                {
+                    <div class="message-file-chip">
+                        <MudIcon Icon="@Icons.Material.Filled.Mic" Size="Size.Small" Color="Color.Error" />
+                        <div class="message-file-main">
+                            <span class="message-file-name">Ghi âm @_recordedSeconds giây</span>
+                            <span class="message-file-meta">@FormatBytes(_recordedAudio.LongLength)</span>
+                        </div>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="ClearRecording" />
+                    </div>
+                }
                 <div class="d-flex align-end mt-2" style="gap:8px">
                     <label class="message-attach-button" title="Gửi file hoặc hình ảnh">
                         <InputFile OnChange="OnAttachmentSelected" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" class="message-attach-input" />
                         <MudIcon Icon="@Icons.Material.Filled.AttachFile" Size="Size.Small" />
                     </label>
+                    <MudIconButton Icon="@(_recording ? Icons.Material.Filled.Stop : Icons.Material.Filled.Mic)"
+                                   Color="@(_recording ? Color.Error : Color.Default)" Variant="Variant.Outlined"
+                                   title="@(_recording ? "Dừng ghi âm" : "Ghi âm")" OnClick="ToggleRecording" Disabled="_sending" />
                     <MudTextField @bind-Value="_compose" Placeholder="Nhập tin nhắn..." Variant="Variant.Outlined" Margin="Margin.Dense"
                                   Lines="2" Immediate="true" Class="flex-grow-1"
                                   OnKeyDown="OnComposeKeyDown" />
                     <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Send"
-                               OnClick="Send" Disabled="@(_sending || (string.IsNullOrWhiteSpace(_compose) && _attachmentFile is null))">Gửi</MudButton>
+                               OnClick="Send" Disabled="@(_sending || (string.IsNullOrWhiteSpace(_compose) && _attachmentFile is null && _recordedAudio is null))">Gửi</MudButton>
                 </div>
             }
         </MudPaper>
@@ -144,6 +164,8 @@
     {
         public bool IsImage => !string.IsNullOrWhiteSpace(ContentType)
             && ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+        public bool IsAudio => !string.IsNullOrWhiteSpace(ContentType)
+            && ContentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class MessageBodyPayload
@@ -166,6 +188,13 @@
     private string _compose = "";
     private IBrowserFile? _attachmentFile;
     private bool _sending;
+
+    private IJSObjectReference? _recorderModule;
+    private bool _recording;
+    private byte[]? _recordedAudio;
+    private string _recordedMime = "audio/webm";
+    private string _recordedExt = "webm";
+    private int _recordedSeconds;
 
     private IEnumerable<Contact> FilteredContacts => string.IsNullOrWhiteSpace(_search)
         ? _contacts
@@ -291,7 +320,7 @@
 
     private async Task Send()
     {
-        if (_selectedId is null || (string.IsNullOrWhiteSpace(_compose) && _attachmentFile is null) || _sending) return;
+        if (_selectedId is null || (string.IsNullOrWhiteSpace(_compose) && _attachmentFile is null && _recordedAudio is null) || _sending) return;
         _sending = true;
         try
         {
@@ -318,6 +347,16 @@
                     uploaded.FileSize,
                     uploaded.ContentType);
             }
+            else if (_recordedAudio is not null)
+            {
+                var uploaded = await DocumentStorage.UploadMessageAudioAsync(
+                    _meId, _selectedId.Value, _recordedAudio, _recordedMime, _recordedExt);
+                attachment = new MessageAttachmentPayload(
+                    uploaded.ObjectKey,
+                    uploaded.FileName,
+                    uploaded.FileSize,
+                    uploaded.ContentType);
+            }
 
             var payload = new MessageBodyPayload
             {
@@ -335,6 +374,8 @@
             await db.SaveChangesAsync();
             _compose = "";
             _attachmentFile = null;
+            _recordedAudio = null;
+            _recordedSeconds = 0;
             await LoadThread();
             await LoadContacts();
         }
@@ -357,6 +398,79 @@
     private void ClearAttachment()
     {
         _attachmentFile = null;
+    }
+
+    private async Task<IJSObjectReference> RecorderAsync()
+        => _recorderModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/audio-recorder.js");
+
+    private sealed class RecordResult
+    {
+        public string MimeType { get; set; } = "audio/webm";
+        public string Ext { get; set; } = "webm";
+        public long Size { get; set; }
+        public int Seconds { get; set; }
+    }
+
+    private async Task ToggleRecording()
+    {
+        try
+        {
+            var mod = await RecorderAsync();
+            if (!_recording)
+            {
+                _recordedAudio = null;
+                await mod.InvokeVoidAsync("start");
+                _recording = true;
+            }
+            else
+            {
+                _recording = false;
+                var meta = await mod.InvokeAsync<RecordResult?>("stop");
+                if (meta is null || meta.Size <= 0)
+                {
+                    Snackbar.Add("Không ghi được âm thanh.", Severity.Warning);
+                    return;
+                }
+                await using var streamRef = await mod.InvokeAsync<IJSStreamReference>("getAudioStream");
+                await using var s = await streamRef.OpenReadStreamAsync(DocumentStorage.MaxUploadBytes);
+                using var ms = new MemoryStream();
+                await s.CopyToAsync(ms);
+                _recordedAudio = ms.ToArray();
+                _recordedMime = meta.MimeType;
+                _recordedExt = meta.Ext;
+                _recordedSeconds = meta.Seconds;
+            }
+        }
+        catch (Microsoft.JSInterop.JSException jsEx)
+        {
+            // start() trong audio-recorder.js đã ném thông điệp tiếng Việt rõ ràng — hiển thị trực tiếp.
+            _recording = false;
+            Snackbar.Add(jsEx.Message, Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            _recording = false;
+            Snackbar.Add($"Không ghi âm được: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    private void ClearRecording()
+    {
+        _recordedAudio = null;
+        _recordedSeconds = 0;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_recorderModule is not null)
+            {
+                if (_recording) { try { await _recorderModule.InvokeVoidAsync("cancel"); } catch { } }
+                await _recorderModule.DisposeAsync();
+            }
+        }
+        catch { /* circuit đã đóng */ }
     }
 
     private async Task DownloadAttachment(ThreadAttachment attachment)
@@ -400,7 +514,11 @@
     {
         if (!string.IsNullOrWhiteSpace(message.Text))
             return message.Text;
-        return message.Attachment is null ? "" : $"File: {message.Attachment.FileName}";
+        if (message.Attachment is null) return "";
+        var ct = message.Attachment.ContentType;
+        if (!string.IsNullOrWhiteSpace(ct) && ct.StartsWith("audio/", StringComparison.OrdinalIgnoreCase))
+            return "🎤 Tin nhắn thoại";
+        return $"File: {message.Attachment.FileName}";
     }
 
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max] + "…";

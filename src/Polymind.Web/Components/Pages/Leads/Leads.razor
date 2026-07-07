@@ -204,7 +204,9 @@
         (string.IsNullOrWhiteSpace(_search)
             || l.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase)
             || (l.Phone?.Contains(_search) ?? false)
-            || l.Code.Contains(_search, StringComparison.OrdinalIgnoreCase))
+            || l.Code.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || (l.Province?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (l.TargetCountry?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false))
         && (_statusFilter is null || l.Status == _statusFilter)
         && (_sourceFilter is null || l.Source == _sourceFilter));
 

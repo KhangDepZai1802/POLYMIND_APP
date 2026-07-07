@@ -707,6 +707,16 @@ body,
     text-shadow: 0 1px 1px rgba(0,0,0,.28);
     box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
 }
+/* Bảng ứng viên trên LAPTOP (≤1600px): giữ NGUYÊN nhãn "Bước hiện tại" đầy đủ, nhưng thu gọn
+   để không tràn ngang: cột Quốc gia chỉ còn CỜ (ẩn tên nước), thanh tiến độ ngắn lại, và cho
+   phép chip bước xuống dòng nếu quá dài. Trên PC rộng (>1600px) mọi thứ giữ y nguyên. */
+.candidate-progress-cell { min-width: 120px; }
+@media (max-width: 1600px) {
+    .laptop-hide-inline { display: none; }
+    .candidate-progress-cell { min-width: 76px; }
+    .candidate-table .step-chip { white-space: normal; }
+}
+
 .step-rainbow {
     position: relative;
     overflow: hidden;

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Polymind.Domain.Commissions;
 using Polymind.Domain.Entities;
 using Polymind.Domain.Enums;
 using Polymind.Infrastructure.Identity;
@@ -209,7 +210,7 @@ public static class DemoDataSeeder
                         Phone = $"09{rnd.Next(10000000, 99999999)}",
                         Email = $"ctv{n}@polymind.local",
                         Address = "Việt Nam",
-                        CommissionSharePercentage = new[] { 45m, 50m, 55m, 60m }[rnd.Next(4)],
+                        CommissionSharePercentage = new[] { 30m, 33m, 35m, 38m, 40m }[rnd.Next(5)], // CTV nhận 30-40% hoa hồng đại lý
                         AgentId = agent.Id,
                         IsActive = rnd.Next(6) != 0, // ~83% đang hoạt động
                     });
@@ -423,15 +424,16 @@ public static class DemoDataSeeder
             }
         }
 
-        // ---- Cấu hình hoa hồng cho mỗi đại lý: 20% đặt cọc / 30% trúng tuyển / 50% xuất cảnh ----
+        // ---- Cấu hình hoa hồng cho mỗi đại lý (góp ý Vietgroup): đại lý hưởng TỔNG 5% số tiền
+        //      ứng viên phải đóng, chia theo mốc 1% đặt cọc / 1.5% trúng tuyển / 2.5% xuất cảnh ----
         if (!await db.AgentCommissionConfigs.AnyAsync())
         {
             var agentIds = await db.Agents.Select(a => a.Id).ToListAsync();
             foreach (var aid in agentIds)
             {
-                db.AgentCommissionConfigs.Add(new AgentCommissionConfig { AgentId = aid, Milestone = CommissionMilestone.Deposit, Percentage = 20 });
-                db.AgentCommissionConfigs.Add(new AgentCommissionConfig { AgentId = aid, Milestone = CommissionMilestone.Selected, Percentage = 30 });
-                db.AgentCommissionConfigs.Add(new AgentCommissionConfig { AgentId = aid, Milestone = CommissionMilestone.Departure, Percentage = 50 });
+                db.AgentCommissionConfigs.Add(new AgentCommissionConfig { AgentId = aid, Milestone = CommissionMilestone.Deposit, Percentage = AgentCommissionRates.Deposit });
+                db.AgentCommissionConfigs.Add(new AgentCommissionConfig { AgentId = aid, Milestone = CommissionMilestone.Selected, Percentage = AgentCommissionRates.Selected });
+                db.AgentCommissionConfigs.Add(new AgentCommissionConfig { AgentId = aid, Milestone = CommissionMilestone.Departure, Percentage = AgentCommissionRates.Departure });
             }
         }
 
@@ -440,9 +442,9 @@ public static class DemoDataSeeder
         {
             var milestones = new (CommissionMilestone Milestone, WorkflowStep Step, decimal Percent)[]
             {
-                (CommissionMilestone.Deposit, WorkflowStep.Deposit, 20m),
-                (CommissionMilestone.Selected, WorkflowStep.Selected, 30m),
-                (CommissionMilestone.Departure, WorkflowStep.Departure, 50m),
+                (CommissionMilestone.Deposit, WorkflowStep.Deposit, AgentCommissionRates.Deposit),
+                (CommissionMilestone.Selected, WorkflowStep.Selected, AgentCommissionRates.Selected),
+                (CommissionMilestone.Departure, WorkflowStep.Departure, AgentCommissionRates.Departure),
             };
             foreach (var x in cjos)
             {
@@ -465,6 +467,31 @@ public static class DemoDataSeeder
                     });
                 }
             }
+        }
+
+        // ---- Chuẩn hóa hoa hồng cũ về tỉ lệ mới (đại lý ≤5%) — idempotent, chỉ chạy khi còn dữ liệu cũ ----
+        // Dữ liệu demo cũ để 20/30/50% (= 100% CostAmount) → sửa cấu hình + tính lại các lát hoa hồng đã sinh.
+        var newRates = new Dictionary<CommissionMilestone, decimal>
+        {
+            [CommissionMilestone.Deposit] = AgentCommissionRates.Deposit,
+            [CommissionMilestone.Selected] = AgentCommissionRates.Selected,
+            [CommissionMilestone.Departure] = AgentCommissionRates.Departure,
+        };
+        var staleConfigs = await db.AgentCommissionConfigs
+            .Where(c => c.Percentage != null && c.Percentage > AgentCommissionRates.Total)
+            .ToListAsync();
+        if (staleConfigs.Count > 0)
+        {
+            foreach (var c in staleConfigs)
+                if (newRates.TryGetValue(c.Milestone, out var p)) c.Percentage = p;
+
+            // Tính lại số tiền các hoa hồng đã phát sinh theo % mới (giữ nguyên BaseAmount, Status).
+            var comms = await db.AgentCommissions.ToListAsync();
+            foreach (var cm in comms)
+                if (newRates.TryGetValue(cm.Milestone, out var p))
+                    cm.CommissionAmount = cm.BaseAmount * p / 100m;
+
+            await db.SaveChangesAsync();
         }
 
         // ---- Lịch đóng tiền 4 bước cho ứng viên đã xếp vào đơn hàng (20/30/30/20 chi phí đơn hàng) ----
@@ -538,6 +565,77 @@ public static class DemoDataSeeder
             await db.SaveChangesAsync();
         }
 
+        // ---- Tình huống "nợ Vietgroup" (góp ý Vietgroup 07/2026): một số tỉnh KHÔNG được ngân hàng
+        //      hỗ trợ vay, nhưng Vietgroup vẫn hỗ trợ cho đi và ghi nhận là NỢ CÔNG TY (nợ VG).
+        //      Tạo vài hồ sơ nợ công ty kèm lịch trả góp (trừ dần vào lương) để hiện ở /loans
+        //      (thẻ "Nợ công ty" + lọc loại nợ) và trang /debt-collection (Thu nợ). Idempotent. ----
+        if (!await db.Loans.AnyAsync(l => l.Kind == LoanKind.Company))
+        {
+            var withLoan = (await db.Loans.Select(l => l.CandidateId).Distinct().ToListAsync()).ToHashSet();
+            // Ưu tiên ứng viên đã đặt cọc trở đi mà CHƯA có hồ sơ vay nào.
+            var eligible = cjos
+                .Where(x => (int)x.CurrentStep >= (int)WorkflowStep.Deposit && !withLoan.Contains(x.CandidateId))
+                .Select(x => x.CandidateId).Distinct().Take(4).ToList();
+            // Dự phòng: nếu tất cả đã có vay, vẫn tạo 2 hồ sơ nợ công ty cho ứng viên đã đặt cọc.
+            if (eligible.Count == 0)
+                eligible = cjos.Where(x => (int)x.CurrentStep >= (int)WorkflowStep.Deposit)
+                    .Select(x => x.CandidateId).Distinct().Take(2).ToList();
+
+            var provinceByCand = await db.Candidates
+                .Where(c => eligible.Contains(c.Id))
+                .ToDictionaryAsync(c => c.Id, c => c.Province);
+
+            var vgIdx = 3000;
+            foreach (var cid in eligible)
+            {
+                vgIdx++;
+                var province = provinceByCand.GetValueOrDefault(cid);
+                var amount = (decimal)rnd.Next(90, 180) * 1_000_000m;
+                var term = new[] { 18, 24, 30, 36 }[rnd.Next(4)];
+                var startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-rnd.Next(1, 6)));
+                var perMonth = Math.Round(amount / term, 0, MidpointRounding.AwayFromZero);
+                var loan = new Loan
+                {
+                    Code = $"VAY-{DateTime.UtcNow:yyyyMMdd}-{vgIdx}",
+                    CandidateId = cid,
+                    Kind = LoanKind.Company,
+                    Status = LoanStatus.Disbursed, // VG đã "cho đi" — đang trừ nợ dần vào lương
+                    Amount = amount,
+                    TermMonths = term,
+                    BankName = null,
+                    InterestRate = 0m,
+                    DisbursedDate = startDate,
+                    MonthlyDeductionAmount = perMonth,
+                    DeductionStartDate = startDate,
+                    Note = string.IsNullOrWhiteSpace(province)
+                        ? "Tỉnh không thuộc diện ngân hàng hỗ trợ vay — Vietgroup hỗ trợ cho đi, ghi nhận nợ công ty (nợ VG)."
+                        : $"Tỉnh {province} không thuộc diện ngân hàng hỗ trợ vay — Vietgroup hỗ trợ cho đi, ghi nhận nợ công ty (nợ VG).",
+                    CreatedBy = adminId,
+                };
+                db.Loans.Add(loan);
+
+                // Lịch trả góp: vài kỳ đầu đã thu để trang Thu nợ có tiến độ, còn lại chờ thu.
+                var paidCount = rnd.Next(1, Math.Min(4, term)); // 1..3 kỳ đã trả
+                for (var i = 0; i < term; i++)
+                {
+                    var isLast = i == term - 1;
+                    var amt = isLast ? amount - perMonth * (term - 1) : perMonth;
+                    var paid = i < paidCount;
+                    db.LoanRepayments.Add(new LoanRepayment
+                    {
+                        LoanId = loan.Id,
+                        InstallmentNo = i + 1,
+                        DueDate = startDate.AddMonths(i),
+                        Amount = amt,
+                        PaidAmount = paid ? amt : 0m,
+                        PaidDate = paid ? startDate.AddMonths(i) : null,
+                        Status = paid ? LoanRepaymentStatus.Paid : LoanRepaymentStatus.Pending,
+                    });
+                }
+            }
+            await db.SaveChangesAsync();
+        }
+
         // ---- Vài tin nhắn nội bộ demo (để hộp thư không trống) ----
         if (!await db.Messages.AnyAsync())
         {
@@ -602,9 +700,14 @@ public static class DemoDataSeeder
 
         foreach (var collaborator in collaborators)
         {
-            if (collaborator.CommissionSharePercentage <= 0)
+            // CTV chỉ nhận 30-40% hoa hồng đại lý (góp ý Vietgroup) → kéo giá trị cũ về đúng khoảng.
+            if (collaborator.CommissionSharePercentage < AgentCommissionRates.CollaboratorShareMin
+                || collaborator.CommissionSharePercentage > AgentCommissionRates.CollaboratorShareMax)
             {
-                collaborator.CommissionSharePercentage = 50m;
+                collaborator.CommissionSharePercentage = collaborator.CommissionSharePercentage <= 0
+                    ? AgentCommissionRates.CollaboratorShareDefault
+                    : Math.Clamp(collaborator.CommissionSharePercentage,
+                        AgentCommissionRates.CollaboratorShareMin, AgentCommissionRates.CollaboratorShareMax);
                 collaborator.UpdatedAt = now;
                 changed = true;
             }

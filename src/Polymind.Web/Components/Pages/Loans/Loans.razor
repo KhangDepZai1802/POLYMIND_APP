@@ -10,10 +10,14 @@
 
 <PageTitle>Hỗ trợ vay — POLYMIND</PageTitle>
 
-<PageHeader Eyebrow="TÀI CHÍNH" Title="Hỗ trợ vay vốn ứng viên" Subtitle="@($"{_rows.Count} khoản vay • {_disbursedCount} đã giải ngân")">
+<PageHeader Eyebrow="TÀI CHÍNH" Title="Hỗ trợ vay & công nợ ứng viên" Subtitle="@($"{_rows.Count} khoản vay/nợ • {_companyDebtCount} nợ công ty")">
     <Actions>
         @if (_canUpdate)
         {
+            <MudButton Class="entity-action-button" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.RequestQuote"
+                       Href="/debt-collection">
+                Thu nợ
+            </MudButton>
             <MudButton Class="entity-action-button" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreate">
                 Thêm khoản vay
             </MudButton>
@@ -37,8 +41,8 @@ else
         </MudItem>
         <MudItem xs="6" md="3">
             <MudPaper Class="pa-3" Elevation="1">
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">Đã giải ngân</MudText>
-                <MudText Typo="Typo.h5" Color="Color.Info"><b>@_disbursedCount</b></MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Nợ công ty</MudText>
+                <MudText Typo="Typo.h5" Color="Color.Warning"><b>@_companyDebtCount</b></MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="6" md="3">
@@ -70,6 +74,15 @@ else
                     }
                 </MudSelect>
             </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect T="LoanKind?" @bind-Value="_kindFilter" Label="Lọc theo loại nợ" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                    <MudSelectItem T="LoanKind?" Value="@((LoanKind?)null)">Tất cả</MudSelectItem>
+                    @foreach (var k in LoanKindOptions)
+                    {
+                        <MudSelectItem T="LoanKind?" Value="@k">@Labels.Vi(k)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
         </MudGrid>
 
         @if (!Filtered.Any())
@@ -86,6 +99,7 @@ else
                         <thead>
                             <tr>
                                 <th>Ứng viên</th>
+                                <th>Loại nợ</th>
                                 <th>Tình trạng</th>
                                 <th style="text-align:right">Số tiền</th>
                                 <th style="text-align:center">Thời hạn</th>
@@ -99,6 +113,9 @@ else
                             {
                                 <tr style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/candidates/{r.CandidateId}"))">
                                     <td><b>@r.CandidateName</b><MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@r.Code</MudText></td>
+                                    <td>
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Labels.ColorOf(r.Kind)" Icon="@Labels.IconOf(r.Kind)">@Labels.Vi(r.Kind)</MudChip>
+                                    </td>
                                     <td>
                                         <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(r.Status)" Icon="@Labels.IconOf(r.Status)">@Labels.Vi(r.Status)</MudChip>
                                     </td>
@@ -136,7 +153,10 @@ else
                                 <MudText Typo="Typo.subtitle2" Style="font-weight:600">@r.CandidateName</MudText>
                                 <MudText Typo="Typo.caption" Class="mud-text-secondary">@r.Code</MudText>
                             </div>
-                            <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(r.Status)" Icon="@Labels.IconOf(r.Status)">@Labels.Vi(r.Status)</MudChip>
+                            <div class="d-flex flex-column align-end" style="gap:4px">
+                                <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(r.Status)" Icon="@Labels.IconOf(r.Status)">@Labels.Vi(r.Status)</MudChip>
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Labels.ColorOf(r.Kind)">@Labels.Vi(r.Kind)</MudChip>
+                            </div>
                         </div>
                         <div class="d-flex justify-space-between align-center mt-1" style="gap:8px">
                             <MudText Typo="Typo.body2">
@@ -164,10 +184,11 @@ else
 }
 
 @code {
-    private record LoanRow(Guid CandidateId, string CandidateName, string Code, LoanStatus Status,
+    private record LoanRow(Guid CandidateId, string CandidateName, string Code, LoanKind Kind, LoanStatus Status,
         decimal? Amount, int? TermMonths, string? BankName, DateOnly? DisbursedDate);
 
     private static readonly LoanStatus[] LoanStatusOptions = { LoanStatus.Borrowing, LoanStatus.Disbursed, LoanStatus.Settled };
+    private static readonly LoanKind[] LoanKindOptions = { LoanKind.Bank, LoanKind.Company };
 
     private List<LoanRow> _rows = new();
     private bool _loading = true;
@@ -175,14 +196,16 @@ else
     private bool _canDelete;
     private string _search = "";
     private LoanStatus? _statusFilter;
+    private LoanKind? _kindFilter;
 
     private int _borrowingCount;
-    private int _disbursedCount;
     private int _settledCount;
+    private int _companyDebtCount;
     private decimal _disbursedAmount;
 
     private IEnumerable<LoanRow> Filtered => _rows.Where(r =>
         (_statusFilter is null || r.Status == _statusFilter)
+        && (_kindFilter is null || r.Kind == _kindFilter)
         && (string.IsNullOrWhiteSpace(_search)
             || r.CandidateName.Contains(_search, StringComparison.OrdinalIgnoreCase)
             || r.Code.Contains(_search, StringComparison.OrdinalIgnoreCase)
@@ -226,6 +249,7 @@ else
                     c.Id,
                     c.FullName,
                     c.Code,
+                    l.Kind,
                     l.Status == LoanStatus.NotBorrowed ? LoanStatus.Borrowing : l.Status,
                     l.Amount,
                     l.TermMonths,
@@ -236,8 +260,8 @@ else
             .ToList();
 
         _borrowingCount = _rows.Count(r => r.Status == LoanStatus.Borrowing);
-        _disbursedCount = _rows.Count(r => r.Status == LoanStatus.Disbursed);
         _settledCount = _rows.Count(r => r.Status == LoanStatus.Settled);
+        _companyDebtCount = _rows.Count(r => r.Kind == LoanKind.Company);
         _disbursedAmount = _rows.Where(r => r.Status is LoanStatus.Disbursed or LoanStatus.Settled).Sum(r => r.Amount ?? 0m);
 
         _loading = false;

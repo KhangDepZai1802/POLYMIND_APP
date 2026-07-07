@@ -1,0 +1,23 @@
+@page "/admin/parents-students"
+@attribute [Authorize(Policy = "users:read")]
+@using Polymind.Infrastructure.Persistence.Constants
+
+<PageTitle>Phụ huynh & Học sinh — POLYMIND</PageTitle>
+
+<PageHeader Eyebrow="HỆ THỐNG" Title="Phụ huynh & Học sinh" Subtitle="Quản lý riêng tài khoản phụ huynh và học viên">
+    <Actions>
+        <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" Variant="Variant.Outlined" Href="/admin">Về Quản trị hệ thống</MudButton>
+    </Actions>
+</PageHeader>
+
+<MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+    Trang này chỉ tạo và quản lý tài khoản <b>Phụ huynh</b> và <b>Học viên</b> (không tạo được vai trò khác). Có thể đổi qua lại
+    giữa hai vai trò này (hệ thống sẽ hỏi xác nhận). Super admin có thể <b>xóa</b> tài khoản tại đây (luôn có bước xác nhận).
+    Tài khoản nội bộ/đối tác khác quản lý ở trang <b>Quản trị hệ thống</b>.
+</MudAlert>
+
+<AccountManagerPanel ManagedRoles="@ParentStudentRoles" AllowDelete="true" />
+
+@code {
+    private static readonly string[] ParentStudentRoles = { RoleNames.Parent, RoleNames.Student };
+}
