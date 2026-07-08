@@ -13,6 +13,7 @@ obj/
 # Local secrets / env
 *.env
 .env
+scripts/.render-db-url.txt
 appsettings.*.Local.json
 logs/
 db-backups/
