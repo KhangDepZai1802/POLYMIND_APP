@@ -11,12 +11,12 @@
 </PageHeader>
 
 <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
-    Trang này chỉ tạo và quản lý tài khoản <b>Phụ huynh</b> và <b>Học viên</b> (không tạo được vai trò khác). Có thể đổi qua lại
-    giữa hai vai trò này (hệ thống sẽ hỏi xác nhận). Super admin có thể <b>xóa</b> tài khoản tại đây (luôn có bước xác nhận).
+    Trang này quản lý tất cả tài khoản <b>Phụ huynh</b> và <b>Học viên</b>. Tài khoản được <b>tạo trực tiếp ở trang chi tiết ứng viên</b>
+    (khu "Tài khoản đăng nhập"); tại đây bạn đổi vai trò (hệ thống sẽ hỏi xác nhận), khóa hoặc <b>xóa</b> (luôn có bước xác nhận).
     Tài khoản nội bộ/đối tác khác quản lý ở trang <b>Quản trị hệ thống</b>.
 </MudAlert>
 
-<AccountManagerPanel ManagedRoles="@ParentStudentRoles" AllowDelete="true" />
+<AccountManagerPanel ManagedRoles="@ParentStudentRoles" AllowDelete="true" ShowCreateForm="false" />
 
 @code {
     private static readonly string[] ParentStudentRoles = { RoleNames.Parent, RoleNames.Student };

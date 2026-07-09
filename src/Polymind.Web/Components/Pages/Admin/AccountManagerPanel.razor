@@ -16,6 +16,8 @@
 }
 else
 {
+    @if (ShowCreateForm)
+    {
     <AuthorizeView Policy="users:create">
         <Authorized>
             <MudPaper Class="pa-4 mb-4" Elevation="0" Outlined="true">
@@ -45,6 +47,7 @@ else
             </MudPaper>
         </Authorized>
     </AuthorizeView>
+    }
 
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Mỗi vai trò có một bảng riêng để dễ quản lý tài khoản.</MudText>
 
@@ -193,6 +196,9 @@ else
 
     /// <summary>Khi bật: super admin được XÓA hẳn tài khoản trong panel (luôn có bước xác nhận).</summary>
     [Parameter] public bool AllowDelete { get; set; }
+
+    /// <summary>Hiện card "Tạo tài khoản". Tắt ở trang Phụ huynh &amp; Học sinh (tạo trực tiếp ở chi tiết ứng viên).</summary>
+    [Parameter] public bool ShowCreateForm { get; set; } = true;
 
     private bool _loading = true;
     private List<UserRow> _users = new();
