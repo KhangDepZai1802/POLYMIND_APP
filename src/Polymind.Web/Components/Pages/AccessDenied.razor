@@ -1,14 +1,58 @@
 @page "/access-denied"
 @attribute [AllowAnonymous]
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthStateProvider
+@inject Polymind.Web.Identity.AgentScope AgentScope
 <PageTitle>Không có quyền — POLYMIND</PageTitle>
 
-<MudPaper Class="pa-6 mx-auto" Elevation="1" Style="max-width:560px">
-    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Large" Class="mb-3" />
-    <MudText Typo="Typo.h5" Class="mb-2"><b>Không có quyền truy cập</b></MudText>
-    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
-        Tài khoản hiện tại chưa được cấp quyền cho chức năng này.
-    </MudText>
-    <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Home">
-        Về tổng quan
-    </MudButton>
-</MudPaper>
+@if (_ready)
+{
+    <MudPaper Class="pa-6 mx-auto" Elevation="1" Style="max-width:560px">
+        <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Large" Class="mb-3" />
+        <MudText Typo="Typo.h5" Class="mb-2"><b>Không có quyền truy cập</b></MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+            Tài khoản hiện tại chưa được cấp quyền cho chức năng này.
+        </MudText>
+        <MudButton Href="@_homeHref" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Home">
+            @_homeLabel
+        </MudButton>
+    </MudPaper>
+}
+
+@code {
+    private bool _ready;
+    private string _homeHref = "/";
+    private string _homeLabel = "Về tổng quan";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (authState.User.Identity?.IsAuthenticated == true)
+        {
+            // Tài khoản không có quyền xem Tổng quan (Phụ huynh/Học sinh, Đại lý/CTV) KHÔNG bao giờ
+            // được để mắc kẹt ở trang này — đưa thẳng về trang mặc định theo vai trò.
+            // (Bắt cả trường hợp cookie-middleware redirect tới /access-denied?ReturnUrl=/, không qua router Blazor.)
+            var scope = await AgentScope.GetAsync();
+            if (scope.IsSelfScoped)
+            {
+                Nav.NavigateTo("/me", forceLoad: true);
+                return;
+            }
+            if (scope.IsPartnerOnly)
+            {
+                Nav.NavigateTo("/agents", forceLoad: true);
+                return;
+            }
+            // Nhân sự nội bộ (đều có quyền Tổng quan) — nút về Tổng quan hoạt động bình thường.
+            _homeHref = "/";
+            _homeLabel = "Về tổng quan";
+        }
+        else
+        {
+            _homeHref = "/login";
+            _homeLabel = "Đăng nhập";
+        }
+
+        _ready = true;
+    }
+}
