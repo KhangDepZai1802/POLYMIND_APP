@@ -1,0 +1,38 @@
+@* Thanh điều hướng dưới kiểu app điện thoại — chỉ hiện cho Phụ huynh/Học viên trên màn hình nhỏ. *@
+@inject AgentScope AgentScope
+
+@if (_isSelfScoped)
+{
+    <nav class="portal-bottom-nav" aria-label="Điều hướng chính">
+        <NavLink class="portal-bottom-item" href="/me" Match="NavLinkMatch.All">
+            <MudIcon Icon="@Icons.Material.Filled.Dashboard" Size="Size.Small" />
+            <span>Tổng quan</span>
+        </NavLink>
+        <NavLink class="portal-bottom-item" href="/candidates">
+            <MudIcon Icon="@Icons.Material.Filled.Badge" Size="Size.Small" />
+            <span>Hồ sơ</span>
+        </NavLink>
+        <NavLink class="portal-bottom-item" href="/finance">
+            <MudIcon Icon="@Icons.Material.Filled.Payments" Size="Size.Small" />
+            <span>Tài chính</span>
+        </NavLink>
+        <NavLink class="portal-bottom-item" href="/messages">
+            <MudIcon Icon="@Icons.Material.Filled.Forum" Size="Size.Small" />
+            <span>Tin nhắn</span>
+        </NavLink>
+        <NavLink class="portal-bottom-item" href="/ai">
+            <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Size="Size.Small" />
+            <span>Trợ lý AI</span>
+        </NavLink>
+    </nav>
+}
+
+@code {
+    private bool _isSelfScoped;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var scope = await AgentScope.GetAsync();
+        _isSelfScoped = scope.IsSelfScoped;
+    }
+}

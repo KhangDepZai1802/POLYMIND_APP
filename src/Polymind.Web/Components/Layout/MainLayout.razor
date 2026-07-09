@@ -54,12 +54,16 @@
         <NavMenu />
     </MudDrawer>
 
-    <MudMainContent Class="pt-16">
+    <MudMainContent Class="@($"pt-16 {(_isSelfScoped ? "portal-main" : "")}")">
         <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="px-2 px-sm-4 py-4">
             @Body
             <AppFooter />
         </MudContainer>
     </MudMainContent>
+    @if (_isSelfScoped)
+    {
+        <PortalBottomNav />
+    }
 </MudLayout>
 
 <div id="blazor-error-ui" data-nosnippet>
@@ -72,6 +76,7 @@
     private bool _drawerOpen = true;
     private bool _isDarkMode;
     private bool _isAgentOnly;
+    private bool _isSelfScoped;
     private MudThemeProvider _themeProvider = default!;
 
     protected override void OnInitialized() => Nav.LocationChanged += OnLocationChanged;
@@ -80,6 +85,7 @@
     {
         var scope = await AgentScope.GetAsync();
         _isAgentOnly = scope.IsAgentOnly;
+        _isSelfScoped = scope.IsSelfScoped;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

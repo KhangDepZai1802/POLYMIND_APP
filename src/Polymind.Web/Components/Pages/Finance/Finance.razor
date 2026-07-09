@@ -6,13 +6,21 @@
 @inject IAuthorizationService AuthorizationService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Nav
+@inject AgentScope AgentScope
 @using Polymind.Infrastructure.Persistence.Constants
 
 <PageTitle>Tài chính — POLYMIND</PageTitle>
 
-<PageHeader Eyebrow="TÀI CHÍNH" Title="Tài chính & Công nợ" Subtitle="Quản lý khoản thu từ ứng viên và khoản chi vận hành" />
+@if (_selfScoped)
+{
+    <PageHeader Eyebrow="TÀI CHÍNH" Title="Đóng tiền của tôi" Subtitle="Tiến độ nghĩa vụ đóng tiền theo chi phí đơn hàng" />
+}
+else
+{
+    <PageHeader Eyebrow="TÀI CHÍNH" Title="Tài chính & Công nợ" Subtitle="Quản lý khoản thu từ ứng viên và khoản chi vận hành" />
+}
 
-<MudGrid Class="mb-2">
+<MudGrid Class="mb-2" Style="@(_selfScoped ? "display:none" : "")">
     <MudItem xs="12" sm="4">
         <MudPaper Class="pa-4" Elevation="1">
             <MudText Typo="Typo.caption" Class="mud-text-secondary">Tổng đã thu</MudText>
@@ -40,8 +48,11 @@
                 Mỗi ứng viên đã được xếp vào đơn hàng phải đóng tổng = <b>chi phí đơn hàng</b>, chia <b>4 bước</b>:
                 Đặt cọc (20%) → Phí dịch vụ (30%) → Phí trước xuất cảnh (30%) → Tất toán (20%). Ứng viên hoàn tất khi đóng đủ 4 bước.
             </MudAlert>
-            <MudTextField @bind-Value="_progressSearch" Placeholder="Tìm theo tên / mã ứng viên / đơn hàng..." Adornment="Adornment.Start"
-                          AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+            @if (!_selfScoped)
+            {
+                <MudTextField @bind-Value="_progressSearch" Placeholder="Tìm theo tên / mã ứng viên / đơn hàng..." Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+            }
             @if (!FilteredProgress.Any())
             {
                 <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Chưa có ứng viên nào đã đến bước đặt cọc.</MudText>
@@ -122,6 +133,8 @@
             }
         </MudTabPanel>
 
+        @if (!_selfScoped)
+        {
         <MudTabPanel Text="@($"Khoản thu ({_payments.Count})")">
             <div class="d-flex justify-end mb-3">
                 <AuthorizeView Policy="payments:create">
@@ -381,6 +394,7 @@
                 </MudHidden>
             </MudTabPanel>
         }
+        }
     </MudTabs>
 </MudPaper>
 
@@ -408,6 +422,8 @@
     private decimal _totalPaid, _totalPending, _totalExpense;
     private bool _canUpdatePayment, _canUpdateExpense, _canRecordPayment, _canCreatePayment;
     private bool _canCreateReceipt, _canReadReceipt;
+    private bool _selfScoped;
+    private Guid? _ownedCandidateId;
 
     private IEnumerable<ProgressRow> FilteredProgress => _progress.Where(r =>
         string.IsNullOrWhiteSpace(_progressSearch)
@@ -417,6 +433,9 @@
 
     protected override async Task OnInitializedAsync()
     {
+        var scope = await AgentScope.GetAsync();
+        _selfScoped = scope.IsSelfScoped;
+        _ownedCandidateId = scope.OwnedCandidateId;
         _canUpdatePayment = await HasPermission("payments:update");
         _canCreatePayment = await HasPermission("payments:create");
         _canUpdateExpense = await HasPermission("expenses:update");
@@ -509,6 +528,13 @@
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         var eligibleCandidateIds = await FinanceEligibility.CandidateIdsAsync(db);
+        if (_selfScoped)
+        {
+            // Cổng cá nhân hóa: chỉ giữ đúng ứng viên gắn với tài khoản.
+            eligibleCandidateIds = _ownedCandidateId is Guid oid && eligibleCandidateIds.Contains(oid)
+                ? new HashSet<Guid> { oid }
+                : new HashSet<Guid>();
+        }
         var names = await db.Candidates.ToDictionaryAsync(c => c.Id, c => c.FullName);
         var payments = await db.Payments
             .Where(p => eligibleCandidateIds.Contains(p.CandidateId))
@@ -584,6 +610,12 @@
         .ThenByDescending(r => r.Percent)
         .ThenBy(r => r.CandidateName)
         .ToList();
+
+        // Cổng cá nhân hóa: chỉ hiển thị tiến độ của đúng ứng viên gắn với tài khoản.
+        if (_selfScoped)
+            _progress = _ownedCandidateId is Guid oid
+                ? _progress.Where(r => r.CandidateId == oid).ToList()
+                : new List<ProgressRow>();
     }
 
     // Tạo 4 khoản thu (1 cho mỗi bước) cho ứng viên theo lịch — idempotent (chỉ tạo bước còn thiếu).

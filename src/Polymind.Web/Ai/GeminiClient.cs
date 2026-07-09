@@ -141,7 +141,7 @@ public sealed class GeminiClient
     private async Task<AiResult> CallAsync(object body, CancellationToken ct)
     {
         if (!IsConfigured)
-            return AiResult.Fail("Chưa cấu hình Gemini API key (Ai:Gemini:ApiKey). Dán key vào appsettings.Development.json rồi khởi động lại.");
+            return AiResult.Fail("Chưa cấu hình Gemini API key. Máy local: Ai:Gemini:ApiKey (appsettings.Development.json). Server/Render: đặt biến môi trường Ai__Gemini__ApiKey rồi khởi động lại.");
 
         var url = $"{BaseUrl}/{_options.Model}:generateContent?key={_options.ApiKey}";
         try

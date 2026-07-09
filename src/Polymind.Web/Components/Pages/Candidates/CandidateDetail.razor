@@ -28,10 +28,9 @@ else
     <div class="d-flex justify-space-between align-center mb-3">
         <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/candidates"))">Quay lại</MudButton>
         <div class="d-flex flex-wrap" style="gap:8px">
-            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.AutoAwesome" OnClick="OpenAiAnalysis">Phân tích AI</MudButton>
-            @if (_canManageStudentAccount)
+            @if (!_selfScoped)
             {
-                <MudButton Class="entity-action-button" Variant="Variant.Outlined" Color="Color.Tertiary" StartIcon="@Icons.Material.Filled.School" OnClick="OpenStudentAccount">Tài khoản Học viên</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.AutoAwesome" OnClick="OpenAiAnalysis">Phân tích AI</MudButton>
             }
             @if (_canEditCandidateProfile)
             {
@@ -98,6 +97,45 @@ else
                         </div>
                     </div>
                 }
+            </MudItem>
+        </MudGrid>
+
+        @* ===== Tài khoản đăng nhập gắn với ứng viên (Học sinh + Phụ huynh) ===== *@
+        <MudDivider Class="my-3" />
+        <div class="d-flex align-center mb-2" style="gap:8px">
+            <MudIcon Icon="@Icons.Material.Filled.ManageAccounts" Color="Color.Tertiary" />
+            <MudText Typo="Typo.subtitle2"><b>Tài khoản đăng nhập (cổng cá nhân hóa)</b></MudText>
+        </div>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <div class="linked-account-tile">
+                    <MudIcon Icon="@Icons.Material.Filled.School" Color="@(_ownerEmail is null ? Color.Default : Color.Info)" />
+                    <div style="min-width:0;flex:1">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Class="mb-1">Học sinh</MudChip>
+                        <MudText Typo="Typo.body2" Class="person-name">@(_ownerEmail ?? "Chưa gắn tài khoản")</MudText>
+                    </div>
+                    @if (_canManageStudentAccount)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info"
+                                   StartIcon="@(_ownerEmail is null ? Icons.Material.Filled.PersonAdd : Icons.Material.Filled.Settings)"
+                                   OnClick="OpenStudentAccount">@(_ownerEmail is null ? "Tạo" : "Quản lý")</MudButton>
+                    }
+                </div>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <div class="linked-account-tile">
+                    <MudIcon Icon="@Icons.Material.Filled.FamilyRestroom" Color="@(_parentEmail is null ? Color.Default : Color.Tertiary)" />
+                    <div style="min-width:0;flex:1">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Tertiary" Variant="Variant.Outlined" Class="mb-1">Phụ huynh</MudChip>
+                        <MudText Typo="Typo.body2" Class="person-name">@(_parentEmail ?? "Chưa gắn tài khoản")</MudText>
+                    </div>
+                    @if (_canManageStudentAccount)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Tertiary"
+                                   StartIcon="@(_parentEmail is null ? Icons.Material.Filled.PersonAdd : Icons.Material.Filled.Settings)"
+                                   OnClick="OpenParentAccount">@(_parentEmail is null ? "Tạo" : "Quản lý")</MudButton>
+                    }
+                </div>
             </MudItem>
         </MudGrid>
     </MudPaper>
@@ -495,7 +533,8 @@ else
                 </MudPaper>
             }
 
-            @if (_canReadTraining)
+            @* Card đào tạo chỉ hiện khi ứng viên đã có danh xưng Học viên/Lao động (đã đặt cọc). *@
+            @if (_canReadTraining && PersonTitle.IsTitled(_cjo?.CurrentStep))
             {
                 @* Thẻ tóm tắt — chi tiết & phiếu đánh giá nằm ở module Đào tạo (/training). *@
                 <MudPaper Class="pa-4 mt-4" Elevation="1">
@@ -853,7 +892,10 @@ else
 
     private bool _canReadTraining;
     private bool _canManageStudentAccount;
+    private string? _ownerEmail;  // tài khoản Học sinh đã gắn
+    private string? _parentEmail; // tài khoản Phụ huynh đã gắn
     private bool _maskPhone; // CTV không được xem SĐT ứng viên (góp ý Vietgroup)
+    private bool _selfScoped; // Phụ huynh/Học viên xem hồ sơ của chính mình
     private TrainingTrackView _trainingLang = new(TrainingTrack.Language, false, null, 0);
     private TrainingTrackView _trainingVoc = new(TrainingTrack.Vocational, false, null, 0);
     private List<TrainingEvalView> _trainingEvals = new();
@@ -950,6 +992,7 @@ else
             return;
         }
         _maskPhone = scope.IsCollaboratorOnly;
+        _selfScoped = scope.IsSelfScoped;
         // Người phụ trách: Tư vấn viên (tài khoản role consultant) + Cộng tác viên (nguồn giới thiệu).
         _consultantId = _candidate.ConsultantId;
         if (_consultantId is not null)
@@ -964,6 +1007,14 @@ else
             _collaboratorName = await db.Collaborators.Where(x => x.Id == _collaboratorId.Value)
                 .Select(x => x.FullName).FirstOrDefaultAsync() ?? "—";
         }
+
+        // Tài khoản đăng nhập đã gắn: Học sinh (OwnerUserId) + Phụ huynh (ParentUserId).
+        _ownerEmail = _candidate.OwnerUserId is Guid ouid
+            ? await db.Users.Where(u => u.Id == ouid).Select(u => u.Email).FirstOrDefaultAsync()
+            : null;
+        _parentEmail = _candidate.ParentUserId is Guid puid
+            ? await db.Users.Where(u => u.Id == puid).Select(u => u.Email).FirstOrDefaultAsync()
+            : null;
 
         if (_canReadLoan)
         {
@@ -1182,7 +1233,22 @@ else
             { x => x.CandidateCode, _candidate.Code },
             { x => x.CandidateName, _candidate.FullName },
         };
-        var dialog = await DialogService.ShowAsync<StudentAccountDialog>("Tài khoản Học viên", parameters);
+        var dialog = await DialogService.ShowAsync<StudentAccountDialog>("Tài khoản Học sinh", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+            await Load();
+    }
+
+    private async Task OpenParentAccount()
+    {
+        if (!_canManageStudentAccount || _candidate is null) return;
+        var parameters = new DialogParameters<ParentAccountDialog>
+        {
+            { x => x.CandidateId, Id },
+            { x => x.CandidateCode, _candidate.Code },
+            { x => x.CandidateName, _candidate.FullName },
+        };
+        var dialog = await DialogService.ShowAsync<ParentAccountDialog>("Tài khoản Phụ huynh", parameters);
         var result = await dialog.Result;
         if (result is not null && !result.Canceled)
             await Load();

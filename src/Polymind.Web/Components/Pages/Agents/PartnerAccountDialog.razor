@@ -1,0 +1,188 @@
+@using Microsoft.AspNetCore.Identity
+@using Polymind.Infrastructure.Identity
+@using Polymind.Infrastructure.Persistence.Constants
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
+
+@* Tạo/gắn tài khoản đăng nhập cho Đại lý hoặc Cộng tác viên. *@
+<MudDialog>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_linkedEmail is not null)
+        {
+            <MudAlert Severity="Severity.Success" Dense="true" Class="mb-2">
+                @KindLabel <b>@PartnerName</b> đã có tài khoản đăng nhập.
+            </MudAlert>
+            <MudText Typo="Typo.body2"><b>Đăng nhập:</b> @_linkedEmail</MudText>
+            <div class="d-flex flex-wrap mt-3" style="gap:8px">
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Password"
+                           Disabled="_saving" OnClick="ResetPassword">Đặt lại mật khẩu (Admin@123)</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.LinkOff"
+                           Disabled="_saving" OnClick="Unlink">Gỡ liên kết & khóa</MudButton>
+            </div>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mb-2">
+                Tạo tài khoản đăng nhập cho @KindLabel.ToLower() <b>@PartnerName</b> (@PartnerCode).
+            </MudText>
+            <MudTextField @bind-Value="_email" Label="Email đăng nhập" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Mật khẩu mặc định: <b>Admin@123</b> (nên đổi sau khi đăng nhập).</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Đóng</MudButton>
+        @if (_linkedEmail is null && !_loading)
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="_saving" OnClick="CreateAsync">Tạo tài khoản</MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid PartnerId { get; set; }
+    [Parameter] public string PartnerCode { get; set; } = "";
+    [Parameter] public string PartnerName { get; set; } = "";
+    [Parameter] public bool IsAgent { get; set; }
+
+    private string KindLabel => IsAgent ? "Đại lý" : "Cộng tác viên";
+    private string RoleName => IsAgent ? RoleNames.Agent : RoleNames.Collaborator;
+
+    private bool _loading = true;
+    private bool _saving;
+    private string? _linkedEmail;
+    private string _email = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        Guid? uid = IsAgent
+            ? await db.Agents.Where(a => a.Id == PartnerId).Select(a => a.UserId).FirstOrDefaultAsync()
+            : await db.Collaborators.Where(c => c.Id == PartnerId).Select(c => c.UserId).FirstOrDefaultAsync();
+        if (uid is Guid u)
+            _linkedEmail = await db.Users.Where(x => x.Id == u).Select(x => x.Email).FirstOrDefaultAsync();
+        _email = SuggestEmail(PartnerCode);
+        _loading = false;
+    }
+
+    private string SuggestEmail(string code)
+    {
+        var slug = new string((code ?? "").Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(slug)) slug = Guid.NewGuid().ToString("N")[..8];
+        return $"{(IsAgent ? "daily" : "ctv")}-{slug}@polymind.local";
+    }
+
+    private async Task CreateAsync()
+    {
+        _saving = true;
+        try
+        {
+            var email = _email.Trim();
+            if (string.IsNullOrWhiteSpace(email)) { Snackbar.Add("Nhập email đăng nhập.", Severity.Warning); return; }
+
+            var existing = await UserManager.FindByEmailAsync(email);
+            ApplicationUser user;
+            if (existing is not null)
+            {
+                user = existing;
+            }
+            else
+            {
+                user = new ApplicationUser
+                {
+                    UserName = email,
+                    Email = email,
+                    EmailConfirmed = true,
+                    FullName = PartnerName,
+                    IsActive = true,
+                };
+                var create = await UserManager.CreateAsync(user, DbSeeder.DefaultAdminPassword);
+                if (!create.Succeeded)
+                {
+                    Snackbar.Add(string.Join("; ", create.Errors.Select(e => e.Description)), Severity.Error);
+                    return;
+                }
+            }
+            if (!await UserManager.IsInRoleAsync(user, RoleName))
+                await UserManager.AddToRoleAsync(user, RoleName);
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+            if (IsAgent)
+            {
+                var agent = await db.Agents.FirstOrDefaultAsync(a => a.Id == PartnerId);
+                if (agent is null) { Snackbar.Add("Không tìm thấy đại lý.", Severity.Warning); return; }
+                agent.UserId = user.Id;
+                agent.UpdatedAt = DateTimeOffset.UtcNow;
+                db.AddAudit(actorId, "link_account", "agents", agent.Id, null, new { agent.UserId, email });
+            }
+            else
+            {
+                var ctv = await db.Collaborators.FirstOrDefaultAsync(c => c.Id == PartnerId);
+                if (ctv is null) { Snackbar.Add("Không tìm thấy cộng tác viên.", Severity.Warning); return; }
+                ctv.UserId = user.Id;
+                ctv.UpdatedAt = DateTimeOffset.UtcNow;
+                db.AddAudit(actorId, "link_account", "collaborators", ctv.Id, null, new { ctv.UserId, email });
+            }
+            await db.SaveChangesAsync();
+
+            Snackbar.Add($"Đã tạo tài khoản {KindLabel.ToLower()}: {email}", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        finally { _saving = false; }
+    }
+
+    private async Task ResetPassword()
+    {
+        _saving = true;
+        try
+        {
+            if (_linkedEmail is null) return;
+            var user = await UserManager.FindByEmailAsync(_linkedEmail);
+            if (user is null) return;
+            var token = await UserManager.GeneratePasswordResetTokenAsync(user);
+            var reset = await UserManager.ResetPasswordAsync(user, token, DbSeeder.DefaultAdminPassword);
+            if (reset.Succeeded) Snackbar.Add("Đã đặt lại mật khẩu về Admin@123.", Severity.Success);
+            else Snackbar.Add(string.Join("; ", reset.Errors.Select(e => e.Description)), Severity.Error);
+        }
+        finally { _saving = false; }
+    }
+
+    private async Task Unlink()
+    {
+        _saving = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+            Guid? uid;
+            if (IsAgent)
+            {
+                var agent = await db.Agents.FirstOrDefaultAsync(a => a.Id == PartnerId);
+                uid = agent?.UserId;
+                if (agent is not null) { agent.UserId = null; agent.UpdatedAt = DateTimeOffset.UtcNow; db.AddAudit(actorId, "unlink_account", "agents", agent.Id, new { UserId = uid }, null); }
+            }
+            else
+            {
+                var ctv = await db.Collaborators.FirstOrDefaultAsync(c => c.Id == PartnerId);
+                uid = ctv?.UserId;
+                if (ctv is not null) { ctv.UserId = null; ctv.UpdatedAt = DateTimeOffset.UtcNow; db.AddAudit(actorId, "unlink_account", "collaborators", ctv.Id, new { UserId = uid }, null); }
+            }
+            if (uid is Guid u)
+            {
+                var user = await UserManager.FindByIdAsync(u.ToString());
+                if (user is not null) { user.IsActive = false; await UserManager.UpdateAsync(user); }
+            }
+            await db.SaveChangesAsync();
+            Snackbar.Add($"Đã gỡ liên kết tài khoản {KindLabel.ToLower()}.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        finally { _saving = false; }
+    }
+}

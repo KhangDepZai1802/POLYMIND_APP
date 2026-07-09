@@ -60,13 +60,23 @@
             <Columns>
                 <PropertyColumn Property="x => x.ShortCode" Title="Mã" />
                 <PropertyColumn Property="x => x.FullName" Title="Họ tên" />
+                <TemplateColumn Title="Trạng thái">
+                    <CellTemplate>
+                        @{ var titled = PersonTitle.IsTitled(context.Item.Step); var isStudent = PersonTitle.IsStudent(context.Item.Step, context.Item.Category); }
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                 Color="@(titled ? (isStudent ? Color.Info : Color.Success) : Color.Default)"
+                                 Icon="@(!titled ? Icons.Material.Filled.PersonOutline : isStudent ? Icons.Material.Filled.School : Icons.Material.Filled.Badge)">
+                            @PersonTitle.Of(context.Item.Step, context.Item.Category)
+                        </MudChip>
+                    </CellTemplate>
+                </TemplateColumn>
                 <TemplateColumn Title="Giới tính">
                     <CellTemplate>
                         @if (context.Item.Gender is Gender g)
                         {
                             <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="@GenderChipClass(g)"
                                      Color="@GenderChipColor(g)"
-                                     Icon="@(g == Gender.Male ? Icons.Material.Filled.Male : g == Gender.Female ? Icons.Material.Filled.Female : Icons.Material.Filled.Transgender)">@Labels.Vi(g)</MudChip>
+                                     Icon="@(g == Gender.Male ? Icons.Material.Filled.Male : g == Gender.Female ? Icons.Material.Filled.Female : Icons.Material.Filled.Transgender)"><span class="laptop-hide-inline">@Labels.Vi(g)</span></MudChip>
                         }
                         else { <span class="mud-text-secondary">—</span> }
                     </CellTemplate>
@@ -128,7 +138,15 @@
                 <MudPaper Class="mobile-card pa-3 mt-2" Elevation="0" Style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/candidates/{r.Id}"))">
                     <div class="d-flex justify-space-between align-center" style="gap:8px">
                         <div style="min-width:0">
-                            <MudText Typo="Typo.subtitle2" Style="font-weight:600">@r.FullName</MudText>
+                            <div class="d-flex align-center flex-wrap" style="gap:6px">
+                                <MudText Typo="Typo.subtitle2" Style="font-weight:600">@r.FullName</MudText>
+                                @{ var titled = PersonTitle.IsTitled(r.Step); var isStudent = PersonTitle.IsStudent(r.Step, r.Category); }
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                         Color="@(titled ? (isStudent ? Color.Info : Color.Success) : Color.Default)"
+                                         Icon="@(!titled ? Icons.Material.Filled.PersonOutline : isStudent ? Icons.Material.Filled.School : Icons.Material.Filled.Badge)">
+                                    @PersonTitle.Of(r.Step, r.Category)
+                                </MudChip>
+                            </div>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">@r.ShortCode • @(r.Gender is Gender g ? Labels.Vi(g) : "—") • <CountryFlag Style="st" Size="16" /> @st.Name @(string.IsNullOrWhiteSpace(r.Field) ? "" : $"• {r.Field}")</MudText>
                         </div>
                         @if (r.Step is null)
@@ -161,7 +179,8 @@
 
 @code {
     private record Row(Guid Id, string Code, string ShortCode, string FullName, Gender? Gender,
-        Guid? ConsultantId, string? ConsultantName, string? Country, string? Field, WorkflowStep? Step, double Progress);
+        Guid? ConsultantId, string? ConsultantName, string? Country, string? Field, WorkflowStep? Step, double Progress,
+        JobCategory? Category);
 
     private List<Row> _rows = new();
     private string _search = "";
@@ -210,7 +229,18 @@
         _ => Color.Default
     };
 
-    protected override async Task OnInitializedAsync() => await Load();
+    protected override async Task OnInitializedAsync()
+    {
+        // Cổng cá nhân hóa (Phụ huynh/Học viên): bỏ bảng, vào thẳng hồ sơ của mình.
+        var scope = await AgentScope.GetAsync();
+        if (scope.IsSelfScoped)
+        {
+            if (scope.OwnedCandidateId is Guid oid)
+                Nav.NavigateTo($"/candidates/{oid}", replace: true);
+            return;
+        }
+        await Load();
+    }
 
     private async Task ShowConsultant(Guid id)
     {
@@ -255,7 +285,7 @@
             query = query.Where(c => c.CollaboratorId == scope.CollaboratorId);
         else if (scope.IsSelfScoped)
             // Phụ huynh / Học viên chỉ thấy đúng ứng viên gắn với tài khoản (null = không thấy gì).
-            query = query.Where(c => c.OwnerUserId != null && c.Id == scope.OwnedCandidateId);
+            query = query.Where(c => scope.OwnedCandidateId != null && c.Id == scope.OwnedCandidateId);
 
         var data = await query
             .Select(c => new
@@ -265,7 +295,7 @@
             })
             .ToListAsync();
 
-        var jobInfo = await db.JobOrders.ToDictionaryAsync(j => j.Id, j => new { j.Country, j.Field });
+        var jobInfo = await db.JobOrders.ToDictionaryAsync(j => j.Id, j => new { j.Country, j.Field, j.Category });
         var consultantNames = await db.Users.ToDictionaryAsync(u => u.Id, u => string.IsNullOrWhiteSpace(u.FullName) ? u.Email! : u.FullName);
 
         _rows = data.Select(d =>
@@ -278,7 +308,8 @@
                 job?.Country,
                 job?.Field,
                 d.Cjo?.CurrentStep,
-                WorkflowSteps.Progress(d.Cjo?.CurrentStep));
+                WorkflowSteps.Progress(d.Cjo?.CurrentStep),
+                job?.Category);
         }).ToList();
 
         // Bộ lọc quốc gia chỉ liệt kê các nước thực sự có trong bảng (tự cập nhật khi thêm Jobs nước mới).

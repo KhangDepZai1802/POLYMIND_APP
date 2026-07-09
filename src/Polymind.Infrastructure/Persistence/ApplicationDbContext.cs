@@ -86,6 +86,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
             e.HasIndex(x => x.PassportNumber);
             e.HasIndex(x => x.ConsultantId);
             e.HasIndex(x => x.OwnerUserId);
+            e.HasIndex(x => x.ParentUserId);
         });
 
         b.Entity<Payment>(e =>

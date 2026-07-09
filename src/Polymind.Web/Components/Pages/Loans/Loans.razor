@@ -10,7 +10,7 @@
 
 <PageTitle>Hỗ trợ vay — POLYMIND</PageTitle>
 
-<PageHeader Eyebrow="TÀI CHÍNH" Title="Hỗ trợ vay & công nợ ứng viên" Subtitle="@($"{_rows.Count} khoản vay/nợ • {_companyDebtCount} nợ công ty")">
+<PageHeader Eyebrow="TÀI CHÍNH" Title="@(_selfScoped ? "Khoản vay của tôi" : "Hỗ trợ vay & công nợ ứng viên")" Subtitle="@(_selfScoped ? "Thông tin khoản vay hỗ trợ chi phí xuất khẩu lao động" : $"{_rows.Count} khoản vay/nợ • {_companyDebtCount} nợ công ty")">
     <Actions>
         @if (_canUpdate)
         {
@@ -32,7 +32,7 @@
 else
 {
     @* Thẻ tổng quan theo tình trạng *@
-    <MudGrid Class="mb-4">
+    <MudGrid Class="mb-4" Style="@(_selfScoped ? "display:none" : "")">
         <MudItem xs="6" md="3">
             <MudPaper Class="pa-3" Elevation="1">
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">Đang vay</MudText>
@@ -193,6 +193,7 @@ else
     private List<LoanRow> _rows = new();
     private bool _loading = true;
     private bool _canUpdate;
+    private bool _selfScoped;
     private bool _canDelete;
     private string _search = "";
     private LoanStatus? _statusFilter;
@@ -225,9 +226,13 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         var scope = await AgentScope.GetAsync();
 
+        _selfScoped = scope.IsSelfScoped;
         var loanQuery = db.Loans.AsNoTracking();
         if (scope.IsAgentOnly)
             loanQuery = loanQuery.Where(l => db.Candidates.Any(c => c.Id == l.CandidateId && c.AgentId == scope.AgentId));
+        else if (scope.IsSelfScoped)
+            // Cổng cá nhân hóa: chỉ khoản vay của đúng ứng viên gắn với tài khoản.
+            loanQuery = loanQuery.Where(l => scope.OwnedCandidateId != null && l.CandidateId == scope.OwnedCandidateId);
 
         var loans = await loanQuery.ToListAsync();
         var latestLoans = loans

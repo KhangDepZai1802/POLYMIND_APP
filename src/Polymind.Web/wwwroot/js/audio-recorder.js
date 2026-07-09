@@ -3,12 +3,14 @@
 let mediaRecorder = null;
 let chunks = [];
 let stream = null;
-let lastBytes = null;
+let lastBlob = null;
+let lastSize = 0;
 let startedAt = 0;
 
 export async function start() {
     chunks = [];
-    lastBytes = null;
+    lastBlob = null;
+    lastSize = 0;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Trình duyệt không hỗ trợ ghi âm, hoặc trang không mở qua HTTPS/localhost nên bị chặn micro.');
     }
@@ -44,26 +46,27 @@ export async function stop() {
         if (!mediaRecorder) { resolve(null); return; }
         mediaRecorder.onstop = async () => {
             const type = (mediaRecorder.mimeType || 'audio/webm').split(';')[0];
-            const blob = new Blob(chunks, { type });
-            const buf = await blob.arrayBuffer();
-            lastBytes = new Uint8Array(buf);
+            // Giữ nguyên Blob (createJSStreamReference hỗ trợ Blob ổn định hơn Uint8Array).
+            lastBlob = new Blob(chunks, { type });
+            lastSize = lastBlob.size;
             if (stream) stream.getTracks().forEach(t => t.stop());
             const ext = type.includes('ogg') ? 'ogg' : (type.includes('mp4') || type.includes('mpeg') ? 'm4a' : 'webm');
             const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
-            resolve({ mimeType: type, ext, size: lastBytes.length, seconds });
+            resolve({ mimeType: type, ext, size: lastSize, seconds });
         };
         try { mediaRecorder.stop(); } catch { resolve(null); }
     });
 }
 
-// Trả stream nhị phân để .NET đọc (IJSStreamReference).
+// Trả stream nhị phân để .NET đọc (IJSStreamReference). Truyền Blob — luôn hợp lệ.
 export function getAudioStream() {
-    return lastBytes ? DotNet.createJSStreamReference(lastBytes) : null;
+    return lastBlob ? DotNet.createJSStreamReference(lastBlob) : null;
 }
 
 export function cancel() {
     try { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop(); } catch { }
     if (stream) stream.getTracks().forEach(t => t.stop());
     chunks = [];
-    lastBytes = null;
+    lastBlob = null;
+    lastSize = 0;
 }

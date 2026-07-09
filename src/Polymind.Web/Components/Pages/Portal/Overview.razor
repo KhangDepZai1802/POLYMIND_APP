@@ -1,0 +1,275 @@
+@page "/me"
+@attribute [Authorize(Policy = "candidates:read")]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AgentScope AgentScope
+@inject NavigationManager Nav
+
+<PageTitle>Tổng quan — POLYMIND</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_data is null)
+{
+    <MudAlert Severity="Severity.Info" Class="mt-4">
+        Tài khoản của bạn chưa được gắn với hồ sơ ứng viên nào. Vui lòng liên hệ tư vấn viên/cộng tác viên phụ trách.
+    </MudAlert>
+}
+else
+{
+    var d = _data;
+    <div class="portal-hero mb-4">
+        <div class="d-flex align-center" style="gap:12px">
+            <MudAvatar Color="Color.Primary" Size="Size.Large">@Initials(d.Name)</MudAvatar>
+            <div style="min-width:0">
+                <MudText Typo="Typo.caption" Class="portal-hero-eyebrow">XIN CHÀO 👋</MudText>
+                <MudText Typo="Typo.h6" Style="font-weight:800;line-height:1.15">@(_isParent ? $"Phụ huynh em {d.Name}" : d.Name)</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Mã hồ sơ: @d.Code</MudText>
+            </div>
+        </div>
+    </div>
+
+    <MudGrid Spacing="3">
+        @* ===== Tiến trình XKLĐ ===== *@
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4 portal-card" Elevation="0" @onclick="@(() => Nav.NavigateTo($"/candidates/{d.CandidateId}"))">
+                <div class="portal-card-head">
+                    <MudIcon Icon="@Icons.Material.Filled.Timeline" Color="Color.Primary" />
+                    <MudText Typo="Typo.subtitle1"><b>Tiến trình xuất khẩu lao động</b></MudText>
+                </div>
+                <MudText Typo="Typo.h6" Class="mt-2" Style="font-weight:700">Bước @d.StepNo. @d.StepLabel</MudText>
+                <MudProgressLinear Color="Color.Primary" Value="@d.StepProgress" Class="my-2" Style="height:12px" Rounded="true" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Hoàn thành @($"{d.StepProgress:0}%") của 20 bước quy trình</MudText>
+            </MudPaper>
+        </MudItem>
+
+        @* ===== Đóng tiền ===== *@
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4 portal-card" Elevation="0" @onclick="@(() => Nav.NavigateTo("/finance"))">
+                <div class="portal-card-head">
+                    <MudIcon Icon="@Icons.Material.Filled.Payments" Color="Color.Success" />
+                    <MudText Typo="Typo.subtitle1"><b>Tiến độ đóng tiền</b></MudText>
+                </div>
+                @if (d.TotalCost <= 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">Chưa có lịch đóng tiền (đơn hàng chưa nhập chi phí).</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.h6" Class="mt-2" Style="font-weight:700">@($"{d.Paid:N0}") / @($"{d.TotalCost:N0} đ")</MudText>
+                    <MudProgressLinear Color="@(d.PayPercent >= 100 ? Color.Success : Color.Primary)" Value="@d.PayPercent" Class="my-2" Style="height:12px" Rounded="true" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @d.PaidSteps/4 bước • Còn lại @($"{(d.TotalCost - d.Paid):N0} đ")
+                        @if (d.NextStageLabel is not null) { <span> • Kế tiếp: <b>@d.NextStageLabel</b></span> }
+                        else { <span> • <b>✔ Đã đóng đủ</b></span> }
+                    </MudText>
+                }
+            </MudPaper>
+        </MudItem>
+
+        @* ===== Đào tạo ===== *@
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4 portal-card" Elevation="0" @onclick="@(() => Nav.NavigateTo($"/training/{d.CandidateId}"))">
+                <div class="portal-card-head">
+                    <MudIcon Icon="@Icons.Material.Filled.School" Color="Color.Info" />
+                    <MudText Typo="Typo.subtitle1"><b>Học tập & Đào tạo</b></MudText>
+                </div>
+                @if (!d.LangEnrolled && !d.VocEnrolled)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">Chưa bắt đầu chương trình đào tạo.</MudText>
+                }
+                else
+                {
+                    <div class="mt-2">
+                        @if (d.LangEnrolled)
+                        {
+                            <div class="portal-track">
+                                <span class="portal-track-label">Học tiếng</span>
+                                <MudProgressLinear Color="Color.Success" Value="@d.LangProgress" Class="flex-grow-1" Style="height:8px" Rounded="true" />
+                                <span class="portal-track-pct">@d.LangProgress%</span>
+                            </div>
+                        }
+                        @if (d.VocEnrolled)
+                        {
+                            <div class="portal-track">
+                                <span class="portal-track-label">Chuyên môn</span>
+                                <MudProgressLinear Color="Color.Success" Value="@d.VocProgress" Class="flex-grow-1" Style="height:8px" Rounded="true" />
+                                <span class="portal-track-pct">@d.VocProgress%</span>
+                            </div>
+                        }
+                    </div>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+                        @d.EvalCount phiếu đánh giá@(d.LastEval is not null ? $" • gần nhất {d.LastEval:dd/MM/yyyy}" : "")
+                    </MudText>
+                }
+            </MudPaper>
+        </MudItem>
+
+        @* ===== Job / Đơn hàng ===== *@
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4 portal-card" Elevation="0" @onclick="@(() => Nav.NavigateTo($"/candidates/{d.CandidateId}"))">
+                <div class="portal-card-head">
+                    <MudIcon Icon="@Icons.Material.Filled.WorkOutline" Color="Color.Secondary" />
+                    <MudText Typo="Typo.subtitle1"><b>Đơn hàng của tôi</b></MudText>
+                </div>
+                @if (d.JobField is null && d.JobCompany is null && d.JobCountry is null)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">Chưa được xếp vào đơn hàng.</MudText>
+                }
+                else
+                {
+                    var ct = CountryDisplay.Of(d.JobCountry);
+                    <div class="d-flex align-center mt-2" style="gap:8px">
+                        <CountryFlag Style="ct" Size="22" />
+                        <MudText Typo="Typo.subtitle1" Style="font-weight:700">@ct.Name</MudText>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(d.JobField)) { <MudText Typo="Typo.body2" Class="mt-1"><b>Ngành nghề:</b> @d.JobField</MudText> }
+                    @if (!string.IsNullOrWhiteSpace(d.JobCompany)) { <MudText Typo="Typo.body2"><b>Công ty:</b> @d.JobCompany</MudText> }
+                    @if (!string.IsNullOrWhiteSpace(d.JobSalary)) { <MudText Typo="Typo.body2"><b>Lương:</b> @d.JobSalary</MudText> }
+                }
+            </MudPaper>
+        </MudItem>
+
+        @* ===== Hỗ trợ vay (nếu có) ===== *@
+        @if (d.HasLoan)
+        {
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4 portal-card" Elevation="0" @onclick="@(() => Nav.NavigateTo("/loans"))">
+                    <div class="portal-card-head">
+                        <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Color="Color.Warning" />
+                        <MudText Typo="Typo.subtitle1"><b>Hỗ trợ vay vốn</b></MudText>
+                    </div>
+                    <MudText Typo="Typo.h6" Class="mt-2" Style="font-weight:700">@($"{d.LoanTotal:N0} đ")</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@d.LoanSummary</MudText>
+                </MudPaper>
+            </MudItem>
+        }
+
+        @* ===== Liên hệ nhanh ===== *@
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4 portal-card" Elevation="0" @onclick="@(() => Nav.NavigateTo("/messages"))">
+                <div class="portal-card-head">
+                    <MudIcon Icon="@Icons.Material.Filled.Forum" Color="Color.Primary" />
+                    <MudText Typo="Typo.subtitle1"><b>Cần hỗ trợ?</b></MudText>
+                </div>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">Nhắn tin với người phụ trách hoặc hỏi Trợ lý AI về pháp lý, đóng tiền, quy trình.</MudText>
+                <div class="d-flex flex-wrap mt-3" style="gap:8px">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Forum" OnClick="@(() => Nav.NavigateTo("/messages"))">Tin nhắn</MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.AutoAwesome" OnClick="@(() => Nav.NavigateTo("/ai"))">Hỏi Trợ lý AI</MudButton>
+                </div>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private bool _loading = true;
+    private bool _isParent;
+    private OverviewData? _data;
+
+    private record OverviewData(
+        Guid CandidateId, string Name, string Code,
+        string StepNo, string StepLabel, double StepProgress,
+        decimal TotalCost, decimal Paid, double PayPercent, int PaidSteps, string? NextStageLabel,
+        bool LangEnrolled, int LangProgress, bool VocEnrolled, int VocProgress, int EvalCount, DateOnly? LastEval,
+        string? JobCountry, string? JobField, string? JobCompany, string? JobSalary,
+        bool HasLoan, decimal LoanTotal, string LoanSummary);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var scope = await AgentScope.GetAsync();
+        _isParent = scope.IsParent;
+        if (scope.OwnedCandidateId is not Guid cid) { _loading = false; return; }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var cand = await db.Candidates.AsNoTracking()
+            .Where(c => c.Id == cid)
+            .Select(c => new
+            {
+                c.Id, c.FullName, c.Code,
+                Cjo = c.JobOrders.OrderByDescending(j => j.CreatedAt)
+                    .Select(j => new { j.JobOrderId, j.CurrentStep }).FirstOrDefault()
+            })
+            .FirstOrDefaultAsync();
+        if (cand is null) { _loading = false; return; }
+
+        var step = cand.Cjo?.CurrentStep ?? WorkflowStep.Lead;
+
+        // Đơn hàng
+        string? country = null, field = null, company = null, salary = null;
+        decimal totalCost = 0;
+        if (cand.Cjo is not null)
+        {
+            var job = await db.JobOrders.AsNoTracking()
+                .Where(j => j.Id == cand.Cjo.JobOrderId)
+                .Select(j => new { j.Country, j.Field, j.CompanyName, j.SalaryDescription, j.CostAmount })
+                .FirstOrDefaultAsync();
+            if (job is not null)
+            {
+                country = job.Country; field = job.Field; company = job.CompanyName;
+                salary = job.SalaryDescription; totalCost = job.CostAmount ?? 0;
+            }
+        }
+
+        // Đóng tiền
+        var stagePays = await db.Payments.AsNoTracking()
+            .Where(p => p.CandidateId == cid && p.Stage != null)
+            .Select(p => new { p.Stage, p.Status, p.Amount })
+            .ToListAsync();
+        var split = PaymentSchedule.Split(totalCost);
+        decimal paid = 0; int paidSteps = 0;
+        PaymentStage? nextStage = null;
+        foreach (var (stg, _) in PaymentSchedule.Stages)
+        {
+            var pay = stagePays.FirstOrDefault(p => p.Stage == stg);
+            var isPaid = pay?.Status == PaymentStatus.Paid;
+            if (isPaid) { paid += pay!.Amount; paidSteps++; }
+            else if (nextStage is null) nextStage = stg;
+        }
+        var payPercent = totalCost <= 0 ? 0 : Math.Min(100, (double)(paid * 100 / totalCost));
+
+        // Đào tạo
+        var recs = await db.TrainingRecords.AsNoTracking()
+            .Where(r => r.CandidateId == cid)
+            .Select(r => new { r.Track, r.IsEnrolled, r.ProgressPercent })
+            .ToListAsync();
+        var lang = recs.FirstOrDefault(r => r.Track == TrainingTrack.Language);
+        var voc = recs.FirstOrDefault(r => r.Track == TrainingTrack.Vocational);
+        var evalCount = await db.TrainingEvaluations.AsNoTracking().CountAsync(e => e.CandidateId == cid);
+        DateOnly? lastEval = await db.TrainingEvaluations.AsNoTracking()
+            .Where(e => e.CandidateId == cid)
+            .OrderByDescending(e => e.EvaluationDate)
+            .Select(e => (DateOnly?)e.EvaluationDate)
+            .FirstOrDefaultAsync();
+
+        // Hỗ trợ vay
+        var loans = await db.Loans.AsNoTracking()
+            .Where(l => l.CandidateId == cid)
+            .Select(l => new { l.Amount, l.Status, l.Kind })
+            .ToListAsync();
+        var hasLoan = loans.Count > 0;
+        var loanTotal = loans.Sum(l => (decimal?)l.Amount) ?? 0m;
+        var loanSummary = hasLoan
+            ? string.Join(" • ", loans.Select(l => $"{Labels.Vi(l.Kind)}: {Labels.Vi(l.Status)}").Distinct())
+            : "";
+
+        _data = new OverviewData(
+            cand.Id, cand.FullName, cand.Code,
+            WorkflowSteps.No(step), Labels.Vi(step), WorkflowSteps.Progress(step),
+            totalCost, paid, payPercent, paidSteps, nextStage is null ? null : Labels.Vi(nextStage.Value),
+            lang?.IsEnrolled ?? false, lang?.ProgressPercent ?? 0,
+            voc?.IsEnrolled ?? false, voc?.ProgressPercent ?? 0, evalCount, lastEval,
+            country, field, company, salary,
+            hasLoan, loanTotal, loanSummary);
+        _loading = false;
+    }
+
+    private static string Initials(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+        var parts = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 1 ? parts[0][..1].ToUpper() : (parts[^2][..1] + parts[^1][..1]).ToUpper();
+    }
+}

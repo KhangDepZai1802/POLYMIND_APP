@@ -99,14 +99,16 @@ public static class DbSeeder
             Read("agents", "candidates", "commissions", "notifications", "training"),
             Messaging()),
 
-        // Phụ huynh: quyền thiết lập GIỐNG hệt CTV (góp ý Vietgroup §3).
+        // Phụ huynh: cổng cá nhân hóa — chỉ xem hồ sơ của con/em (bó hẹp qua Candidate.ParentUserId).
+        // Bỏ đại lý & hoa hồng; thêm tài chính + hỗ trợ vay + tin nhắn.
         [RoleNames.Parent] = Combine(
-            Read("agents", "candidates", "commissions", "notifications", "training"),
+            Read("candidates", "training", "payments", "loans", "notifications"),
             Messaging()),
 
-        // Học viên: chỉ xem dữ liệu của chính mình (bó hẹp bằng Candidate.OwnerUserId ở AgentScope).
+        // Học viên: cổng cá nhân hóa — chỉ xem hồ sơ của chính mình (bó hẹp qua Candidate.OwnerUserId).
         [RoleNames.Student] = Combine(
-            Read("candidates", "training", "notifications")),
+            Read("candidates", "training", "payments", "loans", "notifications"),
+            Messaging()),
     };
 
     /// <summary>Quyền nhắn tin nội bộ: ai cũng đọc + gửi được (phân quyền người-nhận xử lý ở tầng service/UI).</summary>

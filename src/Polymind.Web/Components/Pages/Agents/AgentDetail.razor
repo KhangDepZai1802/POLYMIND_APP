@@ -18,10 +18,23 @@ else
 {
     <div class="d-flex justify-space-between align-center mb-3">
         <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/agents"))">Quay lại</MudButton>
-        @if (_canUpdate)
-        {
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenEdit">Sửa đại lý</MudButton>
-        }
+        <div class="d-flex flex-wrap" style="gap:8px">
+            @if (_canManageAccount)
+            {
+                @if (_agent.UserId is null)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Tertiary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="OpenAgentAccount">Tạo tài khoản đại lý</MudButton>
+                }
+                else
+                {
+                    <MudButton Variant="Variant.Text" Color="Color.Success" StartIcon="@Icons.Material.Filled.CheckCircle" Disabled="true">Đã có tài khoản</MudButton>
+                }
+            }
+            @if (_canUpdate)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenEdit">Sửa đại lý</MudButton>
+            }
+        </div>
     </div>
 
     <MudGrid>
@@ -112,8 +125,20 @@ else
                                     </span>
                                     <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@c.Code • @(string.IsNullOrWhiteSpace(c.Phone) ? "—" : c.Phone) • CTV hưởng @($"{c.CommissionSharePercentage:0.#}%")</MudText>
                                 </div>
-                                <div class="d-flex align-center" style="gap:6px">
+                                <div class="d-flex align-center flex-wrap justify-end" style="gap:6px">
                                     <MudChip T="string" Size="Size.Small" Color="@(c.IsActive ? Color.Success : Color.Default)">@(c.IsActive ? "Hoạt động" : "Ngừng")</MudChip>
+                                    @if (_canManageAccount)
+                                    {
+                                        @if (c.UserId is null)
+                                        {
+                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Tertiary" StartIcon="@Icons.Material.Filled.PersonAdd"
+                                                       OnClick="@(() => OpenCtvAccount(c))">Tạo tài khoản</MudButton>
+                                        }
+                                        else
+                                        {
+                                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Success" StartIcon="@Icons.Material.Filled.CheckCircle" Disabled="true">Đã có tài khoản</MudButton>
+                                        }
+                                    }
                                     @if (_canManageCtv)
                                     {
                                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenCtvDialog(c.Id))" />
@@ -249,6 +274,7 @@ else
     private bool _canApproveCommission;
     private bool _canPayCommission;
     private bool _canManageCtv;
+    private bool _canManageAccount;
     private List<AgentCommissionConfig> _configs = new();
     private List<Collaborator> _collaborators = new();
 
@@ -265,7 +291,40 @@ else
         _canApproveCommission = await HasPermission("commissions:approve");
         _canPayCommission = await HasPermission("commissions:update");
         _canManageCtv = await HasPermission("collaborators:create");
+        _canManageAccount = await HasPermission("users:create");
         await Load();
+    }
+
+    private async Task OpenAgentAccount()
+    {
+        if (!_canManageAccount || _agent is null) return;
+        var parameters = new DialogParameters<PartnerAccountDialog>
+        {
+            { x => x.PartnerId, _agent.Id },
+            { x => x.PartnerCode, _agent.Code },
+            { x => x.PartnerName, _agent.Name },
+            { x => x.IsAgent, true },
+        };
+        var dialog = await DialogService.ShowAsync<PartnerAccountDialog>("Tài khoản Đại lý", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+            await Load();
+    }
+
+    private async Task OpenCtvAccount(Collaborator ctv)
+    {
+        if (!_canManageAccount) return;
+        var parameters = new DialogParameters<PartnerAccountDialog>
+        {
+            { x => x.PartnerId, ctv.Id },
+            { x => x.PartnerCode, ctv.Code },
+            { x => x.PartnerName, ctv.FullName },
+            { x => x.IsAgent, false },
+        };
+        var dialog = await DialogService.ShowAsync<PartnerAccountDialog>("Tài khoản Cộng tác viên", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+            await Load();
     }
 
     private async Task ShowCtv(Guid id)

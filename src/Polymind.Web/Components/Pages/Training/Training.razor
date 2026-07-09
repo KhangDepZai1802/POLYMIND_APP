@@ -131,7 +131,18 @@ else
         || r.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase)
         || r.ShortCode.Contains(_search, StringComparison.OrdinalIgnoreCase));
 
-    protected override async Task OnInitializedAsync() => await Load();
+    protected override async Task OnInitializedAsync()
+    {
+        // Cổng cá nhân hóa (Phụ huynh/Học viên): bỏ bảng, xem thẳng chi tiết đào tạo của mình.
+        var scope = await AgentScope.GetAsync();
+        if (scope.IsSelfScoped)
+        {
+            if (scope.OwnedCandidateId is Guid oid)
+                Nav.NavigateTo($"/training/{oid}", replace: true);
+            return;
+        }
+        await Load();
+    }
 
     private static string Short(string code)
     {
@@ -169,7 +180,7 @@ else
         var query = db.Candidates.AsQueryable();
         if (scope.IsAgentOnly) query = query.Where(c => c.AgentId == scope.AgentId);
         else if (scope.IsCollaboratorOnly) query = query.Where(c => c.CollaboratorId == scope.CollaboratorId);
-        else if (scope.IsSelfScoped) query = query.Where(c => c.OwnerUserId != null && c.Id == scope.OwnedCandidateId);
+        else if (scope.IsSelfScoped) query = query.Where(c => scope.OwnedCandidateId != null && c.Id == scope.OwnedCandidateId);
 
         var candidates = await query
             .Select(c => new
@@ -202,8 +213,9 @@ else
             var agg = evalAgg.GetValueOrDefault(c.Id);
             var step = c.Cjo?.CurrentStep;
 
-            // "Đang đào tạo": có bản ghi đào tạo, có phiếu đánh giá, hoặc đang ở bước Học tiếng/định hướng/nghề.
-            var inTraining = recs.Count > 0 || agg is not null || step == WorkflowStep.Orientation;
+            // "Đang đào tạo": đã có danh xưng Học viên/Lao động (đã đặt cọc — PersonTitle.IsTitled),
+            // hoặc đã có bản ghi/phiếu đánh giá, hoặc đang ở bước định hướng.
+            var inTraining = PersonTitle.IsTitled(step) || recs.Count > 0 || agg is not null || step == WorkflowStep.Orientation;
             if (!inTraining) continue;
 
             var enrolledProgress = new List<int>();

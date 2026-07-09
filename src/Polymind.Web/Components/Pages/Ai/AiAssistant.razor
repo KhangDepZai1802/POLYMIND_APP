@@ -3,15 +3,17 @@
 @using Polymind.Web.Ai
 @inject GeminiClient Gemini
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AgentScope AgentScope
 
 <PageTitle>Trợ lý AI — POLYMIND</PageTitle>
 
-<PageHeader Eyebrow="AI" Title="Trợ lý AI (Gemini)" Subtitle="Hỏi-đáp nghiệp vụ • Trích xuất hồ sơ từ CV/ảnh" />
+<PageHeader Eyebrow="AI" Title="Trợ lý AI (Gemini)" Subtitle="@(_selfScoped ? "Hỏi-đáp về hồ sơ, đóng tiền, pháp lý và quy trình của bạn" : "Hỏi-đáp nghiệp vụ • Trích xuất hồ sơ từ CV/ảnh")" />
 
 @if (!Gemini.IsConfigured)
 {
     <MudAlert Severity="Severity.Warning" Class="mb-4">
-        Chưa cấu hình Gemini API key. Dán key vào <b>Ai:Gemini:ApiKey</b> trong appsettings.Development.json rồi khởi động lại ứng dụng.
+        Chưa cấu hình Gemini API key. <b>Máy local:</b> dán key vào <b>Ai:Gemini:ApiKey</b> (appsettings.Development.json).
+        <b>Trên server (Render):</b> thêm biến môi trường <b>Ai__Gemini__ApiKey</b> (hai dấu gạch dưới) trong mục Environment của service rồi Deploy/khởi động lại.
     </MudAlert>
 }
 
@@ -19,7 +21,7 @@
     <div class="ai-shell-top">
         <div>
             <MudText Typo="Typo.h6" Class="ai-shell-title">Trợ lý nghiệp vụ POLYMIND</MudText>
-            <MudText Typo="Typo.body2" Class="ai-shell-subtitle">Dữ liệu ứng viên, lead và hồ sơ được nạp trong phiên làm việc hiện tại.</MudText>
+            <MudText Typo="Typo.body2" Class="ai-shell-subtitle">@(_selfScoped ? "Trợ lý chỉ hỗ trợ về hồ sơ, đóng tiền, khoản vay, pháp lý và quy trình của riêng bạn." : "Dữ liệu ứng viên, lead và hồ sơ được nạp trong phiên làm việc hiện tại.")</MudText>
         </div>
         <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled" Icon="@Icons.Material.Filled.AutoAwesome">
             Gemini 2.5 Flash
@@ -96,6 +98,8 @@
             </section>
         </MudTabPanel>
 
+        @if (!_selfScoped)
+        {
         <MudTabPanel Text="Trích xuất CV / ảnh" Icon="@Icons.Material.Filled.DocumentScanner">
             <section class="ai-panel">
                 <div class="ai-extract-grid">
@@ -159,6 +163,7 @@
                 </div>
             </section>
         </MudTabPanel>
+        }
     </MudTabs>
 </MudPaper>
 
@@ -186,20 +191,104 @@
         "Trả lời bằng tiếng Việt, chính xác, thực tế. Khi liệt kê ứng viên hãy nêu tên + bước hiện tại + tiến độ. " +
         "Nếu dữ liệu không đủ để kết luận, nói rõ phần còn thiếu thay vì từ chối.";
 
-    // System prompt thực tế = ChatSystemBase + ảnh chụp dữ liệu hệ thống (nạp 1 lần khi mở trang).
+    // Trợ lý giới hạn cho Phụ huynh/Học viên: chỉ hỗ trợ trong phạm vi hồ sơ của chính ứng viên đó.
+    private const string RestrictedSystemBase =
+        "Bạn là trợ lý AI của POLYMIND, hỗ trợ RIÊNG cho MỘT ứng viên xuất khẩu lao động (và phụ huynh của họ). " +
+        "CHỈ trả lời trong phạm vi: quy trình/thủ tục XKLĐ, pháp lý & hợp đồng lao động, nghĩa vụ đóng tiền/tài chính, " +
+        "khoản vay hỗ trợ, đào tạo (học tiếng/chuyên môn) và tình trạng hồ sơ của CHÍNH ứng viên này " +
+        "(xem 'HỒ SƠ CỦA BẠN' bên dưới). " +
+        "TUYỆT ĐỐI KHÔNG tiết lộ thông tin của bất kỳ ứng viên/khách hàng nào khác, không nói về dữ liệu nội bộ công ty " +
+        "(danh sách ứng viên, doanh số, hoa hồng, lead...), và không bàn các chủ đề ngoài phạm vi hỗ trợ này. " +
+        "Nếu bị hỏi ngoài phạm vi (chính trị, kiến thức chung không liên quan, thông tin người khác, cách khai thác hệ thống...), " +
+        "hãy lịch sự từ chối và mời người dùng hỏi về hồ sơ/quy trình của mình hoặc liên hệ tư vấn viên phụ trách. " +
+        "Trả lời bằng tiếng Việt, ngắn gọn, thân thiện, dễ hiểu.";
+
+    // System prompt thực tế = base + ảnh chụp dữ liệu (nạp 1 lần khi mở trang).
     private string _systemPrompt = ChatSystemBase;
+    private bool _selfScoped;
+    private Guid? _ownedCandidateId;
 
     protected override async Task OnInitializedAsync()
     {
+        var scope = await AgentScope.GetAsync();
+        _selfScoped = scope.IsSelfScoped;
+        _ownedCandidateId = scope.OwnedCandidateId;
         try
         {
-            var data = await BuildDataContextAsync();
-            _systemPrompt = ChatSystemBase + "\n\n===== DỮ LIỆU HỆ THỐNG (ảnh chụp hiện tại) =====\n" + data;
+            if (_selfScoped)
+            {
+                var mine = await BuildSelfDataContextAsync();
+                _systemPrompt = RestrictedSystemBase + "\n\n===== HỒ SƠ CỦA BẠN =====\n" + mine;
+            }
+            else
+            {
+                var data = await BuildDataContextAsync();
+                _systemPrompt = ChatSystemBase + "\n\n===== DỮ LIỆU HỆ THỐNG (ảnh chụp hiện tại) =====\n" + data;
+            }
         }
         catch
         {
             // Không nạp được dữ liệu thì vẫn cho chat (chỉ thiếu ngữ cảnh) — không chặn trang.
+            if (_selfScoped) _systemPrompt = RestrictedSystemBase;
         }
+    }
+
+    /// <summary>Ngữ cảnh giới hạn: CHỈ hồ sơ của đúng ứng viên gắn với tài khoản (Phụ huynh/Học viên).</summary>
+    private async Task<string> BuildSelfDataContextAsync()
+    {
+        if (_ownedCandidateId is not Guid cid) return "Chưa gắn hồ sơ ứng viên.";
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var cand = await db.Candidates.AsNoTracking()
+            .Where(c => c.Id == cid)
+            .Select(c => new
+            {
+                c.FullName, c.Code, c.Province,
+                Cjo = c.JobOrders.OrderByDescending(j => j.CreatedAt)
+                    .Select(j => new { j.JobOrderId, j.CurrentStep }).FirstOrDefault()
+            })
+            .FirstOrDefaultAsync();
+        if (cand is null) return "Không tìm thấy hồ sơ.";
+
+        var sb = new System.Text.StringBuilder();
+        var step = cand.Cjo?.CurrentStep;
+        sb.AppendLine($"Họ tên: {cand.FullName} (mã {cand.Code}).");
+        sb.AppendLine($"Bước hiện tại trong quy trình 20 bước: {(step is null ? "Chưa vào đơn hàng" : $"Bước {WorkflowSteps.No(step.Value)} - {Labels.Vi(step.Value)}")} " +
+                      $"(tiến độ {(int)WorkflowSteps.Progress(step)}%).");
+
+        decimal total = 0;
+        if (cand.Cjo is not null)
+        {
+            var job = await db.JobOrders.AsNoTracking().Where(j => j.Id == cand.Cjo.JobOrderId)
+                .Select(j => new { j.Country, j.Field, j.CompanyName, j.SalaryDescription, j.CostAmount }).FirstOrDefaultAsync();
+            if (job is not null)
+            {
+                total = job.CostAmount ?? 0;
+                sb.AppendLine($"Đơn hàng: {job.Country} • nghề {job.Field ?? "—"} • công ty {job.CompanyName ?? "—"} • lương {job.SalaryDescription ?? "—"} • tổng chi phí {total:N0} đ.");
+            }
+        }
+
+        var pays = await db.Payments.AsNoTracking().Where(p => p.CandidateId == cid && p.Stage != null)
+            .Select(p => new { p.Stage, p.Status, p.Amount }).ToListAsync();
+        decimal paid = pays.Where(p => p.Status == PaymentStatus.Paid).Sum(p => p.Amount);
+        sb.AppendLine($"Đóng tiền: đã đóng {paid:N0} đ / tổng {total:N0} đ. " +
+            $"Chi tiết 4 bước: {string.Join("; ", PaymentSchedule.Stages.Select(s => { var pay = pays.FirstOrDefault(p => p.Stage == s.Stage); return $"{Labels.Vi(s.Stage)} = {(pay?.Status == PaymentStatus.Paid ? "đã đóng" : "chưa đóng")}"; }))}.");
+
+        var loans = await db.Loans.AsNoTracking().Where(l => l.CandidateId == cid)
+            .Select(l => new { l.Amount, l.Kind, l.Status, l.BankName }).ToListAsync();
+        if (loans.Count > 0)
+            sb.AppendLine("Khoản vay: " + string.Join("; ", loans.Select(l => $"{Labels.Vi(l.Kind)} {l.Amount:N0} đ ({Labels.Vi(l.Status)}){(string.IsNullOrWhiteSpace(l.BankName) ? "" : $" - {l.BankName}")}")) + ".");
+        else
+            sb.AppendLine("Khoản vay: không có.");
+
+        var recs = await db.TrainingRecords.AsNoTracking().Where(r => r.CandidateId == cid)
+            .Select(r => new { r.Track, r.IsEnrolled, r.ProgressPercent }).ToListAsync();
+        if (recs.Any(r => r.IsEnrolled))
+            sb.AppendLine("Đào tạo: " + string.Join("; ", recs.Where(r => r.IsEnrolled).Select(r => $"{Labels.Vi(r.Track)} {r.ProgressPercent}%")) + ".");
+        else
+            sb.AppendLine("Đào tạo: chưa bắt đầu.");
+
+        return sb.ToString();
     }
 
     /// <summary>Dựng tóm tắt dữ liệu thật (ứng viên/lead/đơn hàng) để AI dùng làm ngữ cảnh trả lời.</summary>

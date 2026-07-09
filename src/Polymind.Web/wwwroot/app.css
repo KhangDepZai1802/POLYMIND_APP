@@ -711,10 +711,40 @@ body,
    để không tràn ngang: cột Quốc gia chỉ còn CỜ (ẩn tên nước), thanh tiến độ ngắn lại, và cho
    phép chip bước xuống dòng nếu quá dài. Trên PC rộng (>1600px) mọi thứ giữ y nguyên. */
 .candidate-progress-cell { min-width: 120px; }
+
+/* Bảng ứng viên: thu gọn khoảng cách các cột để chữ đỡ xuống dòng */
+.candidate-table td,
+.candidate-table th {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+}
+.candidate-table th { white-space: nowrap; }
+
 @media (max-width: 1600px) {
     .laptop-hide-inline { display: none; }
     .candidate-progress-cell { min-width: 76px; }
     .candidate-table .step-chip { white-space: normal; }
+
+    /* Laptop: chip giới tính chỉ còn icon → ép về hình TRÒN cân đối (không méo so với border) */
+    .candidate-table .gender-chip-male,
+    .candidate-table .gender-chip-female {
+        width: 30px;
+        min-width: 30px;
+        height: 30px;
+        padding: 0 !important;
+        border-radius: 50% !important;
+        justify-content: center;
+    }
+    .candidate-table .gender-chip-male .mud-chip-icon,
+    .candidate-table .gender-chip-female .mud-chip-icon {
+        margin: 0 !important;
+    }
+    .candidate-table .gender-chip-male svg,
+    .candidate-table .gender-chip-female svg {
+        flex: 0 0 auto;
+        width: 18px;
+        height: 18px;
+    }
 }
 
 .step-rainbow {
@@ -1356,4 +1386,113 @@ body,
     vertical-align: middle;
     border-radius: 3px;
     box-shadow: 0 0 0 1px rgba(0,0,0,.14), 0 1px 2px rgba(0,0,0,.12);
+}
+
+/* ===== Cổng cá nhân hóa Phụ huynh/Học viên: bottom nav kiểu app ===== */
+.portal-bottom-nav {
+    display: none;
+}
+
+@media (max-width: 959.98px) {
+    /* Thanh điều hướng dưới chỉ hiện trên điện thoại/tablet nhỏ */
+    .portal-bottom-nav {
+        display: flex;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1300;
+        height: 62px;
+        padding: 4px 4px calc(4px + env(safe-area-inset-bottom, 0px));
+        background: var(--mud-palette-surface);
+        border-top: 1px solid var(--mud-palette-lines-default);
+        box-shadow: 0 -2px 12px rgba(0,0,0,.10);
+    }
+
+    .portal-bottom-item {
+        flex: 1 1 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        text-decoration: none;
+        color: var(--mud-palette-text-secondary);
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.1;
+        border-radius: 12px;
+        padding: 4px 2px;
+        transition: color .15s ease, background .15s ease;
+    }
+
+    .portal-bottom-item span {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+
+    .portal-bottom-item:hover {
+        color: var(--mud-palette-primary);
+    }
+
+    .portal-bottom-item.active {
+        color: var(--mud-palette-primary);
+        background: var(--mud-palette-primary-hover);
+    }
+
+    /* Chừa chỗ cho bottom nav để nội dung không bị che */
+    .portal-main {
+        padding-bottom: 74px;
+    }
+}
+
+/* ===== Cổng cá nhân hóa: thẻ Tổng quan ===== */
+.portal-hero {
+    background: linear-gradient(135deg, var(--mud-palette-primary) 0%, var(--mud-palette-primary-darken) 100%);
+    color: #fff;
+    border-radius: 18px;
+    padding: 18px 18px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.12);
+}
+.portal-hero .portal-hero-eyebrow { color: rgba(255,255,255,.85); font-weight: 700; letter-spacing: .04em; }
+.portal-hero .mud-typography { color: #fff; }
+
+.portal-card {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 16px;
+    height: 100%;
+    cursor: pointer;
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+.portal-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,.10);
+    border-color: var(--mud-palette-primary);
+}
+.portal-card-head { display: flex; align-items: center; gap: 8px; }
+
+.portal-track { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.portal-track-label { min-width: 78px; font-size: 12px; color: var(--mud-palette-text-secondary); }
+.portal-track-pct { font-size: 12px; font-weight: 600; min-width: 34px; text-align: right; }
+
+/* Thẻ tài khoản đăng nhập gắn với ứng viên (chi tiết ứng viên) */
+.linked-account-tile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 12px;
+    background: var(--mud-palette-background-grey);
+}
+
+/* Khung nghe lại ghi âm trước khi gửi (Tin nhắn) */
+.message-audio-preview {
+    border: 1px dashed var(--mud-palette-primary);
+    border-radius: 12px;
+    padding: 8px 10px;
+    background: var(--mud-palette-primary-hover);
+    margin-bottom: 6px;
 }

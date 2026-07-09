@@ -174,7 +174,7 @@ else
         var query = db.Candidates.AsNoTracking().Where(c => c.Id == Id);
         if (scope.IsAgentOnly) query = query.Where(c => c.AgentId == scope.AgentId);
         else if (scope.IsCollaboratorOnly) query = query.Where(c => c.CollaboratorId == scope.CollaboratorId);
-        else if (scope.IsSelfScoped) query = query.Where(c => c.OwnerUserId != null && c.Id == scope.OwnedCandidateId);
+        else if (scope.IsSelfScoped) query = query.Where(c => scope.OwnedCandidateId != null && c.Id == scope.OwnedCandidateId);
 
         var candidate = await query.Select(c => new { c.Id, c.FullName, c.Code }).FirstOrDefaultAsync();
         if (candidate is null) { _found = false; _loading = false; return; }

@@ -21,7 +21,10 @@ public readonly record struct AgentScopeInfo(
     Guid? CollaboratorId,
     string? CollaboratorName,
     bool IsSelfScoped = false,
-    Guid? OwnedCandidateId = null)
+    Guid? OwnedCandidateId = null,
+    bool IsParent = false,
+    bool IsStudent = false,
+    bool OwnedCandidateHasLoan = false)
 {
     public bool IsPartnerOnly => IsAgentOnly || IsCollaboratorOnly;
 }
@@ -53,23 +56,29 @@ public class AgentScope(
         var isAgentOnly = user.IsInRole(RoleNames.Agent) && !hasStaffRole;
         var isCollaboratorOnly = !isAgentOnly && user.IsInRole(RoleNames.Collaborator) && !hasStaffRole;
         // Phụ huynh / Học viên: chỉ được xem đúng ứng viên gắn với tài khoản (Candidate.OwnerUserId).
+        var isStudent = user.IsInRole(RoleNames.Student);
+        var isParent = user.IsInRole(RoleNames.Parent);
         var isSelfScoped = !isAgentOnly && !isCollaboratorOnly && !hasStaffRole
-            && (user.IsInRole(RoleNames.Parent) || user.IsInRole(RoleNames.Student));
+            && (isParent || isStudent);
         Guid? agentId = null;
         string? agentName = null;
         Guid? collaboratorId = null;
         string? collaboratorName = null;
         Guid? ownedCandidateId = null;
+        var ownedHasLoan = false;
 
         if ((isAgentOnly || isCollaboratorOnly || isSelfScoped) && Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
         {
             await using var db = await dbFactory.CreateDbContextAsync();
             if (isSelfScoped)
             {
+                // Ứng viên gắn với tài khoản: Học sinh qua OwnerUserId, Phụ huynh qua ParentUserId.
                 ownedCandidateId = await db.Candidates
-                    .Where(c => c.OwnerUserId == userId)
+                    .Where(c => c.OwnerUserId == userId || c.ParentUserId == userId)
                     .Select(c => (Guid?)c.Id)
                     .FirstOrDefaultAsync();
+                if (ownedCandidateId is Guid cid)
+                    ownedHasLoan = await db.Loans.AnyAsync(l => l.CandidateId == cid);
             }
             else if (isAgentOnly)
             {
@@ -100,7 +109,7 @@ public class AgentScope(
         }
 
         var info = new AgentScopeInfo(isAgentOnly, agentId, agentName, isCollaboratorOnly, collaboratorId, collaboratorName,
-            isSelfScoped, ownedCandidateId);
+            isSelfScoped, ownedCandidateId, isParent && isSelfScoped, isStudent && isSelfScoped, ownedHasLoan);
         _cached = info;
         return info;
     }
