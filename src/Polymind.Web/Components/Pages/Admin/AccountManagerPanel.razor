@@ -51,6 +51,13 @@ else
 
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Mỗi vai trò có một bảng riêng để dễ quản lý tài khoản.</MudText>
 
+    @* RB-3: tìm kiếm theo tên (kèm email) — lọc các bảng tài khoản bên dưới. *@
+    <MudTextField @bind-Value="_search" @bind-Value:after="StateHasChanged" Immediate="true"
+                  Placeholder="Tìm theo tên hoặc email…" Label="Tìm kiếm theo tên"
+                  Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true"
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                  Class="mb-3" Style="max-width:420px" />
+
     @foreach (var grp in GroupedUsers())
     {
         <MudPaper Class="pa-3 mb-4" Elevation="0" Outlined="true">
@@ -207,6 +214,7 @@ else
     private string _newFullName = "";
     private string _newPassword = DbSeeder.DefaultAdminPassword;
     private string? _newRole;
+    private string _search = "";
 
     private HashSet<string> ManagedSet => ManagedRoles.ToHashSet();
 
@@ -436,10 +444,16 @@ else
     private IEnumerable<(string Key, string Label, string Icon, Color Color, List<UserRow> Users)> GroupedUsers()
     {
         var managed = ManagedSet;
+        var term = _search?.Trim() ?? "";
         foreach (var (role, label, icon, color) in RoleOrder)
         {
             if (!managed.Contains(role)) continue;
-            yield return (role, label, icon, color, _users.Where(u => u.PrimaryRole == role).ToList());
+            var rows = _users.Where(u => u.PrimaryRole == role);
+            if (term.Length > 0)
+                rows = rows.Where(u =>
+                    (u.FullName?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || (u.Email?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false));
+            yield return (role, label, icon, color, rows.ToList());
         }
     }
 

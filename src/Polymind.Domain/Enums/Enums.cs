@@ -126,7 +126,14 @@ public enum NotificationType
     ReminderDocument, ReminderPayment, ReminderInterview,
     ReminderVisa, ReminderDeparture, CommissionPayment,
     /// <summary>Lead đứng yên một trạng thái quá ngưỡng giờ cho phép → nhắc người phụ trách chăm sóc (góp ý Vietgroup).</summary>
-    ReminderLeadCare
+    ReminderLeadCare,
+    // RB-7: bổ sung nhắc việc Tài chính + Hoa hồng.
+    /// <summary>Kỳ trả nợ vay đến hạn/quá hạn → nhắc kế toán/giám đốc.</summary>
+    ReminderLoanRepayment,
+    /// <summary>Khoản chi đang chờ duyệt → nhắc kế toán/giám đốc.</summary>
+    ExpenseApproval,
+    /// <summary>Hoa hồng vừa phát sinh, đang chờ duyệt → nhắc kế toán/giám đốc.</summary>
+    CommissionPending
 }
 
 public enum NotificationChannel { Email, Sms, Zalo, InApp }

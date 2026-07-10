@@ -3,6 +3,10 @@
 @using Polymind.Web.Components.Pages.Loans
 @using Polymind.Web.Components.Pages.Ai
 @using Polymind.Web.Components.Pages.Training
+@using Polymind.Web.Components.Pages.Admin
+@using Microsoft.AspNetCore.Identity
+@using Polymind.Infrastructure.Identity
+@using Polymind.Infrastructure.Persistence.Constants
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
 @inject IDialogService DialogService
@@ -11,6 +15,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IDocumentStorage DocumentStorage
 @inject AgentScope AgentScope
+@inject UserManager<ApplicationUser> UserManager
 
 <PageTitle>Chi tiết Ứng viên — POLYMIND</PageTitle>
 
@@ -100,6 +105,39 @@ else
             </MudItem>
         </MudGrid>
 
+        @* ===== RB-2: Chỉ Super Admin được đổi Tư vấn viên (TVV) / Cộng tác viên (CTV) ===== *@
+        @if (_isSuperAdmin)
+        {
+            <MudDivider Class="my-3" />
+            <div class="d-flex align-center mb-2" style="gap:8px">
+                <MudIcon Icon="@Icons.Material.Filled.SwapHoriz" Color="Color.Warning" />
+                <MudText Typo="Typo.subtitle2"><b>Đổi người phụ trách (chỉ Super Admin)</b></MudText>
+            </div>
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="Guid?" @bind-Value="_editConsultantId" Label="Tư vấn viên (TVV)" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                        @foreach (var o in _consultantOptions)
+                        {
+                            <MudSelectItem T="Guid?" Value="@o.Id">@o.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="Guid?" @bind-Value="_editCollaboratorId" Label="Cộng tác viên (CTV)" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                        @foreach (var o in _collaboratorOptions)
+                        {
+                            <MudSelectItem T="Guid?" Value="@o.Id">@o.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+            <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Warning" StartIcon="@Icons.Material.Filled.Save"
+                       OnClick="ChangeAssigneesAsync"
+                       Disabled="@(_busy || (_editConsultantId == _candidate.ConsultantId && _editCollaboratorId == _candidate.CollaboratorId))">
+                Lưu thay đổi TVV/CTV
+            </MudButton>
+        }
+
         @* ===== Tài khoản đăng nhập gắn với ứng viên (Học sinh + Phụ huynh) ===== *@
         <MudDivider Class="my-3" />
         <div class="d-flex align-center mb-2" style="gap:8px">
@@ -139,6 +177,45 @@ else
             </MudItem>
         </MudGrid>
     </MudPaper>
+
+    @* ===== RB-2: Card riêng — Đơn hàng (Job) ứng viên đang gắn ===== *@
+    @if (_cjo is not null)
+    {
+        <MudPaper Class="pa-4 mb-4" Elevation="2">
+            <div class="d-flex align-center mb-2" style="gap:8px">
+                <MudIcon Icon="@Icons.Material.Filled.WorkOutline" Color="Color.Primary" />
+                <MudText Typo="Typo.subtitle1"><b>Đơn hàng của ứng viên</b></MudText>
+            </div>
+            <MudGrid>
+                @Field("Mã đơn hàng", _jobCode)
+                @Field("Quốc gia", _country)
+                @Field("Công ty tiếp nhận", _jobCompany)
+                @Field("Tiến trình", $"{WorkflowSteps.No(_cjo.CurrentStep)}. {Labels.Vi(_cjo.CurrentStep)}")
+            </MudGrid>
+            @if (_isSuperAdmin)
+            {
+                <MudDivider Class="my-3" />
+                <div class="d-flex align-center mb-2" style="gap:8px">
+                    <MudIcon Icon="@Icons.Material.Filled.SwapHoriz" Color="Color.Warning" />
+                    <MudText Typo="Typo.subtitle2"><b>Đổi đơn hàng (chỉ Super Admin)</b></MudText>
+                </div>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">
+                    Đổi đơn hàng đã gắn cho ứng viên; tiến trình hiện tại được giữ nguyên. Thao tác cần nhập lại mật khẩu.
+                </MudText>
+                <MudSelect T="Guid?" @bind-Value="_changeJobOrderId" Label="Đơn hàng mới" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2">
+                    @foreach (var j in _activeJobOrders)
+                    {
+                        <MudSelectItem T="Guid?" Value="@j.Id">@j.Code — @j.Country (@j.CompanyName)</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudButton Variant="Variant.Filled" Color="Color.Warning" StartIcon="@Icons.Material.Filled.SwapHoriz"
+                           OnClick="ChangeJobOrderAsync"
+                           Disabled="@(_busy || _changeJobOrderId is null || _changeJobOrderId == _cjo.JobOrderId)">
+                    Đổi đơn hàng
+                </MudButton>
+            }
+        </MudPaper>
+    }
 
     <MudGrid>
         <MudItem xs="12" md="5">
@@ -852,6 +929,17 @@ else
     private string _consultantName = "—";
     private Guid? _collaboratorId;
     private string _collaboratorName = "—";
+    // RB-2: chỉ super_admin được đổi TVV/CTV/đơn hàng của ứng viên (kèm xác nhận mật khẩu).
+    private bool _isSuperAdmin;
+    private string? _jobCode;
+    private string? _jobCompany;
+    private List<PickOption> _consultantOptions = new();
+    private List<PickOption> _collaboratorOptions = new();
+    private List<JobOrder> _activeJobOrders = new();
+    private Guid? _editConsultantId;
+    private Guid? _editCollaboratorId;
+    private Guid? _changeJobOrderId;
+    private record PickOption(Guid Id, string Name);
     private bool _busy;
     private bool _accessDenied;
     private bool _canUpdateCandidate;
@@ -972,6 +1060,7 @@ else
         _canReadTraining = await HasPermission("training:read");
         _canManageStudentAccount = await HasPermission("users:create");
         _canAssignJobOrder = WorkflowStepAccess.CanAssignJobOrder(authState.User);
+        _isSuperAdmin = authState.User.IsInRole(RoleNames.SuperAdmin);
         await Load();
     }
 
@@ -1008,6 +1097,29 @@ else
                 .Select(x => x.FullName).FirstOrDefaultAsync() ?? "—";
         }
 
+        // RB-2: chỉ super_admin mới nạp danh sách chọn TVV/CTV/đơn hàng để đổi.
+        _editConsultantId = _candidate.ConsultantId;
+        _editCollaboratorId = _candidate.CollaboratorId;
+        if (_isSuperAdmin)
+        {
+            var consultantUsers = await UserManager.GetUsersInRoleAsync(RoleNames.Consultant);
+            _consultantOptions = consultantUsers
+                .Select(u => new PickOption(u.Id, string.IsNullOrWhiteSpace(u.FullName) ? (u.Email ?? "—") : u.FullName))
+                .OrderBy(o => o.Name)
+                .ToList();
+            _collaboratorOptions = await db.Collaborators
+                .Where(c => c.IsActive)
+                .OrderBy(c => c.FullName)
+                .Select(c => new PickOption(c.Id, c.FullName))
+                .ToListAsync();
+            var todayJob = DateOnly.FromDateTime(DateTime.Today);
+            _activeJobOrders = await db.JobOrders
+                .Where(j => j.Status != JobOrderStatus.Cancelled
+                            && (j.ApplicationDeadline == null || j.ApplicationDeadline >= todayJob))
+                .OrderByDescending(j => j.CreatedAt)
+                .ToListAsync();
+        }
+
         // Tài khoản đăng nhập đã gắn: Học sinh (OwnerUserId) + Phụ huynh (ParentUserId).
         _ownerEmail = _candidate.OwnerUserId is Guid ouid
             ? await db.Users.Where(u => u.Id == ouid).Select(u => u.Email).FirstOrDefaultAsync()
@@ -1039,9 +1151,12 @@ else
         if (_cjo is not null)
         {
             var jobMeta = await db.JobOrders.Where(j => j.Id == _cjo.JobOrderId)
-                .Select(j => new { j.Country, j.Category }).FirstOrDefaultAsync();
+                .Select(j => new { j.Code, j.Country, j.Category, j.CompanyName }).FirstOrDefaultAsync();
+            _jobCode = jobMeta?.Code;
             _country = jobMeta?.Country;
             _jobCategory = jobMeta?.Category;
+            _jobCompany = jobMeta?.CompanyName;
+            _changeJobOrderId = _cjo.JobOrderId; // RB-2: mặc định = đơn hàng hiện tại
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
             _canAdvanceWorkflow = WorkflowStepAccess.CanAdvance(authState.User, _cjo.CurrentStep);
             _workflowOwnerLabel = WorkflowStepAccess.OwnerLabel(_cjo.CurrentStep);
@@ -1434,6 +1549,91 @@ else
             db.Loans.RemoveRange(loans);
             await db.SaveChangesAsync();
             Snackbar.Add("Đã xóa khoản vay.", Severity.Success);
+            await Load();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    // RB-2: xác nhận thao tác nhạy cảm bằng mật khẩu của chính super admin đang đăng nhập.
+    private async Task<bool> ConfirmWithPasswordAsync(string message)
+    {
+        var parameters = new DialogParameters<ConfirmPasswordDialog> { { x => x.Message, message } };
+        var dialog = await DialogService.ShowAsync<ConfirmPasswordDialog>("Xác nhận thao tác", parameters);
+        var result = await dialog.Result;
+        return result is not null && !result.Canceled;
+    }
+
+    // RB-2: chỉ super_admin đổi TVV/CTV; hỏi "chắc chưa?" + nhập lại mật khẩu.
+    private async Task ChangeAssigneesAsync()
+    {
+        if (_candidate is null || !_isSuperAdmin) return;
+        if (_editConsultantId == _candidate.ConsultantId && _editCollaboratorId == _candidate.CollaboratorId)
+        {
+            Snackbar.Add("Không có thay đổi nào.", Severity.Info);
+            return;
+        }
+        if (!await ConfirmWithPasswordAsync("Bạn sắp đổi Tư vấn viên/Cộng tác viên phụ trách ứng viên này. Thao tác này thay đổi người phụ trách và ảnh hưởng hoa hồng/nhắc việc."))
+            return;
+
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var candidate = await db.Candidates.FirstAsync(c => c.Id == Id);
+            var oldValue = new { candidate.ConsultantId, candidate.CollaboratorId };
+            candidate.ConsultantId = _editConsultantId;
+            candidate.CollaboratorId = _editCollaboratorId;
+            candidate.UpdatedAt = DateTimeOffset.UtcNow;
+            var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+            db.AddAudit(actorId, "reassign_people", "candidates", candidate.Id, oldValue,
+                new { candidate.ConsultantId, candidate.CollaboratorId });
+            await db.SaveChangesAsync();
+            Snackbar.Add("Đã cập nhật người phụ trách ứng viên.", Severity.Success);
+            await Load();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    // RB-2: chỉ super_admin đổi đơn hàng đã gắn; hỏi "chắc chưa?" + nhập lại mật khẩu. 1 ứng viên = 1 job active.
+    private async Task ChangeJobOrderAsync()
+    {
+        if (_cjo is null || _changeJobOrderId is null || !_isSuperAdmin) return;
+        if (_changeJobOrderId == _cjo.JobOrderId) return;
+        if (!await ConfirmWithPasswordAsync("Bạn sắp ĐỔI đơn hàng đã gắn của ứng viên. Tiến trình 20 bước hiện tại được giữ nguyên trên đơn hàng mới."))
+            return;
+
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var jobInfo = await db.JobOrders.Where(j => j.Id == _changeJobOrderId.Value)
+                .Select(j => new { j.Code, j.ApplicationDeadline, j.Status }).FirstOrDefaultAsync();
+            if (jobInfo is null || jobInfo.Status == JobOrderStatus.Cancelled)
+            {
+                Snackbar.Add("Đơn hàng không hợp lệ.", Severity.Warning);
+                return;
+            }
+            if (jobInfo.ApplicationDeadline is DateOnly deadline && deadline < DateOnly.FromDateTime(DateTime.Today))
+            {
+                Snackbar.Add($"Job {jobInfo.Code} đã hết hạn ứng tuyển ({deadline:dd/MM/yyyy}).", Severity.Warning);
+                return;
+            }
+
+            var cjo = await db.CandidateJobOrders.FirstAsync(j => j.Id == _cjo.Id);
+            var oldJobId = cjo.JobOrderId;
+            cjo.JobOrderId = _changeJobOrderId.Value;
+            cjo.UpdatedAt = DateTimeOffset.UtcNow;
+            var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+            db.AddAudit(actorId, "change_job_order", "candidate_job_orders", cjo.Id,
+                new { JobOrderId = oldJobId }, new { cjo.JobOrderId });
+            await db.SaveChangesAsync();
+            Snackbar.Add("Đã đổi đơn hàng của ứng viên.", Severity.Success);
             await Load();
         }
         finally

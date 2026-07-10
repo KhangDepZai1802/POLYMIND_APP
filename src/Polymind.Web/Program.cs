@@ -56,6 +56,8 @@ builder.Services.AddScoped<IDocumentStorage, MinioDocumentStorage>();
 // AI (Gemini) — trợ lý hỏi-đáp, phân tích hồ sơ, trích xuất CV. Key tạm thời (free) ở Ai:Gemini.
 builder.Services.Configure<Polymind.Web.Ai.GeminiOptions>(builder.Configuration.GetSection("Ai:Gemini"));
 builder.Services.AddHttpClient<Polymind.Web.Ai.GeminiClient>(c => c.Timeout = TimeSpan.FromSeconds(60));
+// RB-5: lưu hội thoại AI + kết quả trích xuất CV theo user, sống suốt phiên đăng nhập (xóa khi logout).
+builder.Services.AddSingleton<Polymind.Web.Ai.AiSessionStore>();
 
 // Thông báo đa kênh + job nền
 builder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection("Notifications"));
@@ -239,8 +241,12 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 });
 
 // Đăng xuất: xóa cookie rồi quay về trang login.
-app.MapPost("/Account/Logout", async (SignInManager<ApplicationUser> signInManager) =>
+app.MapPost("/Account/Logout", async (SignInManager<ApplicationUser> signInManager,
+    Microsoft.AspNetCore.Http.HttpContext httpContext, Polymind.Web.Ai.AiSessionStore aiSessions) =>
 {
+    // RB-5: xóa hội thoại AI + kết quả trích xuất CV của người dùng khi đăng xuất.
+    var uid = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    if (Guid.TryParse(uid, out var userId)) aiSessions.Clear(userId);
     await signInManager.SignOutAsync();
     return Results.Redirect("/login");
 });

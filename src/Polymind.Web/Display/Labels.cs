@@ -437,6 +437,9 @@ public static class Labels
         NotificationType.ReminderDeparture => "Nhắc xuất cảnh",
         NotificationType.CommissionPayment => "Chi hoa hồng",
         NotificationType.ReminderLeadCare => "Nhắc chăm sóc lead",
+        NotificationType.ReminderLoanRepayment => "Nhắc trả nợ vay",
+        NotificationType.ExpenseApproval => "Duyệt khoản chi",
+        NotificationType.CommissionPending => "Hoa hồng chờ duyệt",
         _ => t.ToString()
     };
 
@@ -449,6 +452,9 @@ public static class Labels
         NotificationType.ReminderDeparture => Icons.Material.Filled.FlightTakeoff,
         NotificationType.CommissionPayment => Icons.Material.Filled.Handshake,
         NotificationType.ReminderLeadCare => Icons.Material.Filled.NotificationsActive,
+        NotificationType.ReminderLoanRepayment => Icons.Material.Filled.AccountBalanceWallet,
+        NotificationType.ExpenseApproval => Icons.Material.Filled.ReceiptLong,
+        NotificationType.CommissionPending => Icons.Material.Filled.PendingActions,
         _ => Icons.Material.Filled.Notifications
     };
 
@@ -460,6 +466,9 @@ public static class Labels
         NotificationType.ReminderDocument => Color.Warning,
         NotificationType.CommissionPayment => Color.Secondary,
         NotificationType.ReminderLeadCare => Color.Error,
+        NotificationType.ReminderLoanRepayment => Color.Error,
+        NotificationType.ExpenseApproval => Color.Warning,
+        NotificationType.CommissionPending => Color.Secondary,
         _ => Color.Default
     };
 }

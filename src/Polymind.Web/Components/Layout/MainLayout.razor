@@ -3,6 +3,7 @@
 @inject NavigationManager Nav
 @inject IBrowserViewportService Viewport
 @inject AgentScope AgentScope
+@inject IDialogService DialogService
 @implements IDisposable
 
 <MudThemeProvider @ref="_themeProvider" Theme="Polymind.Web.Theme.PolymindTheme.Default" @bind-IsDarkMode="_isDarkMode" />
@@ -38,6 +39,8 @@
                     <MudText Typo="Typo.body2"><b>@context.User.Identity?.Name</b></MudText>
                     <MudText Typo="Typo.caption">@RoleLabel(context)</MudText>
                 </div>
+                <MudDivider />
+                <MudMenuItem Icon="@Icons.Material.Filled.Password" OnClick="OpenChangePasswordAsync">Đổi mật khẩu</MudMenuItem>
                 <MudDivider />
                 <form method="post" action="/Account/Logout">
                     <AntiforgeryToken />
@@ -80,6 +83,10 @@
     private MudThemeProvider _themeProvider = default!;
 
     protected override void OnInitialized() => Nav.LocationChanged += OnLocationChanged;
+
+    // RB-4: mở dialog tự đổi mật khẩu (mọi tài khoản, gồm Phụ huynh/Học sinh).
+    private async Task OpenChangePasswordAsync()
+        => await DialogService.ShowAsync<ChangePasswordDialog>("Đổi mật khẩu");
 
     protected override async Task OnParametersSetAsync()
     {

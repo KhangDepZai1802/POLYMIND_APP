@@ -1,4 +1,5 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject Polymind.Web.Identity.AgentScope Scope
 
 @* Bảng thông tin nhanh về 1 cộng tác viên — để liên lạc. *@
 <MudDialog>
@@ -43,8 +44,11 @@
                     else { <span>—</span> }
                 </MudListItem>
                 <MudListItem T="string" Icon="@Icons.Material.Filled.Place">@(string.IsNullOrWhiteSpace(_ctv.Address) ? "—" : _ctv.Address)</MudListItem>
-                <MudListItem T="string" Icon="@Icons.Material.Filled.Groups">Ứng viên đã giới thiệu: <b>@_candidateCount</b></MudListItem>
-                <MudListItem T="string" Icon="@Icons.Material.Filled.Percent">Tỷ lệ hoa hồng CTV: <b>@($"{_ctv.CommissionSharePercentage:0.#}%")</b></MudListItem>
+                @if (!_hideSensitive)
+                {
+                    <MudListItem T="string" Icon="@Icons.Material.Filled.Groups">Ứng viên đã giới thiệu: <b>@_candidateCount</b></MudListItem>
+                    <MudListItem T="string" Icon="@Icons.Material.Filled.Percent">Tỷ lệ hoa hồng CTV: <b>@($"{_ctv.CommissionSharePercentage:0.#}%")</b></MudListItem>
+                }
                 @if (!string.IsNullOrWhiteSpace(_ctv.Note))
                 {
                     <MudListItem T="string" Icon="@Icons.Material.Filled.Notes">@_ctv.Note</MudListItem>
@@ -65,9 +69,13 @@
     private string _agentName = "—";
     private int _candidateCount;
     private bool _loading = true;
+    // RB-1: Phụ huynh/Học sinh không được xem "Ứng viên đã giới thiệu" và "% hoa hồng CTV".
+    private bool _hideSensitive;
 
     protected override async Task OnInitializedAsync()
     {
+        var scope = await Scope.GetAsync();
+        _hideSensitive = scope.IsParent || scope.IsStudent;
         await using var db = await DbFactory.CreateDbContextAsync();
         _ctv = await db.Collaborators.FirstOrDefaultAsync(c => c.Id == CollaboratorId);
         if (_ctv is not null)

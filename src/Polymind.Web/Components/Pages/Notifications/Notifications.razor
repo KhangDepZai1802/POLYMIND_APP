@@ -3,6 +3,7 @@
 @inject Polymind.Web.Notifications.NotificationService NotificationSvc
 @inject AuthenticationStateProvider AuthState
 @inject ISnackbar Snackbar
+@inject NavigationManager Nav
 
 <PageTitle>Thông báo — POLYMIND</PageTitle>
 
@@ -143,10 +144,21 @@ else
         Snackbar.Add(sent > 0 ? $"Đã xử lý {sent} thông báo theo kênh." : "Không có thông báo đang chờ gửi.", Severity.Info);
     }
 
+    // RB-6: bấm 1 thông báo → đánh dấu đã đọc rồi điều hướng tới trang nguồn (nếu xác định được).
     private async Task MarkAsync(Notification n)
     {
-        if (n.IsRead || _userId is null) return;
-        await NotificationSvc.MarkReadAsync(n.Id);
+        if (_userId is null) return;
+        if (!n.IsRead)
+        {
+            await NotificationSvc.MarkReadAsync(n.Id);
+            n.IsRead = true;
+        }
+        var url = await NotificationSvc.ResolveTargetUrlAsync(n.ReferenceType, n.ReferenceId);
+        if (!string.IsNullOrEmpty(url))
+        {
+            Nav.NavigateTo(url);
+            return;
+        }
         await LoadAsync();
     }
 

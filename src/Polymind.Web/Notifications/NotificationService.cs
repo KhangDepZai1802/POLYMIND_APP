@@ -149,6 +149,69 @@ public class NotificationService(
             n.UserId == userId && n.Channel == NotificationChannel.InApp && !n.IsRead);
     }
 
+    /// <summary>
+    /// RB-6: từ 1 thông báo suy ra URL trang nguồn để điều hướng khi người dùng bấm vào.
+    /// payment/visa/flight → trang chi tiết ứng viên tương ứng; commission → trang đại lý;
+    /// lead/candidate → trang chi tiết trực tiếp. Trả null nếu không xác định được đích.
+    /// </summary>
+    public async Task<string?> ResolveTargetUrlAsync(string? referenceType, Guid? referenceId)
+    {
+        if (referenceId is not Guid id) return null;
+        switch (referenceType)
+        {
+            case "lead":
+                return $"/leads/{id}";
+            case "candidate":
+                return $"/candidates/{id}";
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        switch (referenceType)
+        {
+            case "payment":
+            {
+                var candidateId = await db.Payments.Where(p => p.Id == id)
+                    .Select(p => (Guid?)p.CandidateId).FirstOrDefaultAsync();
+                return candidateId is Guid c ? $"/candidates/{c}" : "/finance";
+            }
+            case "visa":
+            {
+                var candidateId = await db.Visas.Where(v => v.Id == id)
+                    .Select(v => (Guid?)v.CandidateId).FirstOrDefaultAsync();
+                return candidateId is Guid c ? $"/candidates/{c}" : "/visa";
+            }
+            case "flight":
+            {
+                var candidateId = await db.Flights.Where(f => f.Id == id)
+                    .Select(f => (Guid?)f.CandidateId).FirstOrDefaultAsync();
+                return candidateId is Guid c ? $"/candidates/{c}" : null;
+            }
+            case "commission":
+            {
+                var agentId = await db.AgentCommissions.Where(x => x.Id == id)
+                    .Select(x => (Guid?)x.AgentId).FirstOrDefaultAsync();
+                return agentId is Guid a ? $"/agents/{a}" : "/agents";
+            }
+            case "loan":
+            {
+                var candidateId = await db.Loans.Where(l => l.Id == id)
+                    .Select(l => (Guid?)l.CandidateId).FirstOrDefaultAsync();
+                return candidateId is Guid c ? $"/candidates/{c}" : "/loans";
+            }
+            case "loan_repayment":
+            {
+                var candidateId = await db.LoanRepayments.Where(r => r.Id == id)
+                    .Join(db.Loans, r => r.LoanId, l => l.Id, (r, l) => (Guid?)l.CandidateId)
+                    .FirstOrDefaultAsync();
+                return candidateId is Guid c ? $"/candidates/{c}" : "/debt-collection";
+            }
+            case "expense":
+                return "/finance";
+            default:
+                return null;
+        }
+    }
+
     public async Task MarkReadAsync(Guid notificationId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -340,6 +403,64 @@ public class NotificationService(
                 $"Hoa hồng chờ chi: {agentNames.GetValueOrDefault(c.AgentId, "Đại lý")}",
                 $"{c.CommissionAmount:N0} đ đã được duyệt, chờ thanh toán cho đại lý.",
                 RoleUsers(roleRecipients, RoleNames.Accountant, RoleNames.Director)));
+        }
+
+        // RB-7 (Hoa hồng): hoa hồng vừa phát sinh, đang chờ duyệt → kế toán/giám đốc.
+        var pendingCommissions = await db.AgentCommissions
+            .Where(c => c.Status == CommissionStatus.Pending)
+            .Select(c => new { c.Id, c.AgentId, c.CommissionAmount })
+            .ToListAsync();
+        foreach (var c in pendingCommissions)
+        {
+            events.Add(new ReminderEvent(
+                NotificationType.CommissionPending, c.Id, "commission",
+                $"Hoa hồng chờ duyệt: {agentNames.GetValueOrDefault(c.AgentId, "Đại lý")}",
+                $"{c.CommissionAmount:N0} đ vừa phát sinh, cần duyệt trước khi chi.",
+                RoleUsers(roleRecipients, RoleNames.Accountant, RoleNames.Director)));
+        }
+
+        // RB-7 (Tài chính): kỳ trả nợ vay đến hạn/quá hạn → kế toán/giám đốc.
+        var dueRepayments = await db.LoanRepayments
+            .Where(r => r.Status != LoanRepaymentStatus.Paid && r.DueDate <= horizon)
+            .Select(r => new { r.Id, r.LoanId, r.InstallmentNo, r.Amount, r.DueDate, r.Status })
+            .ToListAsync();
+        if (dueRepayments.Count > 0)
+        {
+            var loanIds = dueRepayments.Select(r => r.LoanId).Distinct().ToList();
+            var loanToCandidate = await db.Loans
+                .Where(l => loanIds.Contains(l.Id))
+                .Select(l => new { l.Id, l.CandidateId })
+                .ToDictionaryAsync(x => x.Id, x => x.CandidateId);
+            var financeStaff = RoleUsers(roleRecipients, RoleNames.Accountant, RoleNames.Director);
+            foreach (var r in dueRepayments)
+            {
+                var overdue = r.DueDate < today || r.Status == LoanRepaymentStatus.Overdue;
+                var candidateId = loanToCandidate.GetValueOrDefault(r.LoanId);
+                events.Add(new ReminderEvent(
+                    NotificationType.ReminderLoanRepayment, r.Id, "loan_repayment",
+                    $"{(overdue ? "Nợ vay quá hạn" : "Nợ vay sắp đến hạn")}: {Name(candidateId)}",
+                    $"Kỳ {r.InstallmentNo}: {r.Amount:N0} đ — hạn {r.DueDate:dd/MM/yyyy}.",
+                    financeStaff));
+            }
+        }
+
+        // RB-7 (Tài chính): khoản chi chờ duyệt (chưa có người duyệt) → kế toán/giám đốc.
+        var recentCutoff = today.AddDays(-60);
+        var pendingExpenses = await db.Expenses
+            .Where(e => e.ApprovedBy == null && e.ExpenseDate >= recentCutoff)
+            .Select(e => new { e.Id, e.Code, e.Amount, e.ExpenseDate })
+            .ToListAsync();
+        if (pendingExpenses.Count > 0)
+        {
+            var financeApprovers = RoleUsers(roleRecipients, RoleNames.Accountant, RoleNames.Director);
+            foreach (var e in pendingExpenses)
+            {
+                events.Add(new ReminderEvent(
+                    NotificationType.ExpenseApproval, e.Id, "expense",
+                    $"Khoản chi chờ duyệt: {e.Code}",
+                    $"{e.Amount:N0} đ — ngày {e.ExpenseDate:dd/MM/yyyy}.",
+                    financeApprovers));
+            }
         }
 
         return events;

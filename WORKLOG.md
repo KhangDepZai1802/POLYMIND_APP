@@ -28,6 +28,33 @@
 
 ---
 
+## 🔒 RÀNG BUỘC NGHIỆP VỤ — CHỐT VỚI USER 2026-07-10 (BẮT BUỘC — Claude + Codex phải tuân)
+
+> 7 yêu cầu user đã chốt (kèm quyết định qua hỏi–đáp). **Trạng thái: ĐÃ CODE XONG (Session 63) — BUILD 0/0, CHƯA smoke test trình duyệt (Docker/DB local chưa chạy) → cần duyệt mắt.** KHÔNG tự đổi quyết định đã chốt; nếu vướng, hỏi user trước.
+
+**✅ RB-1 — Ẩn thông tin nhạy cảm CTV với Phụ huynh/Học sinh.** Với role `parent` và `student`, mọi nơi hiển thị thông tin CTV (card/modal "Thông tin cộng tác viên") PHẢI ẩn đúng 2 dòng: **"Ứng viên đã giới thiệu"** và **"Tỷ lệ hoa hồng CTV %"**. Các dòng khác (tên, đại lý, SĐT, email, trạng thái) vẫn hiện. Kiểm tra qua `AgentScope.IsParent/IsStudent`.
+
+**✅ RB-2 — Chỉ super_admin đổi TVV/CTV + card Job trên chi tiết ứng viên.**
+- Chỉ `super_admin` được đổi **TVV (consultant)** và **CTV (collaborator)** đã gắn vào ứng viên; role khác chỉ xem.
+- Thêm **card riêng "Đơn hàng (Job)"** trên trang chi tiết ứng viên (giống card chọn job lúc convert lead→ứng viên). **1 ứng viên = 1 job active** (đổi job = thay job cũ).
+- Đổi job / đổi TVV / đổi CTV: chỉ super_admin, mỗi thao tác PHẢI qua hộp xác nhận **"Chắc chưa?" + nhập lại mật khẩu đăng nhập của CHÍNH super admin** (reuse `ConfirmPasswordDialog`; verify bằng `SignInManager.CheckPasswordSignInAsync` với user hiện tại). Ghi audit cho mỗi lần đổi.
+
+**✅ RB-3 — Tìm kiếm theo tên ở trang quản lý tài khoản Phụ huynh & Học sinh.** Trang admin `/admin/parents-students` (`ParentStudentAccounts.razor` / `AccountManagerPanel`): thêm ô **search theo tên** (lọc họ tên, có thể kèm email). (Không phải search trong portal của PH/HS.)
+
+**✅ RB-4 — Đổi mật khẩu Phụ huynh/Học sinh.** User `parent`/`student` **tự đổi mật khẩu** trong portal (`/me`), dùng Identity — **KHÔNG lưu plaintext**. Super admin **chỉ có nút "Đặt lại mật khẩu"** (đã có ở `AccountManagerPanel` — bảo đảm chạy được), **KHÔNG xem được** mật khẩu user tự đặt. (User đã chọn phương án an toàn thay vì lưu plaintext.)
+
+**✅ RB-5 — Giữ dữ liệu AI trong 1 phiên đăng nhập.** Hội thoại AI + kết quả trích xuất CV/ảnh PHẢI **lưu server-side theo `UserId`**, sống sót khi chuyển chức năng **và khi F5/refresh**; chỉ **mất khi đăng xuất**. Không để state chỉ trong component (mất khi điều hướng). Gợi ý: bảng/cache theo user + nạp lại khi mở trang AI + dọn khi logout (hook logout endpoint).
+
+**✅ RB-6 — Bấm thông báo → tới đúng trang nguồn.** Click 1 thông báo (chuông + trang thông báo) PHẢI điều hướng theo `Notification.ReferenceType` + `ReferenceId`: lead→`/leads/{id}`, candidate→`/candidates/{id}`, agent→`/agents/{id}`, payment/finance→trang tài chính ứng viên, visa→`/visas/...`, v.v.; đánh dấu đã đọc khi click. Thiếu reference thì không điều hướng.
+
+**✅ RB-7 — Bổ sung thông báo cho các module (user chốt: Tài chính, Hoa hồng & Đại lý, Visa & Xuất cảnh; KHÔNG thêm nhóm Tài khoản/Bảo mật).** (Visa/Xuất cảnh đã có sẵn; bổ sung mới: hoa hồng chờ duyệt, kỳ trả nợ vay đến hạn, khoản chi chờ duyệt.)
+- **Tài chính** → Kế toán + Director/super_admin: khoản thu đến hạn/quá hạn, công nợ ứng viên, khoản chi chờ duyệt, khoản vay (Loan) đến hạn trả.
+- **Hoa hồng & Đại lý** → CTV/Đại lý liên quan + Kế toán: hoa hồng phát sinh → chờ duyệt → đã chi.
+- **Visa & Xuất cảnh** → Visa staff + RM: nộp/bổ sung/kết quả visa, lịch phỏng vấn sắp tới, lịch bay sắp tới, xác nhận xuất cảnh.
+- Mọi thông báo mới PHẢI set `ReferenceType`/`ReferenceId` để RB-6 điều hướng được.
+
+---
+
 ## 🎯 TRẠNG THÁI HIỆN TẠI
 
 - **BỎ AUTHENTICATOR/TOTP 2FA CHO TOÀN BỘ TÀI KHOẢN TEST (Session 62, Codex) — CODE XONG, BUILD 0/0, CHƯA restart/redeploy/commit.** Đã gỡ luồng Google/Microsoft Authenticator khỏi web hiện tại: `Login.razor` chỉ dùng email+mật khẩu + lockout, không rẽ `/login-2fa`; xóa middleware enforcement, `TwoFactorEnforcement`, trang `/login-2fa`, `/account/2fa-setup`, nút/logic “Đặt lại 2FA” trong dialog sửa user; bỏ config `Security:RequireTwoFactor`; cache-bust login CSS. **Báo cáo `POLYMIND_Báo cáo tiến độ.docx` đã cập nhật:** giai đoạn đối tác test tạm bỏ 2FA để 2–3 người dùng chung tài khoản demo; bản final trước vận hành thật sẽ triển khai 2FA bằng SMS gửi về số điện thoại người dùng nhập (do SMS tốn phí nên chưa bật lúc test).
@@ -61,6 +88,12 @@
 ---
 
 ## 📜 NHẬT KÝ SESSION (mới nhất ở trên)
+
+### [2026-07-10] Session 63 — Claude — Thực thi 7 RÀNG BUỘC NGHIỆP VỤ mới (RB-1→RB-7)
+- **Làm được:** (RB-1) `CollaboratorInfoDialog` inject `AgentScope`, ẩn 2 dòng "Ứng viên đã giới thiệu" + "% hoa hồng CTV" khi role parent/student. (RB-2) `CandidateDetail`: thêm card riêng "Đơn hàng của ứng viên" (mã/quốc gia/công ty/tiến trình) + khu super_admin đổi TVV/CTV và đổi đơn hàng, mỗi thao tác qua `ConfirmPasswordDialog` (nhập lại mật khẩu super admin) + audit `reassign_people`/`change_job_order`; 1 ứng viên = 1 job active. (RB-3) `AccountManagerPanel` thêm ô tìm theo tên/email (lọc GroupedUsers) → áp cho `/admin/parents-students`. (RB-4) `ChangePasswordDialog.razor` mới (tự đổi MK qua `UserManager.ChangePasswordAsync`, KHÔNG lưu plaintext) + mục "Đổi mật khẩu" trong user-menu `MainLayout`; super admin vẫn reset qua `UserEditDialog` sẵn có. (RB-5) `AiSessionStore` singleton lưu hội thoại + kết quả trích xuất CV theo `UserId` (sống qua chuyển trang + F5), xóa ở endpoint `/Account/Logout`; `AiAssistant` đọc/ghi qua store. (RB-6) `NotificationService.ResolveTargetUrlAsync` map ReferenceType→route (lead/candidate/payment/visa/flight/commission/loan/loan_repayment/expense); `Notifications.razor` click → mark read + điều hướng. (RB-7) thêm 3 `NotificationType` (ReminderLoanRepayment, ExpenseApproval, CommissionPending) + nhắc: hoa hồng chờ duyệt, kỳ trả nợ vay đến hạn, khoản chi chờ duyệt (kế toán+giám đốc) + nhãn/icon/màu ở `Labels`.
+- **File thay đổi chính:** `Components/Shared/CollaboratorInfoDialog.razor`, `Components/Shared/ChangePasswordDialog.razor` (mới), `Components/Pages/Candidates/CandidateDetail.razor`, `Components/Pages/Admin/AccountManagerPanel.razor`, `Components/Layout/MainLayout.razor`, `Components/Pages/Notifications/Notifications.razor`, `Components/Pages/Ai/AiAssistant.razor`, `Ai/AiSessionStore.cs` (mới), `Notifications/NotificationService.cs`, `Display/Labels.cs`, `Domain/Enums/Enums.cs`, `Program.cs`, `WORKLOG.md`.
+- **Đã test:** `dotnet build Polymind.slnx` = **0 warning / 0 error**. CHƯA smoke test trình duyệt vì Docker Desktop/Postgres local chưa chạy (`docker ps` trống) → cần bật Docker rồi duyệt mắt.
+- **Lưu ý/cảnh báo cho người sau:** 3 enum NotificationType mới lưu dạng string → KHÔNG cần migration. RB-4: đổi MK làm mới security-stamp; do RevalidationInterval=30' user có thể bị buộc đăng nhập lại trong vòng 30' — chấp nhận được. RB-2 đổi job chỉ hoán `JobOrderId` trên CJO active, giữ nguyên tiến trình (override hành chính, khác luồng B7.5). RB-5 store in-memory (mất khi restart app — đúng nghĩa "trong phiên"). Cần duyệt mắt: modal CTV với tài khoản parent/student, nút đổi TVV/CTV/job (nhập MK), tìm tên ở /admin/parents-students, đổi MK ở user-menu, giữ hội thoại AI sau F5, click thông báo điều hướng đúng.
 
 ### [2026-07-09] Session 62 — Codex — Bỏ Authenticator/TOTP 2FA cho toàn bộ tài khoản test + cập nhật báo cáo tiến độ
 - **Làm được:** Gỡ luồng Authenticator/TOTP khỏi bản web hiện tại để đối tác có thể test chung tài khoản: login chỉ còn email+mật khẩu, không rẽ `/login-2fa`; bỏ middleware ép cài 2FA; xóa trang `/login-2fa`, `/account/2fa-setup`, `TwoFactorEnforcement`; bỏ nút/logic “Đặt lại 2FA” trong dialog sửa user. Cập nhật `POLYMIND_Báo cáo tiến độ.docx`: hiện tạm bỏ 2FA trong giai đoạn test, bản final sẽ dùng SMS OTP gửi về số điện thoại người dùng nhập.
@@ -98,23 +131,4 @@
 - **File thay đổi chính:** `Web/Components/Pages/Loans/DebtCollection.razor`, `Web/Components/Pages/Loans/LoanDialog.razor`, `WORKLOG.md`.
 - **Đã test:** `dotnet build Polymind.slnx` = **0 warning / 0 error**. **Không migration** (chỉ đổi logic UI + query, không đổi schema). **Chưa restart/duyệt mắt trình duyệt** (web cũ đang chạy — cần restart để nạp code).
 - **Lưu ý/cảnh báo cho người sau:** **CHƯA commit.** Công thức lãi hiện là **lãi đơn phẳng** (flat) chia đều — nếu Vietgroup muốn lãi giảm dần theo dư nợ thì sửa `RegenerateScheduleAsync` trong `LoanDialog.razor`. Khoản vay NH cũ trong DB có thể còn `LoanRepayment` mồ côi (không hiện ở Thu nợ do đã lọc); mở & lưu lại hồ sơ đó sẽ tự dọn. Trang **Hỗ trợ vay `/loans`** vẫn hiện CẢ 2 loại (bank + company) — đúng chủ ý (đây là sổ theo dõi mọi nguồn vốn).
-
-### [2026-07-06] Session 57 — Claude — 8 góp ý duyệt mắt: sửa lỗi micro/thông báo, chip Học viên/Lao động theo phân nhóm job, MODULE ĐÀO TẠO riêng, nợ VG, hoa hồng 5%/CTV 35%, bỏ menu Thông báo, sửa tràn bảng laptop
-- **Làm được (8 mục theo phản hồi user):**
-  1. **Lỗi micro** (`audio-recorder.js`): `start()` kiểm tra `navigator.mediaDevices` + bắt lỗi getUserMedia → ném thông điệp tiếng Việt rõ (NotAllowed/NotFound/NotReadable); `Messages.razor` bắt `JSException` hiện thẳng message (hết "Permission denied undefined").
-  2. **Chip Học viên/Lao động theo phân nhóm job** (`Display/PersonTitle.cs`): giữ ngưỡng B5, nhưng đơn **StudyAbroad → "Học viên"** (chip Info, icon School), nhóm khác → **"Lao động"**; CandidateDetail nạp thêm `_jobCategory`.
-  3. **MODULE ĐÀO TẠO riêng:** trang `/training` (`Training.razor` — danh sách học viên/lao động đang đào tạo + tiến độ 2 mảng + phiếu gần nhất) và `/training/{id}` (`TrainingDetail.razor` — 2 mảng + **timeline theo TỪNG TUẦN** gom `TrainingEvaluation` theo tuần (Thứ 2 đầu tuần) + nút thêm báo cáo tuần/sửa tiến trình). NavMenu thêm **"Đào tạo"** (gate `training:read`). Thẻ Đào tạo ở `CandidateDetail` rút gọn còn **tóm tắt** (2 progress + báo cáo gần nhất) + nút **"Xem chi tiết đào tạo"** → module (bỏ nút quản lý khỏi thẻ, xóa `_canManageTraining`/`OpenTrackEdit`/`OpenAddEvaluation`).
-  4. **Nợ VG** (`DemoDataSeeder`): block idempotent tạo vài **Loan `Kind=Company`** (tỉnh không được NH hỗ trợ, VG cho đi → nợ công ty) + lịch `LoanRepayment` (vài kỳ đã thu) → hiện ở `/loans` (Nợ công ty) + `/debt-collection`.
-  5. **Lỗi thông báo trùng khóa** (`NotificationService.PersistEventsAsync`): lead-care "nhắc lại" trước đây CHÈN hàng mới → vỡ unique `ix_notifications_user_id_type_reference_id_channel` (23505). Nay **CẬP NHẬT hàng cũ** (reset chưa đọc + làm mới nội dung/thời điểm) thay vì chèn; thêm try/catch `DbUpdateException` phòng chèn song song.
-  6. **Hoa hồng** (`Domain/Commissions/AgentCommissionRates.cs` mới): đại lý **TỔNG 5%** (1%/1.5%/2.5% theo mốc) số tiền ứng viên đóng; **CTV 35%** (khoảng 30-40%). Seeder set giá trị mới + **chuẩn hóa dữ liệu cũ** (config >5% → 1/1.5/2.5 + tính lại `AgentCommission.CommissionAmount`; CTV share kẹp về 30-40%). Dialog CTV Min/Max 30-40, config đại lý có HelperText.
-  7. **Bỏ menu "Thông báo"** khỏi NavMenu (giữ route + icon chuông góc phải).
-  8. **Tràn bảng laptop** (`/candidates`) — **ĐÃ ĐỔI HƯỚNG theo phản hồi:** giữ NGUYÊN nhãn "Bước hiện tại" ĐẦY ĐỦ (bỏ `ShortLabel`, `StepChip` về bản gốc); thay vào đó ≤1600px: cột **Quốc gia chỉ còn CỜ** (`.laptop-hide-inline` ẩn tên nước) + thanh **tiến độ ngắn lại** (`.candidate-progress-cell` 120→76px) + chip bước cho xuống dòng (`.candidate-table .step-chip white-space:normal`). PC >1600px y nguyên.
-  9. **Thu nợ `/debt-collection` — tóm tắt hơn:** thẻ nợ nay hiện tóm tắt (còn nợ + progress + "K/N kỳ" + "Kỳ tới …") + nút **"Thu kỳ tới"** (thu nhanh kỳ chưa trả sớm nhất) + nút **"Xem lịch"** bung `MudCollapse` bảng đầy đủ (trước đây in thẳng 18-36 dòng/ứng viên → quá dài).
-  10. **Micro** (từ phản hồi): thông điệp lỗi đã rõ; hướng dẫn user bật quyền micro trên trình duyệt. **Nguyên nhân THẬT** micro không chạy: header `Permissions-Policy` ở `Program.cs:199` để `microphone=()` (chặn) → đổi thành **`microphone=(self)`**. (Lỗi kế tiếp `NotFoundError` = máy user không có thiết bị micro — xử lý ở Windows, không phải code.)
-  11. **Giới tính thứ 3** (biên bản họp 3/7): đổi nhãn `Gender.Other` "Khác" → **"Không đề cập"** (`Labels.cs`) — tùy chọn đã có sẵn trong form ứng viên.
-  12. **File .docx** `POLYMIND - Da lam theo bien ban hop 3-7-2026.docx` (root, tạo bằng python-docx): ghi lại từng góp ý trong `POLYMIND HỌP 3_7_2026.pdf` + việc đã làm tương ứng, không thêm/bớt ý. App Demo (mục 4) ghi "ngoài phạm vi web"; "gửi data" ghi "chờ VG".
-- **File thay đổi chính:** `wwwroot/js/audio-recorder.js`, `wwwroot/app.css`, `Components/Pages/Messages/Messages.razor`, `Components/Shared/StepChip.razor`, `Display/{PersonTitle,WorkflowSteps}.cs`, `Components/Pages/Training/{Training,TrainingDetail}.razor (mới)`, `Components/Layout/NavMenu.razor`, `Components/Pages/Candidates/{CandidateDetail,Candidates}.razor`, `Domain/Commissions/AgentCommissionRates.cs (mới)`, `Domain/Entities/Collaborator.cs`, `Infrastructure/Persistence/DemoDataSeeder.cs`, `Web/Notifications/NotificationService.cs`, `Components/Pages/Agents/{CollaboratorDialog,CommissionConfigDialog}.razor`.
-- **Đã test:** `dotnet build -t:Compile` toàn solution = **0 warning / 0 error**. Full build chỉ vướng khóa DLL do web đang chạy (PID host) — **KHÔNG có lỗi code**. **Chưa migration** (toàn thay đổi code + seeder, không đổi schema). **Chưa chạy/duyệt mắt trình duyệt** (web cũ đang chạy — cần restart để nạp thay đổi + seeder chuẩn hóa hoa hồng/nợ VG).
-- **Lưu ý/cảnh báo cho người sau:** **CHƯA commit.** Cần **restart web** để: (a) áp code mới, (b) DemoDataSeeder chạy chuẩn hóa hoa hồng cũ (20/30/50→5%) + kẹp CTV 30-40% + seed nợ VG. Số hoa hồng đại lý sẽ GIẢM mạnh (đúng ý). Chip Học viên/Lao động vẫn dùng ngưỡng B5 (trước B5 = "Ứng viên") — nếu user muốn gắn chip ngay khi vào job (không cần B5) thì bỏ `IsTitled` gate trong `PersonTitle`. Module Đào tạo "đang đào tạo" = có TrainingRecord/đánh giá hoặc đang ở B10. CSS bảng laptop cache — Ctrl+F5.
-- **[[project-polymind-deploy-plan]]**
 

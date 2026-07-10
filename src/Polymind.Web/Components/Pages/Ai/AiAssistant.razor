@@ -4,6 +4,8 @@
 @inject GeminiClient Gemini
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AgentScope AgentScope
+@inject AiSessionStore AiSessions
+@inject AuthenticationStateProvider AuthState
 
 <PageTitle>Trợ lý AI — POLYMIND</PageTitle>
 
@@ -168,7 +170,9 @@
 </MudPaper>
 
 @code {
-    private readonly List<AiChatMessage> _history = new();
+    // RB-5: hội thoại lưu trong AiSessionStore theo user (sống qua chuyển trang + F5, xóa khi logout).
+    private AiSessionState? _session;
+    private List<AiChatMessage> _history = new();
     private string _input = "";
     private bool _chatBusy;
     private IBrowserFile? _chatFile;
@@ -210,6 +214,15 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // RB-5: khôi phục hội thoại + kết quả trích xuất CV của phiên đăng nhập hiện tại.
+        var userId = await AuthState.GetUserIdAsync();
+        if (userId is Guid uid)
+        {
+            _session = AiSessions.Get(uid);
+            _history = _session.History;
+            _cvResult = _session.CvResult;
+        }
+
         var scope = await AgentScope.GetAsync();
         _selfScoped = scope.IsSelfScoped;
         _ownedCandidateId = scope.OwnedCandidateId;
@@ -451,6 +464,11 @@
     {
         _cvFile = null;
         _cvResult = null;
+        if (_session is not null)
+        {
+            _session.CvResult = null;
+            _session.CvFileName = null;
+        }
     }
 
     private async Task ExtractAsync()
@@ -477,6 +495,12 @@
         finally
         {
             _cvBusy = false;
+            // RB-5: lưu kết quả trích xuất vào phiên để không mất khi chuyển trang/F5.
+            if (_session is not null)
+            {
+                _session.CvResult = _cvResult;
+                _session.CvFileName = _cvFile?.Name;
+            }
         }
     }
 
