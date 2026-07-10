@@ -200,7 +200,7 @@ else
                     <MudText Typo="Typo.subtitle2"><b>Đổi đơn hàng (chỉ Super Admin)</b></MudText>
                 </div>
                 <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">
-                    Đổi đơn hàng đã gắn cho ứng viên; tiến trình hiện tại được giữ nguyên. Thao tác cần nhập lại mật khẩu.
+                    Đổi đơn hàng đã gắn cho ứng viên; <b>quy trình 20 bước sẽ được reset lại từ đầu</b> trên đơn hàng mới. Thao tác cần nhập lại mật khẩu.
                 </MudText>
                 <MudSelect T="Guid?" @bind-Value="_changeJobOrderId" Label="Đơn hàng mới" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2">
                     @foreach (var j in _activeJobOrders)
@@ -1605,7 +1605,7 @@ else
     {
         if (_cjo is null || _changeJobOrderId is null || !_isSuperAdmin) return;
         if (_changeJobOrderId == _cjo.JobOrderId) return;
-        if (!await ConfirmWithPasswordAsync("Bạn sắp ĐỔI đơn hàng đã gắn của ứng viên. Tiến trình 20 bước hiện tại được giữ nguyên trên đơn hàng mới."))
+        if (!await ConfirmWithPasswordAsync("Bạn sắp ĐỔI đơn hàng đã gắn của ứng viên. Quy trình 20 bước sẽ được RESET lại từ đầu (bước 1) trên đơn hàng mới."))
             return;
 
         _busy = true;
@@ -1627,13 +1627,21 @@ else
 
             var cjo = await db.CandidateJobOrders.FirstAsync(j => j.Id == _cjo.Id);
             var oldJobId = cjo.JobOrderId;
+            var oldStep = cjo.CurrentStep;
             cjo.JobOrderId = _changeJobOrderId.Value;
+            // Đổi đơn hàng = reset quy trình 20 bước về bước đầu (B1) trên đơn hàng mới,
+            // xóa lịch sử các bước đã đi của đơn hàng cũ để tiến trình mới bắt đầu sạch.
+            cjo.CurrentStep = WorkflowStep.Lead;
+            cjo.Status = CandidateJobOrderStatus.Active;
             cjo.UpdatedAt = DateTimeOffset.UtcNow;
+            var oldRecords = await db.WorkflowStepRecords.Where(r => r.CandidateJobOrderId == cjo.Id).ToListAsync();
+            db.WorkflowStepRecords.RemoveRange(oldRecords);
             var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
             db.AddAudit(actorId, "change_job_order", "candidate_job_orders", cjo.Id,
-                new { JobOrderId = oldJobId }, new { cjo.JobOrderId });
+                new { JobOrderId = oldJobId, CurrentStep = oldStep },
+                new { cjo.JobOrderId, cjo.CurrentStep });
             await db.SaveChangesAsync();
-            Snackbar.Add("Đã đổi đơn hàng của ứng viên.", Severity.Success);
+            Snackbar.Add("Đã đổi đơn hàng và reset quy trình 20 bước về bước đầu.", Severity.Success);
             await Load();
         }
         finally

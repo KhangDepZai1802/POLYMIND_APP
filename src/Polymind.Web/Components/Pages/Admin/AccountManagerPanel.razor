@@ -201,6 +201,10 @@ else
     /// <summary>Khi bật: mọi vai trò trong panel là cố định (không đổi role được), chỉ tạo mới/sửa/khóa.</summary>
     [Parameter] public bool RolesFixed { get; set; }
 
+    /// <summary>Các vai trò được phép TẠO mới / CHUYỂN sang (dropdown vai trò). Mặc định = ManagedRoles.
+    /// Tài khoản mang vai trò ngoài danh sách này vẫn hiển thị nhưng coi như cố định (VD: Đại lý/CTV chỉ tạo ở trang Đại lý &amp; Hoa hồng).</summary>
+    [Parameter] public IReadOnlyList<string>? CreatableRoles { get; set; }
+
     /// <summary>Khi bật: super admin được XÓA hẳn tài khoản trong panel (luôn có bước xác nhận).</summary>
     [Parameter] public bool AllowDelete { get; set; }
 
@@ -217,6 +221,8 @@ else
     private string _search = "";
 
     private HashSet<string> ManagedSet => ManagedRoles.ToHashSet();
+    // Vai trò được phép tạo mới / gán qua dropdown (mặc định = ManagedRoles).
+    private HashSet<string> CreatableSet => (CreatableRoles ?? ManagedRoles).ToHashSet();
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -224,9 +230,9 @@ else
     {
         _loading = true;
         await using var db = await DbFactory.CreateDbContextAsync();
-        var managed = ManagedSet;
+        var creatable = CreatableSet;
         _assignableRoles = await db.Roles
-            .Where(r => r.Name != null && managed.Contains(r.Name))
+            .Where(r => r.Name != null && creatable.Contains(r.Name))
             .OrderBy(r => r.Name).ToListAsync();
         _newRole ??= _assignableRoles.FirstOrDefault()?.Name;
         await LoadUsersAsync();
@@ -265,8 +271,9 @@ else
             Snackbar.Add("Vui lòng nhập email và họ tên.", Severity.Warning);
             return;
         }
-        // Chốt chặn: chỉ cho tạo tài khoản trong phạm vi vai trò panel này quản lý.
-        if (string.IsNullOrWhiteSpace(_newRole) || !ManagedSet.Contains(_newRole))
+        // Chốt chặn: chỉ cho tạo tài khoản trong phạm vi vai trò được phép tạo ở trang này
+        // (VD: Đại lý/CTV không tạo được ở đây — chỉ tạo ở trang Đại lý & Hoa hồng).
+        if (string.IsNullOrWhiteSpace(_newRole) || !CreatableSet.Contains(_newRole))
         {
             Snackbar.Add("Vai trò được chọn không hợp lệ với trang này.", Severity.Warning);
             return;
@@ -307,12 +314,16 @@ else
     }
 
     // Tài khoản super admin: vai trò cố định (kể cả super admin khác không đổi được). Ngoài ra khi RolesFixed=true thì mọi role đều cố định.
+    // Vai trò ngoài phạm vi được phép tạo/gán ở trang này (VD: Đại lý/CTV ở trang Quản trị) cũng cố định — quản lý ở trang riêng.
     private static bool IsSuperAdminRow(UserRow row) => row.Roles.Contains(RoleNames.SuperAdmin);
-    private bool IsRoleFixed(UserRow row) => RolesFixed || IsSuperAdminRow(row);
+    private bool IsRoleUnassignable(UserRow row) => row.PrimaryRole is not null && !CreatableSet.Contains(row.PrimaryRole);
+    private bool IsRoleFixed(UserRow row) => RolesFixed || IsSuperAdminRow(row) || IsRoleUnassignable(row);
 
     private string FixedRoleHint(UserRow row) => IsSuperAdminRow(row)
         ? "Không thể chuyển vai trò của Super Admin — chỉ được sửa thông tin qua nút Sửa."
-        : "Vai trò này được cố định — chỉ được sửa thông tin qua nút Sửa, không đổi sang vai trò khác.";
+        : IsRoleUnassignable(row)
+            ? "Vai trò này được quản lý ở trang riêng (VD: Đại lý & Hoa hồng) — không tạo/đổi ở đây."
+            : "Vai trò này được cố định — chỉ được sửa thông tin qua nút Sửa, không đổi sang vai trò khác.";
 
     private async Task SaveUserRoleAsync(UserRow row)
     {
@@ -324,8 +335,8 @@ else
             Snackbar.Add(FixedRoleHint(row), Severity.Warning);
             return;
         }
-        // Chốt chặn: không cho đổi sang vai trò ngoài phạm vi panel này quản lý.
-        if (!ManagedSet.Contains(row.SelectedRole))
+        // Chốt chặn: không cho đổi sang vai trò ngoài phạm vi được phép gán ở trang này.
+        if (!CreatableSet.Contains(row.SelectedRole))
         {
             Snackbar.Add("Không thể chuyển sang vai trò ngoài phạm vi trang này.", Severity.Warning);
             return;

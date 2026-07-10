@@ -31,7 +31,7 @@ else
                 Trang này quản lý tài khoản nội bộ và đối tác. Tài khoản <b>Phụ huynh &amp; Học sinh</b> được quản lý ở trang riêng — bấm nút
                 <b>"Phụ huynh &amp; Học sinh"</b> ở góc trên.
             </MudAlert>
-            <AccountManagerPanel ManagedRoles="@StaffRoles" />
+            <AccountManagerPanel ManagedRoles="@StaffRoles" CreatableRoles="@StaffCreatableRoles" />
         </MudTabPanel>
 
         <MudTabPanel Text="Phân quyền">
@@ -185,6 +185,11 @@ else
     // Trang "Tài khoản" chỉ quản lý vai trò nội bộ/đối tác — KHÔNG gồm Phụ huynh & Học sinh (có trang riêng).
     private static readonly string[] StaffRoles = RoleNames.All.Keys
         .Where(r => r != RoleNames.Parent && r != RoleNames.Student).ToArray();
+
+    // Vai trò được phép TẠO ở trang Quản trị — bỏ Đại lý & CTV (chỉ tạo ở trang "Đại lý & Hoa hồng").
+    // Tài khoản Đại lý/CTV đang có vẫn hiển thị (để xem/khóa) nhưng không tạo/đổi role ở đây.
+    private static readonly string[] StaffCreatableRoles = StaffRoles
+        .Where(r => r != RoleNames.Agent && r != RoleNames.Collaborator).ToArray();
 
     private bool _loading = true;
     private List<ApplicationRole> _roles = new();
