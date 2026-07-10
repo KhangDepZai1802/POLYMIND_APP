@@ -107,7 +107,18 @@
                                         </div>
                                     </div>
                                 }
-                                <div class="chat-meta">@m.At.ToLocalTime().ToString("dd/MM HH:mm")</div>
+                                <div class="chat-meta-row">
+                                    <span class="chat-meta">@m.At.ToLocalTime().ToString("dd/MM HH:mm")</span>
+                                    @if (m.Mine)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                       Size="Size.Small"
+                                                       Color="Color.Inherit"
+                                                       Class="chat-recall-button"
+                                                       title="Thu hồi tin nhắn"
+                                                       OnClick="@(() => RecallMessage(m.Id))" />
+                                    }
+                                </div>
                             </div>
                         }
                     }
@@ -409,6 +420,36 @@
             Snackbar.Add($"Không gửi được tin nhắn: {ex.Message}", Severity.Error);
         }
         finally { _sending = false; }
+    }
+
+    private async Task RecallMessage(Guid messageId)
+    {
+        if (_selectedId is null) return;
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var message = await db.Messages
+                .FirstOrDefaultAsync(m => m.Id == messageId
+                    && m.SenderId == _meId
+                    && (m.RecipientId == _selectedId.Value || m.RecipientId == _meId));
+
+            if (message is null)
+            {
+                Snackbar.Add("Không tìm thấy tin nhắn cần thu hồi.", Severity.Warning);
+                return;
+            }
+
+            db.Messages.Remove(message);
+            await db.SaveChangesAsync();
+            Snackbar.Add("Đã thu hồi tin nhắn.", Severity.Success);
+            await LoadThread();
+            await LoadContacts();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Không thu hồi được tin nhắn: {ex.Message}", Severity.Error);
+        }
     }
 
     private void OnAttachmentSelected(InputFileChangeEventArgs args)
