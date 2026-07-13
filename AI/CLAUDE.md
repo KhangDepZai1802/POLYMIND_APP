@@ -9,6 +9,7 @@
 
 ## Tài liệu nền
 - [docs/05-handoff-codex.md](docs/05-handoff-codex.md) — cách chạy, cấu trúc, quy ước, bẫy kỹ thuật, backlog P1→P4.
+- [docs/messaging-tiers.md](docs/messaging-tiers.md) — **luật GỐC "ai được nhắn ai"** (mô hình 5 bậc + ma trận đầy đủ). Đọc file này TRƯỚC khi đụng vào `MessagingTiers.cs` / `Messages.razor`.
 
 ## Tóm tắt
 - .NET 10 + Blazor (Interactive Server) + MudBlazor + EF Core + PostgreSQL. Solution: `Polymind.slnx`.

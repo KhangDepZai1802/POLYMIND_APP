@@ -31,10 +31,11 @@ public sealed class IdentityRevalidatingAuthenticationStateProvider(
     {
         var user = await userManager.GetUserAsync(principal);
         if (user is null) return false;
-        if (!userManager.SupportsUserSecurityStamp) return true;
+        if (!userManager.SupportsUserSecurityStamp)
+            return AuthenticationSecurityPolicy.IsSessionValid(user.IsActive, false, null, null);
 
         var principalStamp = principal.FindFirstValue(options.Value.ClaimsIdentity.SecurityStampClaimType);
         var userStamp = await userManager.GetSecurityStampAsync(user);
-        return principalStamp == userStamp;
+        return AuthenticationSecurityPolicy.IsSessionValid(user.IsActive, true, principalStamp, userStamp);
     }
 }

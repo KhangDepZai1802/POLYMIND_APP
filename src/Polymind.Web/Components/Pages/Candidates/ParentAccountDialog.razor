@@ -150,7 +150,16 @@
             if (candidate?.ParentUserId is Guid uid)
             {
                 var user = await UserManager.FindByIdAsync(uid.ToString());
-                if (user is not null) { user.IsActive = false; await UserManager.UpdateAsync(user); }
+                if (user is not null)
+                {
+                    user.IsActive = false;
+                    var lockResult = await UserManager.UpdateSecurityStampAsync(user);
+                    if (!lockResult.Succeeded)
+                    {
+                        Snackbar.Add(string.Join("; ", lockResult.Errors.Select(e => e.Description)), Severity.Error);
+                        return;
+                    }
+                }
                 candidate.ParentUserId = null;
                 candidate.UpdatedAt = DateTimeOffset.UtcNow;
                 db.AddAudit(actorId, "unlink_parent", "candidates", candidate.Id, new { ParentUserId = uid }, null);

@@ -1,5 +1,6 @@
 @page "/leads/{Id:guid}"
 @attribute [Authorize(Policy = "leads:read")]
+@using Polymind.Domain.Leads
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
@@ -594,29 +595,11 @@ else
                 return;
             }
 
-            var adminId = await db.Users.Select(u => u.Id).FirstOrDefaultAsync();
-
-            var candidate = new Candidate
-            {
-                Code = $"UV-{DateTime.Now:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}",
-                LeadId = lead.Id,
-                FullName = lead.FullName,
-                Phone = lead.Phone,
-                Province = lead.Province,
-                Address = lead.Address,
-                Gender = lead.Gender,
-                Dob = lead.Dob,
-                CccdNumber = lead.Cccd,
-                Email = lead.Email,
-                Occupation = lead.Occupation,
-                EducationLevel = lead.EducationLevel,
-                WorkExperience = lead.WorkExperience,
-                Languages = lead.Languages,
-                AgentId = lead.AgentId,
-                CollaboratorId = lead.CollaboratorId, // CTV giới thiệu → tính hoa hồng khi tới bước đặt cọc
-                ConsultantId = lead.AssignedTo,        // tư vấn viên theo sát ứng viên
-                CreatedBy = adminId,
-            };
+            var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+            var candidate = LeadConversionRules.CreateCandidate(
+                lead,
+                actorId,
+                $"UV-{DateTime.Now:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}");
             db.Candidates.Add(candidate);
 
             lead.Status = LeadStatus.Converted;

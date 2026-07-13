@@ -150,7 +150,16 @@
             if (candidate?.OwnerUserId is Guid uid)
             {
                 var user = await UserManager.FindByIdAsync(uid.ToString());
-                if (user is not null) { user.IsActive = false; await UserManager.UpdateAsync(user); }
+                if (user is not null)
+                {
+                    user.IsActive = false;
+                    var lockResult = await UserManager.UpdateSecurityStampAsync(user);
+                    if (!lockResult.Succeeded)
+                    {
+                        Snackbar.Add(string.Join("; ", lockResult.Errors.Select(e => e.Description)), Severity.Error);
+                        return;
+                    }
+                }
                 candidate.OwnerUserId = null;
                 candidate.UpdatedAt = DateTimeOffset.UtcNow;
                 db.AddAudit(actorId, "unlink_student", "candidates", candidate.Id, new { OwnerUserId = uid }, null);

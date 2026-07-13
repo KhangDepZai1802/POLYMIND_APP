@@ -88,7 +88,12 @@ public enum PaymentType
     Deposit, DocumentFee, TrainingFee, VisaFee, ServiceFee, OtherIncome
 }
 
-public enum PaymentStatus { Pending, Partial, Paid, Overdue, Refunded }
+/// <summary>
+/// Vòng đời khoản thu. <see cref="Submitted"/> tách "ứng viên đã nộp tiền" khỏi "kế toán đã duyệt":
+/// bên Tiến độ đóng tiền chỉ xác nhận ĐÃ NỘP, việc hạch toán (Paid) là quyết định riêng của kế toán
+/// bên Khoản thu. Giá trị 5 nối vào CUỐI enum để không lệch dữ liệu int đã lưu trong DB.
+/// </summary>
+public enum PaymentStatus { Pending, Partial, Paid, Overdue, Refunded, Submitted = 5 }
 
 /// <summary>4 bước đóng tiền của ứng viên theo chi phí đơn hàng (20/30/30/20). Giá trị = thứ tự bước.</summary>
 public enum PaymentStage
@@ -132,8 +137,10 @@ public enum NotificationType
     ReminderLoanRepayment,
     /// <summary>Khoản chi đang chờ duyệt → nhắc kế toán/giám đốc.</summary>
     ExpenseApproval,
-    /// <summary>Hoa hồng vừa phát sinh, đang chờ duyệt → nhắc kế toán/giám đốc.</summary>
-    CommissionPending
+    /// <summary>Hoa hồng vừa phát sinh, đang chờ duyệt → nhắc đại lý và bộ phận tài chính.</summary>
+    CommissionPending,
+    /// <summary>Hoa hồng đã chi → thông báo đại lý và bộ phận tài chính.</summary>
+    CommissionPaid
 }
 
 public enum NotificationChannel { Email, Sms, Zalo, InApp }

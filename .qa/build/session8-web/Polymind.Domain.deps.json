@@ -1,0 +1,23 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "Polymind.Domain/1.0.0": {
+        "runtime": {
+          "Polymind.Domain.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "Polymind.Domain/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

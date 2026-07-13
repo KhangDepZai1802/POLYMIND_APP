@@ -2,6 +2,7 @@
 @inject IAuthorizationService AuthorizationService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ISnackbar Snackbar
+@using Polymind.Web.Finance
 
 <MudDialog>
     <DialogContent>
@@ -125,6 +126,7 @@
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
+            PaymentPostingResult? posting = null;
             if (IsEdit)
             {
                 var p = await db.Payments.FirstOrDefaultAsync(x => x.Id == PaymentId);
@@ -135,9 +137,29 @@
                 }
                 var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
                 var oldValue = Snapshot(p);
-                _m.ApplyTo(p, selectedCandidate.JobOrderId);
+                var markingPaid = p.Status != PaymentStatus.Paid && _m.Status == PaymentStatus.Paid;
+                _m.ApplyTo(p, selectedCandidate.JobOrderId, applyStatus: !markingPaid);
                 p.UpdatedAt = DateTimeOffset.UtcNow;
-                db.AddAudit(actorId, "update", "payments", p.Id, oldValue, Snapshot(p));
+                if (markingPaid)
+                {
+                    if (!await HasPermission("payments:approve"))
+                    {
+                        Snackbar.Add("Bạn không có quyền duyệt khoản thu.", Severity.Warning);
+                        return;
+                    }
+                    posting = await PaymentPostingService.MarkPaidAsync(
+                        db, p, actorId, auditAction: "update", oldValue: oldValue);
+                    if (!posting.Succeeded)
+                    {
+                        Snackbar.Add(posting.Error!, Severity.Warning);
+                        return;
+                    }
+                }
+                else
+                {
+                    db.AddAudit(actorId, "update", "payments", p.Id, oldValue, Snapshot(p));
+                    await db.SaveChangesAsync();
+                }
             }
             else
             {
@@ -147,11 +169,32 @@
                     Code = $"PT-{DateTime.Now:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}",
                     CreatedBy = actorId,
                 };
-                _m.ApplyTo(p, selectedCandidate.JobOrderId);
+                var markingPaid = _m.Status == PaymentStatus.Paid;
+                _m.ApplyTo(p, selectedCandidate.JobOrderId, applyStatus: !markingPaid);
                 db.Payments.Add(p);
-                db.AddAudit(actorId, "create", "payments", p.Id, null, Snapshot(p));
+                if (markingPaid)
+                {
+                    if (!await HasPermission("payments:approve"))
+                    {
+                        Snackbar.Add("Bạn không có quyền duyệt khoản thu.", Severity.Warning);
+                        return;
+                    }
+                    posting = await PaymentPostingService.MarkPaidAsync(
+                        db, p, actorId, auditAction: "create");
+                    if (!posting.Succeeded)
+                    {
+                        Snackbar.Add(posting.Error!, Severity.Warning);
+                        return;
+                    }
+                }
+                else
+                {
+                    db.AddAudit(actorId, "create", "payments", p.Id, null, Snapshot(p));
+                    await db.SaveChangesAsync();
+                }
             }
-            await db.SaveChangesAsync();
+            if (posting?.NewCommissions > 0)
+                Snackbar.Add($"Đã phát sinh {posting.NewCommissions} lát hoa hồng cho đại lý.", Severity.Info);
         }
         finally
         {
@@ -174,6 +217,7 @@
         p.CandidateId,
         p.JobOrderId,
         p.PaymentType,
+        p.Stage,
         p.Amount,
         p.DueDate,
         p.PaidDate,
@@ -207,13 +251,13 @@
             Notes = p.Notes;
         }
 
-        public void ApplyTo(Payment p, Guid jobOrderId)
+        public void ApplyTo(Payment p, Guid jobOrderId, bool applyStatus)
         {
             p.CandidateId = CandidateId!.Value;
             p.JobOrderId = jobOrderId;
             p.PaymentType = PaymentType;
             p.Amount = Amount;
-            p.Status = Status;
+            if (applyStatus) p.Status = Status;
             p.PaymentMethod = PaymentMethod;
             p.DueDate = DueDate is null ? null : DateOnly.FromDateTime(DueDate.Value);
             p.PaidDate = PaidDate is null ? null : DateOnly.FromDateTime(PaidDate.Value);

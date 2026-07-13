@@ -1,6 +1,7 @@
 @page "/messages"
 @attribute [Authorize(Policy = "messages:read")]
 @using System.Text.Json
+@using Polymind.Infrastructure.Persistence.Constants
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ISnackbar Snackbar
@@ -18,6 +19,17 @@
         <MudPaper Elevation="1" Class="pa-2" Style="height:100%">
             <MudTextField @bind-Value="_search" Placeholder="Tìm người nhận..." Adornment="Adornment.Start"
                           AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" />
+            @if (ShowRoleFilter)
+            {
+                <MudSelect T="string" Value="_roleFilter" ValueChanged="@(v => _roleFilter = v)" Placeholder="Tất cả vai trò"
+                           Label="Lọc theo vai trò" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" Class="mb-2">
+                    <MudSelectItem T="string" Value="@((string?)null)">Tất cả vai trò</MudSelectItem>
+                    @foreach (var role in RoleFilterOptions)
+                    {
+                        <MudSelectItem T="string" Value="@role.Key">@role.Label</MudSelectItem>
+                    }
+                </MudSelect>
+            }
             @if (_contacts.Count == 0)
             {
                 <MudAlert Severity="Severity.Info" Dense="true">Không có ai bạn được phép nhắn tin.</MudAlert>
@@ -152,7 +164,7 @@
 </MudGrid>
 
 @code {
-    private record Contact(Guid Id, string Name, string RoleLabel, string? LastBody, DateTimeOffset? LastAt, int Unread);
+    private record Contact(Guid Id, string Name, string RoleKey, string RoleLabel, string? LastBody, DateTimeOffset? LastAt, int Unread);
     private record ThreadMsg(Guid Id, bool Mine, string Text, ThreadAttachment? Attachment, DateTimeOffset At);
     private sealed record ParsedMessage(string Text, MessageAttachmentPayload? Attachment);
     private sealed record MessageAttachmentPayload(string ObjectKey, string FileName, long FileSize, string? ContentType);
@@ -175,9 +187,11 @@
 
     private Guid _meId;
     private List<string> _myRoles = new();
-    // Cổng cá nhân hóa (Phụ huynh/Học viên): chỉ được nhắn đúng người liên quan ứng viên của mình.
-    // null = không giới hạn theo quan hệ (nhân sự nội bộ dùng MessagingPolicy theo role).
-    private HashSet<Guid>? _allowedRecipientIds;
+    // CR-M14-1/2/3: quan hệ ứng viên áp đối xứng khi một đầu là Phụ huynh/Học viên hoặc CTV.
+    private HashSet<Guid> _relationshipRecipientIds = new();
+    // Danh sách đóng: Phụ huynh/Học viên và CTV chỉ nhắn được đúng người trong tập quan hệ.
+    private bool _restrictedScope;
+    private bool _isAgentOnly;
     private List<Contact> _contacts = new();
     private List<ThreadMsg> _thread = new();
     private Guid? _selectedId;
@@ -188,9 +202,21 @@
     private IBrowserFile? _attachmentFile;
     private bool _sending;
 
-    private IEnumerable<Contact> FilteredContacts => string.IsNullOrWhiteSpace(_search)
-        ? _contacts
-        : _contacts.Where(c => c.Name.Contains(_search, StringComparison.OrdinalIgnoreCase));
+    private string? _roleFilter; // null = tất cả vai trò
+
+    /// <summary>Các vai trò thực có trong danh bạ — nguồn cho dropdown lọc (Super Admin cần nhất).</summary>
+    private List<(string Key, string Label)> RoleFilterOptions => _contacts
+        .Select(c => (Key: c.RoleKey, Label: c.RoleLabel))
+        .Distinct()
+        .OrderBy(x => x.Label)
+        .ToList();
+
+    private bool ShowRoleFilter => RoleFilterOptions.Count > 1;
+
+    private IEnumerable<Contact> FilteredContacts => _contacts
+        .Where(c => string.IsNullOrWhiteSpace(_search)
+                    || c.Name.Contains(_search, StringComparison.OrdinalIgnoreCase))
+        .Where(c => _roleFilter is null || c.RoleKey == _roleFilter);
 
     protected override async Task OnInitializedAsync() => await LoadContacts();
 
@@ -206,8 +232,9 @@
         var rolesMap = rolesByUser.GroupBy(x => x.UserId).ToDictionary(g => g.Key, g => g.Select(x => x.Role).ToList());
         _myRoles = rolesMap.GetValueOrDefault(_meId, new List<string>());
 
-        // Phụ huynh/Học viên: giới hạn danh bạ theo quan hệ với ứng viên của mình.
-        _allowedRecipientIds = await BuildAllowedRecipientsAsync(db);
+        // Dựng scope quan hệ cho cả hai chiều staff/partner ↔ Phụ huynh/Học viên, và CTV ↔ đại lý.
+        _isAgentOnly = (await AgentScope.GetAsync()).IsAgentOnly;
+        (_restrictedScope, _relationshipRecipientIds) = await BuildRelationshipRecipientsAsync(db);
 
         var users = await db.Users.Where(u => u.Id != _meId && u.IsActive)
             .Select(u => new { u.Id, u.FullName, u.Email })
@@ -222,12 +249,15 @@
         foreach (var u in users)
         {
             var roles = rolesMap.GetValueOrDefault(u.Id, new List<string>());
-            // Self-scoped: chỉ giữ đúng người liên quan (CTV/TVV + con/em hoặc phụ huynh).
-            if (_allowedRecipientIds is not null)
+            if (_restrictedScope)
             {
-                if (!_allowedRecipientIds.Contains(u.Id)) continue;
+                // Bậc 5 (Phụ huynh/Học viên/CTV): danh sách ĐÓNG — ngoài tập quan hệ (+ Super Admin) là chặn.
+                if (!_relationshipRecipientIds.Contains(u.Id)) continue;
             }
-            else if (!MessagingPolicy.CanMessage(_myRoles, roles)) continue;
+            else if (!IsAllowedRecipient(roles, u.Id))
+            {
+                continue;
+            }
 
             var conv = myMsgs.Where(m => (m.SenderId == _meId && m.RecipientId == u.Id)
                                       || (m.SenderId == u.Id && m.RecipientId == _meId)).ToList();
@@ -237,6 +267,7 @@
             contacts.Add(new Contact(
                 u.Id,
                 string.IsNullOrWhiteSpace(u.FullName) ? (u.Email ?? "Người dùng") : u.FullName,
+                MessagingPolicy.PrimaryRole(roles),
                 MessagingPolicy.PrimaryRoleLabel(roles),
                 lastPreview is null ? null : Truncate(lastPreview, 38),
                 last?.CreatedAt,
@@ -250,36 +281,121 @@
             .ToList();
     }
 
-    // Xây tập user-id mà Phụ huynh/Học viên được phép nhắn: CTV + TVV phụ trách ứng viên của mình,
-    // cộng con/em (tài khoản Học viên) nếu là Phụ huynh, hoặc phụ huynh nếu là Học viên.
-    private async Task<HashSet<Guid>?> BuildAllowedRecipientsAsync(ApplicationDbContext db)
+    // Dựng tập recipient theo quan hệ (đối xứng, fail-closed).
+    // - Phụ huynh/Học viên (Restricted): CHỈ nhắn nhau + CTV giới thiệu + TVV phụ trách ứng viên của mình.
+    // - CTV (Restricted): CHỈ nhắn đại lý chủ quản + Phụ huynh/Học viên của ứng viên mình giới thiệu.
+    // - Đại lý: thêm CTV thuộc đại lý mình (nhân sự nội bộ vẫn theo MessagingPolicy).
+    // - Nhân sự: chỉ thấy Phụ huynh/Học viên của ứng viên mình là TVV phụ trách.
+    /// <summary>
+    /// Luật cho người gửi KHÔNG thuộc bậc 5 (fail-closed). Dùng chung cho danh bạ và re-check khi Gửi.
+    /// 1) Ma trận bậc (`docs/messaging-tiers.md`) chặn trước theo loại role.
+    /// 2) Người nhận là Phụ huynh/Học viên → phải thuộc quan hệ ứng viên của tôi.
+    /// 3) Tôi là Đại lý và người nhận là CTV → phải là CTV thuộc đại lý mình.
+    /// </summary>
+    private bool IsAllowedRecipient(IReadOnlyCollection<string> recipientRoles, Guid recipientId)
+    {
+        if (!MessagingPolicy.CanMessage(_myRoles, recipientRoles)) return false;
+
+        var inRelationship = _relationshipRecipientIds.Contains(recipientId);
+        if (MessagingPolicy.IsPortalUser(recipientRoles) && !inRelationship) return false;
+        if (_isAgentOnly && MessagingPolicy.IsCollaborator(recipientRoles) && !inRelationship) return false;
+
+        return true;
+    }
+
+    /// <summary>Super Admin là kênh hỗ trợ: ai cũng nhắn được (kể cả bậc 5 vốn là danh sách đóng).</summary>
+    private static async Task<List<Guid>> SuperAdminUserIdsAsync(ApplicationDbContext db)
+        => await (from ur in db.UserRoles
+                  join r in db.Roles on ur.RoleId equals r.Id
+                  where r.Name == RoleNames.SuperAdmin
+                  select ur.UserId).Distinct().ToListAsync();
+
+    private async Task<(bool Restricted, HashSet<Guid> Recipients)> BuildRelationshipRecipientsAsync(ApplicationDbContext db)
     {
         var scope = await AgentScope.GetAsync();
-        if (!scope.IsSelfScoped) return null;
         var allowed = new HashSet<Guid>();
-        if (scope.OwnedCandidateId is not Guid cid) return allowed;
 
-        var cand = await db.Candidates.AsNoTracking()
-            .Where(c => c.Id == cid)
-            .Select(c => new { c.CollaboratorId, c.ConsultantId, c.OwnerUserId, c.ParentUserId })
-            .FirstOrDefaultAsync();
-        if (cand is null) return allowed;
+        // Bậc 5 (Phụ huynh/Học viên/CTV) là danh sách ĐÓNG → phải nạp Super Admin vào đây,
+        // nếu không họ sẽ không trả lời được khi Super Admin nhắn tới (kênh hỗ trợ).
+        if (scope.IsSelfScoped || scope.IsCollaboratorOnly)
+            allowed.UnionWith(await SuperAdminUserIdsAsync(db));
 
-        // CTV phụ trách → tài khoản đăng nhập của CTV.
-        if (cand.CollaboratorId is Guid collabId)
+        if (scope.IsAgentOnly)
         {
-            var collabUser = await db.Collaborators.AsNoTracking()
-                .Where(x => x.Id == collabId).Select(x => x.UserId).FirstOrDefaultAsync();
-            if (collabUser is Guid cu) allowed.Add(cu);
+            // Đại lý không thuộc quan hệ portal; chỉ thêm CTV thuộc đại lý mình.
+            if (scope.AgentId is Guid ownAgentId)
+            {
+                var ctvUserIds = await db.Collaborators.AsNoTracking()
+                    .Where(c => c.AgentId == ownAgentId && c.UserId != null)
+                    .Select(c => c.UserId!.Value)
+                    .ToListAsync();
+                allowed.UnionWith(ctvUserIds);
+            }
+            return (false, allowed);
         }
-        // TVV phụ trách (ConsultantId chính là user role consultant).
-        if (cand.ConsultantId is Guid consultantUser) allowed.Add(consultantUser);
-        // Phụ huynh ↔ con/em; Học viên ↔ phụ huynh.
-        if (scope.IsParent && cand.OwnerUserId is Guid childUser) allowed.Add(childUser);
-        if (scope.IsStudent && cand.ParentUserId is Guid parentUser) allowed.Add(parentUser);
 
-        allowed.Remove(_meId);
-        return allowed;
+        var restricted = scope.IsSelfScoped || scope.IsCollaboratorOnly;
+        var candidateQuery = db.Candidates.AsNoTracking().AsQueryable();
+        if (scope.IsSelfScoped)
+        {
+            if (scope.OwnedCandidateId is not Guid candidateId)
+                return (true, allowed);
+            candidateQuery = candidateQuery.Where(c => c.Id == candidateId);
+        }
+        else if (scope.IsCollaboratorOnly)
+        {
+            if (scope.CollaboratorId is not Guid collaboratorId)
+                return (true, allowed); // chưa gắn hồ sơ CTV → fail-closed
+
+            // CTV được nhắn đại lý chủ quản của mình.
+            if (scope.AgentId is Guid agentId)
+            {
+                var agentUserId = await db.Agents.AsNoTracking()
+                    .Where(a => a.Id == agentId && a.UserId != null)
+                    .Select(a => a.UserId!.Value)
+                    .FirstOrDefaultAsync();
+                if (agentUserId != Guid.Empty) allowed.Add(agentUserId);
+            }
+
+            candidateQuery = candidateQuery.Where(c => c.CollaboratorId == collaboratorId);
+        }
+        else
+        {
+            candidateQuery = MessagingCandidateScope.ForConsultant(candidateQuery, _meId);
+        }
+
+        var candidates = await candidateQuery
+            .Select(c => new
+            {
+                c.CollaboratorId,
+                c.ConsultantId,
+                c.OwnerUserId,
+                c.ParentUserId,
+            })
+            .ToListAsync();
+        if (candidates.Count == 0) return (restricted, allowed);
+
+        var collaboratorIds = candidates.Where(c => c.CollaboratorId != null).Select(c => c.CollaboratorId!.Value).Distinct().ToList();
+        var collaboratorUsers = await db.Collaborators.AsNoTracking()
+            .Where(c => collaboratorIds.Contains(c.Id) && c.UserId != null)
+            .ToDictionaryAsync(c => c.Id, c => c.UserId!.Value);
+
+        foreach (var candidate in candidates)
+        {
+            Guid? collaboratorUserId = candidate.CollaboratorId is Guid collaboratorId
+                && collaboratorUsers.TryGetValue(collaboratorId, out var mapped)
+                    ? mapped
+                    : null;
+
+            var relationship = CandidateMessagingRelationship.ForCandidate(
+                candidate.OwnerUserId,
+                candidate.ParentUserId,
+                candidate.ConsultantId,
+                collaboratorUserId);
+            allowed.UnionWith(relationship.AllowedRecipientsFor(_meId));
+        }
+
+        return (restricted, allowed);
     }
 
     private async Task SelectContact(Guid id)
@@ -360,26 +476,19 @@
 
             // Bảo vệ phía server: xác thực lại quyền nhắn tới người nhận.
             // Self-scoped (Phụ huynh/Học viên): chỉ nhắn được đúng người liên quan ứng viên của mình.
-            var allowed = _allowedRecipientIds ?? await BuildAllowedRecipientsAsync(db);
-            if (allowed is not null)
+            var recipientRoles = await (from ur in db.UserRoles
+                                        join r in db.Roles on ur.RoleId equals r.Id
+                                        where ur.UserId == _selectedId.Value
+                                        select r.Name!).ToListAsync();
+            // Re-check server-side bằng dữ liệu tươi từ DB — không tin danh bạ đã render.
+            (_restrictedScope, _relationshipRecipientIds) = await BuildRelationshipRecipientsAsync(db);
+            var allowed = _restrictedScope
+                ? _relationshipRecipientIds.Contains(_selectedId.Value)
+                : IsAllowedRecipient(recipientRoles, _selectedId.Value);
+            if (!allowed)
             {
-                if (!allowed.Contains(_selectedId.Value))
-                {
-                    Snackbar.Add("Bạn không được phép nhắn tin cho người này.", Severity.Warning);
-                    return;
-                }
-            }
-            else
-            {
-                var recipientRoles = await (from ur in db.UserRoles
-                                            join r in db.Roles on ur.RoleId equals r.Id
-                                            where ur.UserId == _selectedId.Value
-                                            select r.Name!).ToListAsync();
-                if (!MessagingPolicy.CanMessage(_myRoles, recipientRoles))
-                {
-                    Snackbar.Add("Bạn không được phép nhắn tin cho người này.", Severity.Warning);
-                    return;
-                }
+                Snackbar.Add("Bạn không được phép nhắn tin cho người này.", Severity.Warning);
+                return;
             }
 
             MessageAttachmentPayload? attachment = null;

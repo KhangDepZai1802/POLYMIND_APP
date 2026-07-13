@@ -177,7 +177,16 @@
             if (uid is Guid u)
             {
                 var user = await UserManager.FindByIdAsync(u.ToString());
-                if (user is not null) { user.IsActive = false; await UserManager.UpdateAsync(user); }
+                if (user is not null)
+                {
+                    user.IsActive = false;
+                    var lockResult = await UserManager.UpdateSecurityStampAsync(user);
+                    if (!lockResult.Succeeded)
+                    {
+                        Snackbar.Add(string.Join("; ", lockResult.Errors.Select(e => e.Description)), Severity.Error);
+                        return;
+                    }
+                }
             }
             await db.SaveChangesAsync();
             Snackbar.Add($"Đã gỡ liên kết tài khoản {KindLabel.ToLower()}.", Severity.Success);

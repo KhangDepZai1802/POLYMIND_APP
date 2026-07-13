@@ -1,4 +1,5 @@
 @using Microsoft.AspNetCore.Identity
+@using Polymind.Domain.Security
 @using Polymind.Infrastructure.Identity
 @using Polymind.Infrastructure.Persistence.Constants
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
@@ -372,7 +373,11 @@ else
         if (user is null) return;
         var old = user.IsActive;
         user.IsActive = !user.IsActive;
-        var result = await UserManager.UpdateAsync(user);
+        // Khi khóa, UpdateSecurityStampAsync lưu cả IsActive=false và stamp mới trong cùng Identity update.
+        // Mọi cookie cũ sẽ bị revalidation từ chối; mở khóa chỉ cần cập nhật trạng thái.
+        var result = user.IsActive
+            ? await UserManager.UpdateAsync(user)
+            : await UserManager.UpdateSecurityStampAsync(user);
         if (!result.Succeeded)
         {
             Snackbar.Add(string.Join("; ", result.Errors.Select(e => e.Description)), Severity.Error);
@@ -405,12 +410,18 @@ else
             return;
         }
 
-        // Dọn tham chiếu owner (học viên/phụ huynh đang gắn hồ sơ ứng viên) để không còn trỏ tới user đã xóa.
+        // Dọn mọi liên kết Học viên/Phụ huynh để Candidate không còn trỏ tới user đã xóa.
         await using (var db = await DbFactory.CreateDbContextAsync())
         {
-            var owned = await db.Candidates.Where(c => c.OwnerUserId == user.Id).ToListAsync();
-            foreach (var c in owned) c.OwnerUserId = null;
-            if (owned.Count > 0) await db.SaveChangesAsync();
+            var linkedCandidates = await db.Candidates
+                .Where(candidate => candidate.OwnerUserId == user.Id || candidate.ParentUserId == user.Id)
+                .ToListAsync();
+            foreach (var candidate in linkedCandidates)
+            {
+                if (CandidateAccountLinkRules.UnlinkUser(candidate, user.Id))
+                    candidate.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+            if (linkedCandidates.Count > 0) await db.SaveChangesAsync();
         }
 
         var result = await UserManager.DeleteAsync(user);

@@ -2,6 +2,7 @@
 @inject IAuthorizationService AuthorizationService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ISnackbar Snackbar
+@using Polymind.Domain.Visas
 
 <MudDialog>
     <DialogContent>
@@ -125,7 +126,8 @@
             }
             else
             {
-                var f = new Flight { AssignedTo = await db.Users.Select(u => u.Id).FirstOrDefaultAsync() };
+                var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+                var f = VisaFlightCreationRules.CreateFlight(actorId);
                 _m.ApplyTo(f);
                 db.Flights.Add(f);
             }

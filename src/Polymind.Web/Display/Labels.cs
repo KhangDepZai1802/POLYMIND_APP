@@ -331,6 +331,7 @@ public static class Labels
     public static string Vi(PaymentStatus s) => s switch
     {
         PaymentStatus.Pending => "Chờ thu",
+        PaymentStatus.Submitted => "Đã nộp — chờ kế toán duyệt",
         PaymentStatus.Partial => "Thu một phần",
         PaymentStatus.Paid => "Đã thu",
         PaymentStatus.Overdue => "Quá hạn",
@@ -341,6 +342,7 @@ public static class Labels
     public static Color ColorOf(PaymentStatus s) => s switch
     {
         PaymentStatus.Paid => Color.Success,
+        PaymentStatus.Submitted => Color.Info,
         PaymentStatus.Partial => Color.Info,
         PaymentStatus.Pending => Color.Warning,
         PaymentStatus.Overdue => Color.Error,
@@ -440,6 +442,7 @@ public static class Labels
         NotificationType.ReminderLoanRepayment => "Nhắc trả nợ vay",
         NotificationType.ExpenseApproval => "Duyệt khoản chi",
         NotificationType.CommissionPending => "Hoa hồng chờ duyệt",
+        NotificationType.CommissionPaid => "Hoa hồng đã chi",
         _ => t.ToString()
     };
 
@@ -455,6 +458,7 @@ public static class Labels
         NotificationType.ReminderLoanRepayment => Icons.Material.Filled.AccountBalanceWallet,
         NotificationType.ExpenseApproval => Icons.Material.Filled.ReceiptLong,
         NotificationType.CommissionPending => Icons.Material.Filled.PendingActions,
+        NotificationType.CommissionPaid => Icons.Material.Filled.Paid,
         _ => Icons.Material.Filled.Notifications
     };
 
@@ -468,7 +472,7 @@ public static class Labels
         NotificationType.ReminderLeadCare => Color.Error,
         NotificationType.ReminderLoanRepayment => Color.Error,
         NotificationType.ExpenseApproval => Color.Warning,
-        NotificationType.CommissionPending => Color.Secondary,
+        NotificationType.CommissionPending or NotificationType.CommissionPaid => Color.Secondary,
         _ => Color.Default
     };
 }

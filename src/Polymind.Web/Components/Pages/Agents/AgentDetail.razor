@@ -61,10 +61,26 @@ else
                     <MudText Typo="Typo.body2" Class="mt-2"><b>Địa chỉ:</b> @_agent.Address</MudText>
                 }
                 <MudDivider Class="my-3" />
-                <div class="d-flex justify-space-between">
+                <div class="d-flex justify-space-between mb-2">
                     <MudText Typo="Typo.body2">Ứng viên giới thiệu: <b>@_candidates.Count</b></MudText>
-                    <MudText Typo="Typo.body2">Tổng hoa hồng: <b>@($"{_totalCommission:N0} đ")</b></MudText>
+                    <MudText Typo="Typo.body2">Tổng hoa hồng phát sinh: <b>@($"{_totalCommission:N0} đ")</b></MudText>
                 </div>
+                @* Tách 3 trạng thái: bấm Duyệt / Đã chi làm tiền CHUYỂN giữa ba ô này — tổng phát sinh
+                   không đổi vì hoa hồng đã ghi nhận ngay khi ứng viên đóng tiền, chưa cần duyệt. *@
+                <MudGrid Spacing="2">
+                    <MudItem xs="4">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Chờ duyệt</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Warning"><b>@($"{_pendingCommission:N0} đ")</b></MudText>
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Đã duyệt, chờ chi</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Info"><b>@($"{_approvedCommission:N0} đ")</b></MudText>
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Đã chi</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Success"><b>@($"{_paidCommission:N0} đ")</b></MudText>
+                    </MudItem>
+                </MudGrid>
             </MudPaper>
         </MudItem>
 
@@ -191,7 +207,11 @@ else
             </MudPaper>
 
             <MudPaper Class="pa-4" Elevation="1">
-                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Hoa hồng (@_commissions.Count)</b></MudText>
+                @* Gom MỖI ỨNG VIÊN 1 HÀNG như bảng Khoản thu bên Tài chính — 3 mốc nằm trong hàng mở rộng. *@
+                <div class="d-flex align-center mb-3" style="gap:8px">
+                    <MudText Typo="Typo.subtitle1"><b>Hoa hồng (@CommissionGroups.Count ứng viên)</b></MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">— bấm ▸ để xem từng mốc</MudText>
+                </div>
                 @if (_commissions.Count == 0)
                 {
                     <MudAlert Severity="Severity.Info">Chưa có hoa hồng phát sinh.</MudAlert>
@@ -199,58 +219,89 @@ else
                 else
                 {
                     <MudHidden Breakpoint="Breakpoint.SmAndDown">
-                        <MudDataGrid T="CommissionRow" Items="_commissions" Hover="true" Dense="true" Striped="true">
+                        <div style="overflow-x:auto">
+                        <MudDataGrid T="CommissionGroupRow" Items="CommissionGroups" Hover="true" Dense="true" Striped="true">
                             <Columns>
-                                <PropertyColumn Property="x => x.CandidateName" Title="Ứng viên" />
-                                <TemplateColumn Title="Mốc">
-                                    <CellTemplate>@Labels.Vi(context.Item.Milestone)</CellTemplate>
+                                <HierarchyColumn T="CommissionGroupRow" />
+                                <PropertyColumn Property="x => x.CandidateName" Title="Ứng viên" CellStyle="white-space:nowrap" />
+                                @* Cột hẹp (cả bảng nằm trong cột md=7) → ép không xuống dòng, nếu không số tiền
+                                   và nhãn mốc bị bẻ chữ trông rất xấu trên laptop. *@
+                                <TemplateColumn Title="Mốc" CellStyle="white-space:nowrap">
+                                    <CellTemplate>@context.Item.PaidCount/@context.Item.Items.Count đã chi</CellTemplate>
                                 </TemplateColumn>
-                                <TemplateColumn Title="Hoa hồng">
-                                    <CellTemplate>@($"{context.Item.Amount:N0} đ")</CellTemplate>
-                                </TemplateColumn>
-                                <TemplateColumn Title="Trạng thái">
+                                <TemplateColumn Title="Hoa hồng" CellStyle="white-space:nowrap;text-align:right">
                                     <CellTemplate>
-                                        <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(context.Item.Status)">@Labels.Vi(context.Item.Status)</MudChip>
+                                        <b>@($"{context.Item.Total:N0} đ")</b>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">đã chi @($"{context.Item.Paid:N0} đ")</MudText>
                                     </CellTemplate>
                                 </TemplateColumn>
-                                <TemplateColumn Title="" Sortable="false">
+                                <TemplateColumn Title="Trạng thái" CellStyle="white-space:nowrap">
                                     <CellTemplate>
-                                        @if (_canApproveCommission && context.Item.Status == CommissionStatus.Pending)
+                                        @if (context.Item.NextAction is CommissionRow next)
                                         {
-                                            <MudButton Size="Size.Small" Color="Color.Info" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Verified" OnClick="@(() => ApproveCommission(context.Item.Id))">Duyệt</MudButton>
+                                            <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(next.Status)">
+                                                @Labels.Vi(next.Status) — @Labels.Vi(next.Milestone)
+                                            </MudChip>
                                         }
-                                        else if (_canPayCommission && context.Item.Status == CommissionStatus.Approved)
+                                        else
                                         {
-                                            <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Paid" OnClick="@(() => MarkCommissionPaid(context.Item.Id))">Đã chi</MudButton>
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Đã chi đủ</MudChip>
                                         }
                                     </CellTemplate>
+                                </TemplateColumn>
+                                <TemplateColumn Title="" Sortable="false" CellStyle="white-space:nowrap;text-align:right">
+                                    <CellTemplate>@CommissionAction(context.Item.NextAction)</CellTemplate>
                                 </TemplateColumn>
                             </Columns>
+                            <ChildRowContent>
+                                <MudSimpleTable Dense="true" Striped="true" Class="ma-2">
+                                    <thead>
+                                        <tr>
+                                            <th>Mốc</th>
+                                            <th style="text-align:right">Hoa hồng</th>
+                                            <th>Trạng thái</th>
+                                            <th style="text-align:right">Thao tác</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var c in context.Item.Items)
+                                        {
+                                            <tr>
+                                                <td>@Labels.Vi(c.Milestone)</td>
+                                                <td style="text-align:right">@($"{c.Amount:N0} đ")</td>
+                                                <td><MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(c.Status)">@Labels.Vi(c.Status)</MudChip></td>
+                                                <td style="text-align:right">@CommissionAction(c)</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            </ChildRowContent>
+                            <PagerContent><MudDataGridPager T="CommissionGroupRow" /></PagerContent>
                         </MudDataGrid>
+                        </div>
                     </MudHidden>
 
                     <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
-                        @foreach (var c in _commissions)
+                        @foreach (var g in CommissionGroups)
                         {
                             <MudPaper Class="mobile-card pa-3" Elevation="0">
                                 <div class="d-flex justify-space-between align-center" style="gap:8px">
                                     <div style="min-width:0">
-                                        <MudText Typo="Typo.subtitle2" Style="font-weight:600">@c.CandidateName</MudText>
-                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@Labels.Vi(c.Milestone)</MudText>
+                                        <MudText Typo="Typo.subtitle2" Style="font-weight:600">@g.CandidateName</MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@g.PaidCount/@g.Items.Count mốc đã chi</MudText>
                                     </div>
-                                    <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(c.Status)">@Labels.Vi(c.Status)</MudChip>
+                                    <MudText Typo="Typo.body2"><b>@($"{g.Total:N0} đ")</b></MudText>
                                 </div>
-                                <div class="d-flex justify-space-between align-center mt-1" style="gap:8px">
-                                    <MudText Typo="Typo.body2"><b>@($"{c.Amount:N0} đ")</b></MudText>
-                                    @if (_canApproveCommission && c.Status == CommissionStatus.Pending)
-                                    {
-                                        <MudButton Size="Size.Small" Color="Color.Info" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Verified" OnClick="@(() => ApproveCommission(c.Id))">Duyệt</MudButton>
-                                    }
-                                    else if (_canPayCommission && c.Status == CommissionStatus.Approved)
-                                    {
-                                        <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Paid" OnClick="@(() => MarkCommissionPaid(c.Id))">Đã chi</MudButton>
-                                    }
-                                </div>
+                                @foreach (var c in g.Items)
+                                {
+                                    <div class="d-flex justify-space-between align-center mt-1" style="gap:8px">
+                                        <MudText Typo="Typo.caption">@Labels.Vi(c.Milestone) • @($"{c.Amount:N0} đ")</MudText>
+                                        <div class="d-flex align-center" style="gap:4px">
+                                            <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(c.Status)">@Labels.Vi(c.Status)</MudChip>
+                                            @CommissionAction(c)
+                                        </div>
+                                    </div>
+                                }
                             </MudPaper>
                         }
                     </MudHidden>
@@ -264,12 +315,44 @@ else
     [Parameter] public Guid Id { get; set; }
 
     private record CandidateRow(Guid Id, string Code, string FullName, string? Phone);
-    private record CommissionRow(Guid Id, string CandidateName, CommissionMilestone Milestone, decimal Amount, CommissionStatus Status);
+    private record CommissionRow(Guid Id, Guid CandidateId, string CandidateName, CommissionMilestone Milestone, decimal Amount, CommissionStatus Status);
+
+    /// <summary>Gom hoa hồng về MỘT hàng/ứng viên; các mốc (Đặt cọc → Trúng tuyển → Xuất cảnh) nằm trong hàng mở rộng.</summary>
+    private record CommissionGroupRow(Guid CandidateId, string CandidateName, List<CommissionRow> Items)
+    {
+        public decimal Total => Items.Sum(i => i.Amount);
+        public decimal Paid => Items.Where(i => i.Status == CommissionStatus.Paid).Sum(i => i.Amount);
+        public int PaidCount => Items.Count(i => i.Status == CommissionStatus.Paid);
+
+        /// <summary>Việc cần làm tiếp: duyệt mốc chờ duyệt đầu tiên, hết thì chi mốc đã duyệt đầu tiên.</summary>
+        public CommissionRow? NextAction => Items.FirstOrDefault(i => i.Status == CommissionStatus.Pending)
+            ?? Items.FirstOrDefault(i => i.Status == CommissionStatus.Approved);
+    }
+
+    private List<CommissionGroupRow> CommissionGroups => _commissions
+        .GroupBy(c => (c.CandidateId, c.CandidateName))
+        .Select(g => new CommissionGroupRow(g.Key.CandidateId, g.Key.CandidateName,
+            g.OrderBy(c => (int)c.Milestone).ToList()))
+        .OrderBy(g => g.CandidateName)
+        .ToList();
+
+    /// <summary>Nút Duyệt / Đã chi của một mốc — dùng chung cho hàng gom, hàng mở rộng và thẻ mobile.</summary>
+    private RenderFragment CommissionAction(CommissionRow? c) => @<text>
+        @if (c is not null && _canApproveCommission && c.Status == CommissionStatus.Pending)
+        {
+            <MudButton Size="Size.Small" Color="Color.Info" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Verified" OnClick="@(() => ApproveCommission(c.Id))">Duyệt</MudButton>
+        }
+        else if (c is not null && _canPayCommission && c.Status == CommissionStatus.Approved)
+        {
+            <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Paid" OnClick="@(() => MarkCommissionPaid(c.Id))">Đã chi</MudButton>
+        }
+    </text>;
 
     private Agent? _agent;
     private List<CandidateRow> _candidates = new();
     private List<CommissionRow> _commissions = new();
     private decimal _totalCommission;
+    private decimal _pendingCommission, _approvedCommission, _paidCommission;
     private bool _canUpdate;
     private bool _canApproveCommission;
     private bool _canPayCommission;
@@ -354,15 +437,37 @@ else
     {
         if (!await HasPermission("commissions:approve")) { Snackbar.Add("Bạn không có quyền duyệt hoa hồng.", Severity.Warning); return; }
         await using var db = await DbFactory.CreateDbContextAsync();
-        var c = await db.AgentCommissions.FirstOrDefaultAsync(x => x.Id == id);
+        var c = await db.AgentCommissions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
         if (c is null) return;
+        if (!Polymind.Domain.Commissions.AgentCommissionTransitions.CanApprove(c.Status))
+        {
+            Snackbar.Add("Hoa hồng đã đổi trạng thái. Vui lòng tải lại.", Severity.Warning);
+            await Load();
+            return;
+        }
         var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
         var oldValue = CommissionState(c);
+        var updatedAt = DateTimeOffset.UtcNow;
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        var affected = await db.AgentCommissions
+            .Where(x => x.Id == id && x.Status == CommissionStatus.Pending)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.Status, CommissionStatus.Approved)
+                .SetProperty(x => x.ApprovedBy, actorId)
+                .SetProperty(x => x.UpdatedAt, updatedAt));
+        if (affected == 0)
+        {
+            await transaction.RollbackAsync();
+            Snackbar.Add("Hoa hồng đã đổi trạng thái. Vui lòng tải lại.", Severity.Warning);
+            await Load();
+            return;
+        }
         c.Status = CommissionStatus.Approved;
         c.ApprovedBy = actorId;
-        c.UpdatedAt = DateTimeOffset.UtcNow;
+        c.UpdatedAt = updatedAt;
         db.AddAudit(actorId, "approve", "agent_commissions", c.Id, oldValue, CommissionState(c));
         await db.SaveChangesAsync();
+        await transaction.CommitAsync();
         Snackbar.Add("Đã duyệt hoa hồng", Severity.Success);
         await Load();
     }
@@ -371,15 +476,38 @@ else
     {
         if (!await HasPermission("commissions:update")) { Snackbar.Add("Bạn không có quyền chi hoa hồng.", Severity.Warning); return; }
         await using var db = await DbFactory.CreateDbContextAsync();
-        var c = await db.AgentCommissions.FirstOrDefaultAsync(x => x.Id == id);
+        var c = await db.AgentCommissions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
         if (c is null) return;
+        if (!Polymind.Domain.Commissions.AgentCommissionTransitions.CanMarkPaid(c.Status))
+        {
+            Snackbar.Add("Hoa hồng chưa được duyệt hoặc đã được chi. Vui lòng tải lại.", Severity.Warning);
+            await Load();
+            return;
+        }
         var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
         var oldValue = CommissionState(c);
+        var paidDate = DateOnly.FromDateTime(DateTime.UtcNow);
+        var updatedAt = DateTimeOffset.UtcNow;
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        var affected = await db.AgentCommissions
+            .Where(x => x.Id == id && x.Status == CommissionStatus.Approved)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.Status, CommissionStatus.Paid)
+                .SetProperty(x => x.PaidDate, paidDate)
+                .SetProperty(x => x.UpdatedAt, updatedAt));
+        if (affected == 0)
+        {
+            await transaction.RollbackAsync();
+            Snackbar.Add("Hoa hồng chưa được duyệt hoặc đã được chi. Vui lòng tải lại.", Severity.Warning);
+            await Load();
+            return;
+        }
         c.Status = CommissionStatus.Paid;
-        c.PaidDate = DateOnly.FromDateTime(DateTime.UtcNow);
-        c.UpdatedAt = DateTimeOffset.UtcNow;
+        c.PaidDate = paidDate;
+        c.UpdatedAt = updatedAt;
         db.AddAudit(actorId, "mark_paid", "agent_commissions", c.Id, oldValue, CommissionState(c));
         await db.SaveChangesAsync();
+        await transaction.CommitAsync();
         Snackbar.Add("Đã đánh dấu hoa hồng đã chi", Severity.Success);
         await Load();
     }
@@ -416,8 +544,11 @@ else
         var commissions = await db.AgentCommissions.Where(c => c.AgentId == Id)
             .OrderByDescending(c => c.CreatedAt).ToListAsync();
         _commissions = commissions.Select(c => new CommissionRow(
-            c.Id, names.GetValueOrDefault(c.CandidateId, "—"), c.Milestone, c.CommissionAmount, c.Status)).ToList();
+            c.Id, c.CandidateId, names.GetValueOrDefault(c.CandidateId, "—"), c.Milestone, c.CommissionAmount, c.Status)).ToList();
         _totalCommission = commissions.Sum(c => c.CommissionAmount);
+        _pendingCommission = commissions.Where(c => c.Status == CommissionStatus.Pending).Sum(c => c.CommissionAmount);
+        _approvedCommission = commissions.Where(c => c.Status == CommissionStatus.Approved).Sum(c => c.CommissionAmount);
+        _paidCommission = commissions.Where(c => c.Status == CommissionStatus.Paid).Sum(c => c.CommissionAmount);
 
         _configs = await db.AgentCommissionConfigs.Where(c => c.AgentId == Id)
             .OrderBy(c => c.Milestone).ToListAsync();

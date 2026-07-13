@@ -1,5 +1,6 @@
 @page "/my-commissions"
 @attribute [Authorize(Policy = "commissions:read")]
+@using Polymind.Domain.Commissions
 @using Polymind.Web.Components.Pages.Agents
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AgentScope AgentScope
@@ -22,11 +23,12 @@ else if (_scopeError is not null)
 else
 {
     <MudGrid Spacing="2">
+        @* CTV KHÔNG được thấy tổng hoa hồng đại lý nhận được — chỉ phần của chính mình. *@
         @if (_isCollaboratorPortal)
         {
             @Kpi("Đại lý chủ quản", _agentName, Icons.Material.Filled.Storefront, Color.Primary)
             @Kpi("Ứng viên đã giới thiệu", _candidateCount.ToString("N0"), Icons.Material.Filled.Groups, Color.Info)
-            @Kpi("Hoa hồng qua đại lý", $"{_grossCommission:N0} đ", Icons.Material.Filled.Handshake, Color.Warning)
+            @Kpi("Tỷ lệ hoa hồng của tôi", $"{_collaborator?.CommissionSharePercentage ?? 0:0.#}%", Icons.Material.Filled.Percent, Color.Warning)
             @Kpi("CTV được hưởng", $"{_ctvShare:N0} đ", Icons.Material.Filled.Paid, Color.Success)
         }
         else
@@ -147,7 +149,10 @@ else
                                 <th>CTV</th>
                             }
                             <th>Mốc</th>
-                            <th style="text-align:right">Hoa hồng đại lý</th>
+                            @if (!_isCollaboratorPortal)
+                            {
+                                <th style="text-align:right">Hoa hồng đại lý</th>
+                            }
                             <th style="text-align:right">CTV hưởng</th>
                             @if (!_isCollaboratorPortal)
                             {
@@ -167,7 +172,10 @@ else
                                     <td>@(r.CollaboratorName ?? "—")</td>
                                 }
                                 <td>@Labels.Vi(r.Milestone)</td>
-                                <td style="text-align:right">@($"{r.AgentAmount:N0} đ")</td>
+                                @if (!_isCollaboratorPortal)
+                                {
+                                    <td style="text-align:right">@($"{r.AgentAmount:N0} đ")</td>
+                                }
                                 <td style="text-align:right">@($"{r.CollaboratorAmount:N0} đ")</td>
                                 @if (!_isCollaboratorPortal)
                                 {
@@ -295,7 +303,6 @@ else
             .OrderBy(c => c.FullName)
             .Select(c => new { c.Id, c.Code, c.FullName, c.Phone, c.CollaboratorId })
             .ToListAsync();
-        var candidateIds = candidates.Select(c => c.Id).ToHashSet();
         _candidateCount = candidates.Count;
 
         _candidates = candidates.Select(c => new CandidateRow(
@@ -306,25 +313,27 @@ else
             c.CollaboratorId is Guid cid && collaboratorById.TryGetValue(cid, out var ctv) ? ctv.FullName : null))
             .ToList();
 
-        var commissions = candidateIds.Count == 0
-            ? new List<AgentCommission>()
-            : await db.AgentCommissions
-                .Where(c => c.AgentId == agentId && candidateIds.Contains(c.CandidateId))
-                .OrderByDescending(c => c.CreatedAt)
-                .ToListAsync();
+        var commissionQuery = db.AgentCommissions.Where(c => c.AgentId == agentId);
+        if (collaboratorId is Guid scopedCollaboratorId)
+            commissionQuery = commissionQuery.Where(c => c.CollaboratorId == scopedCollaboratorId);
+        var commissions = await commissionQuery
+            .OrderByDescending(c => c.CreatedAt)
+            .ToListAsync();
+        var commissionCandidateIds = commissions.Select(c => c.CandidateId).Distinct().ToList();
+        var candidateNameById = await db.Candidates
+            .Where(c => commissionCandidateIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => c.FullName);
 
-        var candidateById = candidates.ToDictionary(c => c.Id);
         _rows = commissions.Select(c =>
         {
-            var candidate = candidateById[c.CandidateId];
             Collaborator? collaborator = null;
-            if (candidate.CollaboratorId is Guid cid)
+            if (c.CollaboratorId is Guid cid)
                 collaboratorById.TryGetValue(cid, out collaborator);
-            var collaboratorAmount = collaborator is null
+            var collaboratorAmount = c.CollaboratorSharePercentage is not decimal sharePercentage
                 ? 0m
-                : Math.Round(c.CommissionAmount * collaborator.CommissionSharePercentage / 100m, 0, MidpointRounding.AwayFromZero);
+                : AgentCommissionRates.CollaboratorShareAmount(c.CommissionAmount, sharePercentage);
             return new CommissionRow(
-                candidate.FullName,
+                candidateNameById.GetValueOrDefault(c.CandidateId, "—"),
                 collaborator?.Id,
                 collaborator?.FullName,
                 c.Milestone,

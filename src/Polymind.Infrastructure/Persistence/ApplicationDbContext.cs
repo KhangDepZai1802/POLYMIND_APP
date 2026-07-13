@@ -111,6 +111,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
             e.HasIndex(x => x.Code).IsUnique();
             e.HasIndex(x => x.PaymentId);
             e.HasIndex(x => x.ExpenseId);
+            e.HasIndex(x => x.LoanId);
+            e.HasIndex(x => x.LoanRepaymentId).IsUnique();
             e.Property(x => x.Amount).HasPrecision(15, 2);
         });
 
@@ -148,9 +150,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
         b.Entity<AgentCommission>(e =>
         {
             e.HasIndex(x => x.AgentId);
+            e.HasIndex(x => x.CollaboratorId);
             e.HasIndex(x => x.Status);
+            e.HasIndex(x => new { x.AgentId, x.CandidateId, x.Milestone }).IsUnique();
             e.Property(x => x.BaseAmount).HasPrecision(15, 2);
             e.Property(x => x.CommissionAmount).HasPrecision(15, 2);
+            e.Property(x => x.CollaboratorSharePercentage).HasPrecision(5, 2);
         });
 
         b.Entity<JobOrder>().Property(x => x.CostAmount).HasPrecision(15, 2);

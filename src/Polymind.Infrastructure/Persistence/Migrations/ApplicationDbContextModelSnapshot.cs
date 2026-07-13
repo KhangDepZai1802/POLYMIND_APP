@@ -251,6 +251,15 @@ namespace Polymind.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("candidate_id");
 
+                    b.Property<Guid?>("CollaboratorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("collaborator_id");
+
+                    b.Property<decimal?>("CollaboratorSharePercentage")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("collaborator_share_percentage");
+
                     b.Property<decimal>("CommissionAmount")
                         .HasPrecision(15, 2)
                         .HasColumnType("numeric(15,2)")
@@ -300,8 +309,15 @@ namespace Polymind.Infrastructure.Persistence.Migrations
                     b.HasIndex("AgentId")
                         .HasDatabaseName("ix_agent_commissions_agent_id");
 
+                    b.HasIndex("CollaboratorId")
+                        .HasDatabaseName("ix_agent_commissions_collaborator_id");
+
                     b.HasIndex("Status")
                         .HasDatabaseName("ix_agent_commissions_status");
+
+                    b.HasIndex("AgentId", "CandidateId", "Milestone")
+                        .IsUnique()
+                        .HasDatabaseName("ix_agent_commissions_agent_id_candidate_id_milestone");
 
                     b.ToTable("agent_commissions", (string)null);
                 });
@@ -1585,6 +1601,14 @@ namespace Polymind.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("approved_by");
 
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("archived_at");
+
+                    b.Property<Guid?>("ArchivedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("archived_by");
+
                     b.Property<Guid>("CandidateId")
                         .HasColumnType("uuid")
                         .HasColumnName("candidate_id");
@@ -1716,6 +1740,14 @@ namespace Polymind.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(15,2)")
                         .HasColumnName("amount");
 
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("archived_at");
+
+                    b.Property<Guid?>("ArchivedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("archived_by");
+
                     b.Property<Guid?>("CandidateId")
                         .HasColumnType("uuid")
                         .HasColumnName("candidate_id");
@@ -1740,6 +1772,14 @@ namespace Polymind.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ExpenseId")
                         .HasColumnType("uuid")
                         .HasColumnName("expense_id");
+
+                    b.Property<Guid?>("LoanId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("loan_id");
+
+                    b.Property<Guid?>("LoanRepaymentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("loan_repayment_id");
 
                     b.Property<Guid?>("PaymentId")
                         .HasColumnType("uuid")
@@ -1775,6 +1815,13 @@ namespace Polymind.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ExpenseId")
                         .HasDatabaseName("ix_receipts_expense_id");
+
+                    b.HasIndex("LoanId")
+                        .HasDatabaseName("ix_receipts_loan_id");
+
+                    b.HasIndex("LoanRepaymentId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_receipts_loan_repayment_id");
 
                     b.HasIndex("PaymentId")
                         .HasDatabaseName("ix_receipts_payment_id");

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <!-- Chỉ tham chiếu Domain + Infrastructure: logic thuần, không bị khóa file khi web dev đang chạy.
+       KHÔNG tham chiếu Polymind.Web ở đây — build test sẽ rebuild Web và bị khóa DLL khi dev server (:5177) đang chạy.
+       Logic thuần trong Web (VD MessagingPolicy) được kiểm bằng test case thủ công cho tới khi có harness riêng. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Polymind.Domain\Polymind.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Polymind.Infrastructure\Polymind.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -8,7 +8,9 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using System.Threading.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Hangfire;
@@ -20,6 +22,7 @@ using Polymind.Infrastructure.Persistence;
 using Polymind.Web.Api;
 using Polymind.Web.Authorization;
 using Polymind.Web.Components;
+using Polymind.Web.Finance;
 using Polymind.Web.Health;
 using Polymind.Web.Identity;
 using Polymind.Web.Notifications;
@@ -101,6 +104,23 @@ builder.Services.AddScoped<IUserClaimsPrincipalFactory<ApplicationUser>, Permiss
 builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 builder.Services.AddAuthorization();
+
+// Rate limiting: chống dò mật khẩu (brute force) ở đăng nhập API. Phân vùng theo IP thật
+// (đặt UseRateLimiter SAU UseForwardedHeaders để lấy đúng IP client sau reverse proxy/tunnel).
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("login", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+});
+
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.LoginPath = "/login";
@@ -191,6 +211,7 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
+app.UseRateLimiter();
 app.UseSerilogRequestLogging();
 app.Use(async (context, next) =>
 {
@@ -254,13 +275,16 @@ app.MapPost("/Account/Logout", async (SignInManager<ApplicationUser> signInManag
 // Xuất báo cáo CSV (gated reports:read).
 app.MapCsvExportEndpoints();
 
-// REST API (Phase H) + tài liệu Swagger.
-app.UseSwagger();
-app.UseSwaggerUI(options =>
+// REST API (Phase H) + tài liệu Swagger — CHỈ bật ở Development, tránh lộ "bản đồ" API ở production/public.
+if (app.Environment.IsDevelopment())
 {
-    options.SwaggerEndpoint("/swagger/v1/swagger.json", "POLYMIND API v1");
-    options.DocumentTitle = "POLYMIND API";
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "POLYMIND API v1");
+        options.DocumentTitle = "POLYMIND API";
+    });
+}
 app.MapAuthApi();
 app.MapLeadsApi();
 app.MapCandidatesApi();
@@ -280,6 +304,8 @@ using (var scope = app.Services.CreateScope())
         await DbSeeder.SeedAsync(app.Services);
         if (app.Environment.IsDevelopment())
             await DemoDataSeeder.SeedAsync(app.Services);
+        // Khoản thu đã duyệt mà thiếu phiếu thu (seed cũ / dữ liệu trước khi duyệt tự lập phiếu) → lập bù.
+        await ReceiptBackfillService.RunAsync(app.Services);
     }
     catch (Exception ex)
     {

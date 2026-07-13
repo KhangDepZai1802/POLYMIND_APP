@@ -567,7 +567,8 @@ else
                 <MudPaper Class="pa-4 mt-4" Elevation="1">
                     <div class="d-flex justify-space-between align-center mb-3">
                         <div class="d-flex align-center" style="gap:8px">
-                            <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Color="Color.Primary" />
+                            <MudIcon Icon="@(_hasLoan ? Labels.IconOf(_loanKind) : Icons.Material.Filled.AccountBalance)"
+                                     Color="@(_hasLoan ? Labels.ColorOf(_loanKind) : Color.Primary)" />
                             <MudText Typo="Typo.subtitle1"><b>Hỗ trợ vay vốn</b></MudText>
                         </div>
                         @if (_hasLoan)
@@ -577,11 +578,21 @@ else
                     </div>
                     @if (_hasLoan)
                     {
+                        @* Loại khoản nợ: ngân hàng (xanh) vs công ty (cam) — phân biệt ngay từ cái nhìn đầu. *@
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="mb-3"
+                                 Color="Labels.ColorOf(_loanKind)" Icon="@Labels.IconOf(_loanKind)">@Labels.Vi(_loanKind)</MudChip>
                         <MudGrid>
-                            @Field("Số tiền vay", _loanAmount is null ? null : $"{_loanAmount:N0} đ")
+                            @Field(_loanKind == LoanKind.Company ? "Số tiền nợ" : "Số tiền vay", _loanAmount is null ? null : $"{_loanAmount:N0} đ")
                             @Field("Thời hạn", _loanTermMonths is null ? null : $"{_loanTermMonths} tháng")
-                            @Field("Ngân hàng", _loanBankName)
-                            @Field("Lãi suất", _loanInterestRate is null ? null : $"{_loanInterestRate}%/năm")
+                            @if (_loanKind == LoanKind.Bank)
+                            {
+                                @Field("Ngân hàng", _loanBankName)
+                                @Field("Lãi suất", _loanInterestRate is null ? null : $"{_loanInterestRate}%/năm")
+                            }
+                            else
+                            {
+                                @Field("Chủ nợ", "Công ty")
+                            }
                             @Field("Ngày giải ngân", _loanDisbursedDate?.ToString("dd/MM/yyyy"))
                         </MudGrid>
                         @if (!string.IsNullOrWhiteSpace(_loanNote))
@@ -970,6 +981,7 @@ else
     private bool _canLogOverseas;
 
     private bool _hasLoan;
+    private LoanKind _loanKind = LoanKind.Bank;
     private LoanStatus _loanStatus = LoanStatus.Borrowing;
     private decimal? _loanAmount;
     private int? _loanTermMonths;
@@ -1133,6 +1145,7 @@ else
             var loan = await db.Loans.Where(l => l.CandidateId == Id)
                 .OrderByDescending(l => l.CreatedAt).FirstOrDefaultAsync();
             _hasLoan = loan is not null;
+            _loanKind = loan?.Kind ?? LoanKind.Bank;
             _loanStatus = loan?.Status == LoanStatus.NotBorrowed ? LoanStatus.Borrowing : loan?.Status ?? LoanStatus.Borrowing;
             _loanAmount = loan?.Amount;
             _loanTermMonths = loan?.TermMonths;
@@ -1140,7 +1153,7 @@ else
             _loanInterestRate = loan?.InterestRate;
             _loanDisbursedDate = loan?.DisbursedDate;
             _loanNote = loan?.Note;
-            _hasOpenLoan = loan is not null && loan.Status != LoanStatus.Settled;
+            _hasOpenLoan = loan is not null && LoanCollectionRules.BlocksWorkflowCompletion(loan.Kind, loan.Status);
         }
 
         if (_canReadTraining)
@@ -1813,9 +1826,6 @@ else
             cjo.UpdatedAt = DateTimeOffset.UtcNow;
             if (next == WorkflowStep.Completed) cjo.Status = CandidateJobOrderStatus.Completed;
 
-            // Hoa hồng nay phát sinh theo GIAI ĐOẠN ĐÓNG TIỀN (xem CommissionEngine) — gọi ở đây chỉ
-            // tạo lát cho các giai đoạn ứng viên ĐÃ đóng, tránh double so với trigger ở trang Tài chính.
-            var newCommissions = await Polymind.Web.Commissions.CommissionEngine.EnsureAsync(db, cjo.CandidateId, actorId);
             db.AddAudit(actorId, "advance_step", "candidate_job_orders", cjo.Id, new
             {
                 CurrentStep = completed,
@@ -1825,9 +1835,12 @@ else
                 CurrentStep = next,
                 cjo.Status,
                 CompletedStep = completed,
-                NewCommissions = newCommissions,
             });
             await db.SaveChangesAsync();
+
+            // Hoa hồng phát sinh theo giai đoạn đã đóng. Chạy sau khi lưu bước để CommissionEngine
+            // chỉ phải xử lý các row hoa hồng/audit của chính nó khi gặp race unique.
+            var newCommissions = await Polymind.Web.Commissions.CommissionEngine.EnsureAsync(db, cjo.CandidateId, actorId);
 
             Snackbar.Add($"Đã chuyển sang bước: {Labels.Vi(next)}", Severity.Success);
             if (newCommissions > 0)

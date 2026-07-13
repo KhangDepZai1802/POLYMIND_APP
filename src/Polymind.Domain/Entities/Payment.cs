@@ -21,4 +21,9 @@ public class Payment : BaseEntity
     public string? Notes { get; set; }
     public Guid CreatedBy { get; set; }
     public Guid? ApprovedBy { get; set; }
+
+    // Kho lưu trữ: ẩn khỏi Tiến độ đóng tiền + Khoản thu khi ứng viên đã thu đủ 100%.
+    // KHÔNG phải xóa và KHÔNG phải miễn nợ — bản ghi còn nguyên, vẫn tính vào tổng đã thu, khôi phục được.
+    public DateTimeOffset? ArchivedAt { get; set; }
+    public Guid? ArchivedBy { get; set; }
 }

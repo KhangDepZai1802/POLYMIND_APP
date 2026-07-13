@@ -20,4 +20,13 @@ public static class AgentCommissionRates
     public const decimal CollaboratorShareDefault = 35m;
     public const decimal CollaboratorShareMin = 30m;
     public const decimal CollaboratorShareMax = 40m;
+
+    public static decimal NormalizeCollaboratorShare(decimal percentage)
+        => Math.Clamp(percentage, CollaboratorShareMin, CollaboratorShareMax);
+
+    public static decimal CollaboratorShareAmount(decimal commissionAmount, decimal percentage)
+        => Math.Round(
+            commissionAmount * NormalizeCollaboratorShare(percentage) / 100m,
+            0,
+            MidpointRounding.AwayFromZero);
 }

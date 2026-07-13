@@ -33,6 +33,9 @@ public static class BusinessRoleAccess
     public static bool CanDeleteLoan(ClaimsPrincipal user)
         => HasAnyRole(user, RoleNames.SuperAdmin, RoleNames.Accountant);
 
+    public static bool CanCollectDebt(ClaimsPrincipal user)
+        => HasAnyRole(user, RoleNames.SuperAdmin, RoleNames.Accountant);
+
     private static bool HasAnyRole(ClaimsPrincipal user, params string[] roles)
         => roles.Any(user.IsInRole);
 }

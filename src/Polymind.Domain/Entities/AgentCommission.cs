@@ -16,6 +16,10 @@ public class AgentCommission : BaseEntity
     public PaymentStage? Stage { get; set; }
     public decimal BaseAmount { get; set; }
     public decimal CommissionAmount { get; set; }
+    /// <summary>CTV trực tiếp tại thời điểm hoa hồng phát sinh. Null khi ứng viên không do CTV giới thiệu.</summary>
+    public Guid? CollaboratorId { get; set; }
+    /// <summary>Snapshot % CTV tại thời điểm phát sinh; không bị thay đổi khi cấu hình CTV đổi sau này.</summary>
+    public decimal? CollaboratorSharePercentage { get; set; }
     public CommissionStatus Status { get; set; } = CommissionStatus.Pending;
     public DateOnly? PaidDate { get; set; }
     public Guid? ReceiptId { get; set; }

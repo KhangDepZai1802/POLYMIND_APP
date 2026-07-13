@@ -138,26 +138,52 @@ public static class DemoDataSeeder
             candidate.JobOrders.Add(cjo);
             db.Candidates.Add(candidate);
 
-            // vài khoản thu mẫu
-            if ((int)reached >= (int)WorkflowStep.Deposit)
-            {
-                db.Payments.Add(new Payment
-                {
-                    Code = $"PT-{createdAt:yyyyMMdd}-{3000 + c}",
-                    CandidateId = candidate.Id,
-                    JobOrderId = jo.Id,
-                    PaymentType = PaymentType.Deposit,
-                    Amount = 20_000_000,
-                    Status = PaymentStatus.Paid,
-                    PaidDate = DateOnly.FromDateTime(createdAt.AddDays(5).DateTime),
-                    CreatedBy = adminId,
-                });
-            }
+            // KHÔNG seed khoản thu đặt cọc rời ở đây: SeedExtrasAsync đã tạo lịch 4 bước (có Stage),
+            // trong đó bước 1 CHÍNH LÀ đặt cọc. Thêm khoản rời sẽ đếm trùng tiền cọc vào "Tổng đã thu".
             c++;
         }
         await db.SaveChangesAsync();
 
         await SeedExtrasAsync(db, userManager, logger, rnd, adminId);
+    }
+
+    /// <summary>
+    /// Dọn khoản đặt cọc 20tr mà bản seed CŨ tạo rời ngoài lịch 4 bước. Ứng viên vì thế có HAI khoản đặt cọc
+    /// (một rời + bước 1 của lịch) → "Tổng đã thu" bị đếm trùng và bảng Khoản thu lẻ đầy rác.
+    /// Nhận diện rất hẹp để không đụng khoản thu lẻ THẬT: không có Stage, đúng 20.000.000đ, loại Đặt cọc,
+    /// đã thu nhưng KHÔNG có người duyệt (khoản người dùng duyệt luôn có ApprovedBy), và ứng viên ĐÃ CÓ
+    /// bước 1 trong lịch — tức khoản rời này chắc chắn là bản trùng.
+    /// KHÔNG lọc theo ReceiptId: kế toán có thể đã lỡ lập phiếu cho khoản rác này, phiếu đó phải bị gỡ theo.
+    /// </summary>
+    private static async Task RemoveDuplicateSeedDepositsAsync(ApplicationDbContext db, ILogger logger)
+    {
+        var scheduledCandidateIds = await db.Payments
+            .Where(p => p.Stage == PaymentStage.Deposit)
+            .Select(p => p.CandidateId)
+            .Distinct()
+            .ToListAsync();
+
+        var stale = await db.Payments
+            .Where(p => p.Stage == null
+                && p.PaymentType == PaymentType.Deposit
+                && p.Status == PaymentStatus.Paid
+                && p.Amount == 20_000_000m
+                && p.ApprovedBy == null
+                && scheduledCandidateIds.Contains(p.CandidateId))
+            .ToListAsync();
+        if (stale.Count == 0) return;
+
+        var staleIds = stale.Select(p => p.Id).ToList();
+        var staleReceipts = await db.Receipts
+            .Where(r => r.PaymentId != null && staleIds.Contains(r.PaymentId.Value))
+            .ToListAsync();
+
+        db.Receipts.RemoveRange(staleReceipts);
+        db.Payments.RemoveRange(stale);
+        await db.SaveChangesAsync();
+        logger.LogInformation(
+            "Đã gỡ {Count} khoản đặt cọc seed trùng với bước 1 của lịch đóng tiền (kèm {Receipts} phiếu thu của chúng).",
+            stale.Count, staleReceipts.Count);
     }
 
     /// <summary>Bù dữ liệu demo cho Visa / Vé máy bay / Cấu hình &amp; phát sinh hoa hồng.
@@ -169,6 +195,8 @@ public static class DemoDataSeeder
         Random rnd,
         Guid adminId)
     {
+        await RemoveDuplicateSeedDepositsAsync(db, logger);
+
         var cjos = await db.CandidateJobOrders
             .Select(x => new { x.CandidateId, x.JobOrderId, x.CurrentStep })
             .ToListAsync();

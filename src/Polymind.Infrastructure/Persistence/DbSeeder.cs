@@ -38,7 +38,7 @@ public static class DbSeeder
     {
         [RoleNames.Director] = Combine(
             Read("dashboard", "leads", "candidates", "job_orders", "payments", "expenses", "receipts",
-                "agents", "collaborators", "commissions", "loans", "visas", "flights", "reports", "users", "roles", "notifications", "audit", "training"),
+                "agents", "collaborators", "commissions", "loans", "visas", "flights", "reports", "financial_reports", "users", "roles", "notifications", "audit", "training"),
             Actions("commissions", "approve"),
             Actions("reports", "create", "read"),
             Messaging()),
@@ -56,7 +56,7 @@ public static class DbSeeder
             Actions("leads", "create", "read", "update"),
             Actions("candidates", "create", "read", "update"),
             Actions("loans", "create", "read", "update"),
-            Read("dashboard", "job_orders", "agents", "collaborators", "notifications"),
+            Read("dashboard", "job_orders", "agents", "collaborators", "notifications", "training"),
             Messaging()),
 
         // Tư vấn viên: theo sát lead + ứng viên mình phụ trách (quyền tương đương Nhân viên tuyển dụng).
@@ -71,14 +71,14 @@ public static class DbSeeder
         [RoleNames.DocumentStaff] = Combine(
             Actions("leads", "read", "update", "delete"),
             Actions("candidates", "read", "update", "delete"),
-            Read("dashboard", "job_orders", "collaborators", "loans", "visas", "notifications"),
+            Read("dashboard", "job_orders", "collaborators", "loans", "visas", "notifications", "training"),
             Messaging()),
 
         [RoleNames.VisaStaff] = Combine(
             Actions("candidates", "read", "update"),
             AllActions("visas"),
             AllActions("flights"),
-            Read("dashboard", "job_orders", "collaborators", "loans", "notifications"),
+            Read("dashboard", "job_orders", "collaborators", "loans", "notifications", "training"),
             Messaging()),
 
         [RoleNames.Accountant] = Combine(
@@ -87,7 +87,7 @@ public static class DbSeeder
             AllActions("receipts"),
             AllActions("commissions"),
             AllActions("loans"),
-            Read("dashboard", "candidates", "job_orders", "agents", "collaborators", "reports", "notifications"),
+            Read("dashboard", "candidates", "job_orders", "agents", "collaborators", "reports", "financial_reports", "notifications", "training"),
             Messaging()),
 
         [RoleNames.Agent] = Combine(
@@ -95,8 +95,11 @@ public static class DbSeeder
             Actions("collaborators", "update"),
             Messaging()),
 
+        // CTV: chỉ ứng viên mình giới thiệu + phần hoa hồng của chính mình.
+        // KHÔNG có "training" (không xem module Đào tạo) và KHÔNG có "financial_reports"
+        // (không xem doanh thu/hoa hồng của đại lý).
         [RoleNames.Collaborator] = Combine(
-            Read("agents", "candidates", "commissions", "notifications", "training"),
+            Read("agents", "candidates", "commissions", "notifications"),
             Messaging()),
 
         // Phụ huynh: cổng cá nhân hóa — chỉ xem hồ sơ của con/em (bó hẹp qua Candidate.ParentUserId).
@@ -110,6 +113,11 @@ public static class DbSeeder
             Read("candidates", "training", "payments", "loans", "notifications"),
             Messaging()),
     };
+
+    /// <summary>Đọc hợp đồng seed quyền theo role cho kiểm tra/diagnostic; SuperAdmin được xử lý riêng bởi authorization layer.</summary>
+    public static bool RoleHasPermission(string roleName, string permissionName)
+        => RolePermissionMap.TryGetValue(roleName, out var permissions)
+            && permissions.Contains(permissionName, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Quyền nhắn tin nội bộ: ai cũng đọc + gửi được (phân quyền người-nhận xử lý ở tầng service/UI).</summary>
     private static string[] Messaging() => new[] { "messages:read", "messages:create" };

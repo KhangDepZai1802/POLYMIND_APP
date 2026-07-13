@@ -148,11 +148,10 @@
             }
             else
             {
-                var j = new JobOrder
-                {
-                    Code = $"JO-{DateTime.Now:yyyyMM}-{Random.Shared.Next(100, 999)}",
-                    CreatedBy = await db.Users.Select(u => u.Id).FirstOrDefaultAsync(),
-                };
+                var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+                var j = Polymind.Domain.JobOrders.JobOrderCreationRules.Create(
+                    actorId,
+                    $"JO-{DateTime.Now:yyyyMM}-{Random.Shared.Next(100, 999)}");
                 _m.ApplyTo(j);
                 db.JobOrders.Add(j);
             }

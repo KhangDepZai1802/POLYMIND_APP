@@ -286,7 +286,31 @@ else
         db.AddAudit(await AuthState.GetUserIdAsync(), "update", "role_permissions", _selectedRoleId,
             new { PermissionIds = oldIds }, new { PermissionIds = _selectedPermissionIds });
         await db.SaveChangesAsync();
-        Snackbar.Add("Đã lưu phân quyền vai trò.", Severity.Success);
+
+        // Permission claim được chụp vào cookie khi đăng nhập. Khi role đổi quyền, đổi security stamp
+        // của mọi user thuộc role để revalidation vô hiệu phiên cũ và lần đăng nhập sau nạp claim mới.
+        var permissionChanged = toRemove.Count > 0 || toAdd.Count > 0;
+        var selectedRole = _roles.FirstOrDefault(role => role.Id == _selectedRoleId);
+        var invalidatedSessions = 0;
+        if (permissionChanged && !string.IsNullOrWhiteSpace(selectedRole?.Name))
+        {
+            var affectedUsers = await UserManager.GetUsersInRoleAsync(selectedRole.Name);
+            foreach (var user in affectedUsers)
+            {
+                var stampResult = await UserManager.UpdateSecurityStampAsync(user);
+                if (!stampResult.Succeeded)
+                {
+                    var errors = string.Join("; ", stampResult.Errors.Select(error => error.Description));
+                    throw new InvalidOperationException(
+                        $"Đã lưu phân quyền nhưng không thể vô hiệu phiên của {user.Email}: {errors}");
+                }
+                invalidatedSessions++;
+            }
+        }
+
+        Snackbar.Add(permissionChanged
+            ? $"Đã lưu phân quyền và yêu cầu {invalidatedSessions} tài khoản đăng nhập lại."
+            : "Phân quyền không thay đổi.", Severity.Success);
     }
 
     private async Task LoadAuditAsync()

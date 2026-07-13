@@ -1,43 +1,34 @@
 @page "/reports"
 @attribute [Authorize(Policy = "reports:read")]
+@using Polymind.Domain.Reporting
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AgentScope AgentScope
 @inject NavigationManager Nav
 @inject IDialogService DialogService
+@inject IAuthorizationService AuthorizationService
+@inject AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>Báo cáo — POLYMIND</PageTitle>
 
-<PageHeader Eyebrow="THỐNG KÊ" Title="Báo cáo & Thống kê" Subtitle="Tổng hợp số liệu marketing, tuyển dụng và tài chính">
+<PageHeader Eyebrow="THỐNG KÊ" Title="Báo cáo & Thống kê" Subtitle="@(_canReadFinance ? "Tổng hợp số liệu marketing, tuyển dụng và tài chính" : "Tổng hợp số liệu marketing và tuyển dụng")">
     <Actions>
         <MudMenu Label="Excel" StartIcon="@Icons.Material.Filled.GridOn" Variant="Variant.Outlined" Color="Color.Success">
-            <MudMenuItem Href="/export/finance-monthly.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.CalendarMonth">Thu/chi theo tháng</MudMenuItem>
-            <MudMenuItem Href="/export/commissions.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.Handshake">Hoa hồng theo đại lý</MudMenuItem>
-            <MudMenuItem Href="/export/overdue-payments.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.MoneyOff">Khoản thu quá hạn</MudMenuItem>
-            <MudMenuItem Href="/export/revenue-by-country.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.Public">Doanh thu theo quốc gia</MudMenuItem>
-            <MudMenuItem Href="/export/revenue-by-job-order.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.Work">Doanh thu theo đơn hàng</MudMenuItem>
-            <MudMenuItem Href="/export/lead-by-province.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.Map">Lead theo tỉnh</MudMenuItem>
-            <MudMenuItem Href="/export/recruitment-funnel.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.FilterAlt">Phễu tuyển dụng</MudMenuItem>
-            <MudMenuItem Href="/export/top-agents.xlsx" ForceLoad="true" Icon="@Icons.Material.Filled.EmojiEvents">Top đại lý</MudMenuItem>
+            @foreach (var export in VisibleExports)
+            {
+                <MudMenuItem Href='@ExportHref(export.Slug, "xlsx")' ForceLoad="true" Icon="@export.Icon">@export.Label</MudMenuItem>
+            }
         </MudMenu>
         <MudMenu Label="PDF" StartIcon="@Icons.Material.Filled.PictureAsPdf" Variant="Variant.Outlined" Color="Color.Error">
-            <MudMenuItem Href="/export/finance-monthly.pdf" ForceLoad="true" Icon="@Icons.Material.Filled.CalendarMonth">Thu/chi theo tháng</MudMenuItem>
-            <MudMenuItem Href="/export/commissions.pdf" ForceLoad="true" Icon="@Icons.Material.Filled.Handshake">Hoa hồng theo đại lý</MudMenuItem>
-            <MudMenuItem Href="/export/overdue-payments.pdf" ForceLoad="true" Icon="@Icons.Material.Filled.MoneyOff">Khoản thu quá hạn</MudMenuItem>
-            <MudMenuItem Href="/export/revenue-by-country.pdf" ForceLoad="true" Icon="@Icons.Material.Filled.Public">Doanh thu theo quốc gia</MudMenuItem>
-            <MudMenuItem Href="/export/revenue-by-job-order.pdf" ForceLoad="true" Icon="@Icons.Material.Filled.Work">Doanh thu theo đơn hàng</MudMenuItem>
-            <MudMenuItem Href="/export/lead-by-province.pdf" ForceLoad="true" Icon="@Icons.Material.Filled.Map">Lead theo tỉnh</MudMenuItem>
-            <MudMenuItem Href="/export/recruitment-funnel.pdf" ForceLoad="true" Icon="@Icons.Material.Filled.FilterAlt">Phễu tuyển dụng</MudMenuItem>
-            <MudMenuItem Href="/export/top-agents.pdf" ForceLoad="true" Icon="@Icons.Material.Filled.EmojiEvents">Top đại lý</MudMenuItem>
+            @foreach (var export in VisibleExports)
+            {
+                <MudMenuItem Href='@ExportHref(export.Slug, "pdf")' ForceLoad="true" Icon="@export.Icon">@export.Label</MudMenuItem>
+            }
         </MudMenu>
         <MudMenu Label="CSV" StartIcon="@Icons.Material.Filled.Download" Variant="Variant.Outlined" Color="Color.Default">
-            <MudMenuItem Href="/export/finance-monthly.csv" ForceLoad="true" Icon="@Icons.Material.Filled.CalendarMonth">Thu/chi theo tháng</MudMenuItem>
-            <MudMenuItem Href="/export/commissions.csv" ForceLoad="true" Icon="@Icons.Material.Filled.Handshake">Hoa hồng theo đại lý</MudMenuItem>
-            <MudMenuItem Href="/export/overdue-payments.csv" ForceLoad="true" Icon="@Icons.Material.Filled.MoneyOff">Khoản thu quá hạn</MudMenuItem>
-            <MudMenuItem Href="/export/revenue-by-country.csv" ForceLoad="true" Icon="@Icons.Material.Filled.Public">Doanh thu theo quốc gia</MudMenuItem>
-            <MudMenuItem Href="/export/revenue-by-job-order.csv" ForceLoad="true" Icon="@Icons.Material.Filled.Work">Doanh thu theo đơn hàng</MudMenuItem>
-            <MudMenuItem Href="/export/lead-by-province.csv" ForceLoad="true" Icon="@Icons.Material.Filled.Map">Lead theo tỉnh</MudMenuItem>
-            <MudMenuItem Href="/export/recruitment-funnel.csv" ForceLoad="true" Icon="@Icons.Material.Filled.FilterAlt">Phễu tuyển dụng</MudMenuItem>
-            <MudMenuItem Href="/export/top-agents.csv" ForceLoad="true" Icon="@Icons.Material.Filled.EmojiEvents">Top đại lý</MudMenuItem>
+            @foreach (var export in VisibleExports)
+            {
+                <MudMenuItem Href='@ExportHref(export.Slug, "csv")' ForceLoad="true" Icon="@export.Icon">@export.Label</MudMenuItem>
+            }
         </MudMenu>
     </Actions>
 </PageHeader>
@@ -78,16 +69,19 @@ else
                   OnClick="@(() => ShowStat("Tỷ lệ chuyển đổi", $"{_conversionRate:0.#}%", Icons.Material.Filled.TrendingUp, Color.Primary, "Tỷ lệ lead đã chuyển thành ứng viên.", ConversionDetails()))" />
         <StatCard Title="Ứng viên đang xử lý" Value="@_activeCandidates.ToString("N0")" Icon="@Icons.Material.Filled.Groups" Color="Color.Secondary"
                   OnClick="@(() => ShowStat("Ứng viên đang xử lý", _activeCandidates.ToString("N0"), Icons.Material.Filled.Groups, Color.Secondary, "Phân bố ứng viên theo bước hiện tại (20 bước).", StepDetails(), "/candidates", "Mở danh sách Ứng viên"))" />
-        <StatCard Title="Doanh thu (đã thu)" Value="@($"{_totalRevenue:N0} đ")" Icon="@Icons.Material.Filled.Payments" Color="Color.Success"
-                  OnClick="@(() => ShowStat("Doanh thu (đã thu)", $"{_totalRevenue:N0} đ", Icons.Material.Filled.Payments, Color.Success, "Tổng tiền đã thu. Bảng dưới là doanh thu theo quốc gia.", RevenueCountryDetails()))" />
-        <StatCard Title="Tổng chi phí" Value="@($"{_totalExpense:N0} đ")" Icon="@Icons.Material.Filled.MoneyOff" Color="Color.Error"
-                  OnClick="@(() => ShowStat("Tổng chi phí", $"{_totalExpense:N0} đ", Icons.Material.Filled.MoneyOff, Color.Error, "Chi phí 6 tháng gần nhất.", MonthlyExpenseDetails(), "/finance", "Mở Tài chính"))" />
-        <StatCard Title="Lợi nhuận gộp" Value="@($"{(_totalRevenue - _totalExpense):N0} đ")" Icon="@Icons.Material.Filled.AccountBalance" Color="@((_totalRevenue - _totalExpense) >= 0 ? Color.Success : Color.Error)"
-                  OnClick="@(() => ShowStat("Lợi nhuận gộp", $"{(_totalRevenue - _totalExpense):N0} đ", Icons.Material.Filled.AccountBalance, (_totalRevenue - _totalExpense) >= 0 ? Color.Success : Color.Error, "Doanh thu đã thu trừ tổng chi phí.", ProfitDetails()))" />
-        <StatCard Title="Công nợ phải thu" Value="@($"{_receivables:N0} đ")" Icon="@Icons.Material.Filled.RequestQuote" Color="Color.Warning"
-                  OnClick="@(() => ShowStat("Công nợ phải thu", $"{_receivables:N0} đ", Icons.Material.Filled.RequestQuote, Color.Warning, "Tổng các khoản chưa thu.", ReceivablesDetails(), "/finance", "Mở Tài chính"))" />
-        <StatCard Title="Khoản thu quá hạn" Value="@_overduePayments.Count.ToString("N0")" Icon="@Icons.Material.Filled.RunningWithErrors" Color="@(_overduePayments.Count > 0 ? Color.Error : Color.Success)"
-                  OnClick="@(() => ShowStat("Khoản thu quá hạn", _overduePayments.Count.ToString("N0"), Icons.Material.Filled.RunningWithErrors, _overduePayments.Count > 0 ? Color.Error : Color.Success, "Các khoản thu đã quá hạn — liệt kê theo ứng viên.", OverdueListDetails(), "/finance", "Mở Tài chính"))" />
+        @if (_canReadFinance)
+        {
+            <StatCard Title="Doanh thu (đã thu)" Value="@($"{_totalRevenue:N0} đ")" Icon="@Icons.Material.Filled.Payments" Color="Color.Success"
+                      OnClick="@(() => ShowStat("Doanh thu (đã thu)", $"{_totalRevenue:N0} đ", Icons.Material.Filled.Payments, Color.Success, "Tổng tiền đã thu. Bảng dưới là doanh thu theo quốc gia.", RevenueCountryDetails()))" />
+            <StatCard Title="Tổng chi phí" Value="@($"{_totalExpense:N0} đ")" Icon="@Icons.Material.Filled.MoneyOff" Color="Color.Error"
+                      OnClick="@(() => ShowStat("Tổng chi phí", $"{_totalExpense:N0} đ", Icons.Material.Filled.MoneyOff, Color.Error, "Chi phí 6 tháng gần nhất.", MonthlyExpenseDetails(), "/finance", "Mở Tài chính"))" />
+            <StatCard Title="Lợi nhuận gộp" Value="@($"{(_totalRevenue - _totalExpense):N0} đ")" Icon="@Icons.Material.Filled.AccountBalance" Color="@((_totalRevenue - _totalExpense) >= 0 ? Color.Success : Color.Error)"
+                      OnClick="@(() => ShowStat("Lợi nhuận gộp", $"{(_totalRevenue - _totalExpense):N0} đ", Icons.Material.Filled.AccountBalance, (_totalRevenue - _totalExpense) >= 0 ? Color.Success : Color.Error, "Doanh thu đã thu trừ tổng chi phí.", ProfitDetails()))" />
+            <StatCard Title="Công nợ phải thu" Value="@($"{_receivables:N0} đ")" Icon="@Icons.Material.Filled.RequestQuote" Color="Color.Warning"
+                      OnClick="@(() => ShowStat("Công nợ phải thu", $"{_receivables:N0} đ", Icons.Material.Filled.RequestQuote, Color.Warning, "Tổng các khoản chưa thu.", ReceivablesDetails(), "/finance", "Mở Tài chính"))" />
+            <StatCard Title="Khoản thu quá hạn" Value="@_overduePayments.Count.ToString("N0")" Icon="@Icons.Material.Filled.RunningWithErrors" Color="@(_overduePayments.Count > 0 ? Color.Error : Color.Success)"
+                      OnClick="@(() => ShowStat("Khoản thu quá hạn", _overduePayments.Count.ToString("N0"), Icons.Material.Filled.RunningWithErrors, _overduePayments.Count > 0 ? Color.Error : Color.Success, "Các khoản thu đã quá hạn — liệt kê theo ứng viên.", OverdueListDetails(), "/finance", "Mở Tài chính"))" />
+        }
         <StatCard Title="Sắp xuất cảnh (30 ngày)" Value="@_upcomingFlights.Count.ToString("N0")" Icon="@Icons.Material.Filled.FlightTakeoff" Color="Color.Secondary"
                   OnClick="@(() => ShowStat("Sắp xuất cảnh (30 ngày)", _upcomingFlights.Count.ToString("N0"), Icons.Material.Filled.FlightTakeoff, Color.Secondary, "Chuyến bay xuất cảnh dự kiến trong 30 ngày tới.", UpcomingFlightDetails(), "/visa", "Mở Visa & Xuất cảnh"))" />
         <StatCard Title="Tỷ lệ trúng tuyển" Value="@($"{_selectedRate:0.#}%")" Icon="@Icons.Material.Filled.HowToReg" Color="Color.Primary"
@@ -107,18 +101,21 @@ else
         <MudItem xs="12" md="7">
             <BarChart Title="Lead theo nguồn" Data="@SourceData()" />
         </MudItem>
-        <MudItem xs="12" md="6">
-            <LineChart Title="Doanh thu vs Chi phí theo tháng" XLabels="@MonthLabels()" Series="@MonthRevExpSeries()" />
-        </MudItem>
-        <MudItem xs="12" md="6">
-            <ComboChart Title="Doanh thu/Chi phí + Lợi nhuận theo tháng" XLabels="@MonthLabels()" BarSeries="@MonthBarSeries()" LineSeries="@ProfitLine()" />
-        </MudItem>
-        <MudItem xs="12" md="6">
-            <LineChart Area="true" Title="Doanh thu theo tháng" XLabels="@MonthLabels()" Series="@RevenueAreaSeries()" />
-        </MudItem>
-        <MudItem xs="12" md="6">
-            <BarChart Horizontal="true" Money="true" Title="Doanh thu theo quốc gia" Data="@CountryRevenueData()" />
-        </MudItem>
+        @if (_canReadFinance)
+        {
+            <MudItem xs="12" md="6">
+                <LineChart Title="Doanh thu vs Chi phí theo tháng" XLabels="@MonthLabels()" Series="@MonthRevExpSeries()" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <ComboChart Title="Doanh thu/Chi phí + Lợi nhuận theo tháng" XLabels="@MonthLabels()" BarSeries="@MonthBarSeries()" LineSeries="@ProfitLine()" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <LineChart Area="true" Title="Doanh thu theo tháng" XLabels="@MonthLabels()" Series="@RevenueAreaSeries()" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <BarChart Horizontal="true" Money="true" Title="Doanh thu theo quốc gia" Data="@CountryRevenueData()" />
+            </MudItem>
+        }
         <MudItem xs="12" md="12">
             <ScatterChart Title="Tỉnh/thành: Lead và Tỷ lệ chuyển đổi" Points="@ProvinceScatter()"
                           XAxisLabel="Tổng lead" YAxisLabel="Tỷ lệ chuyển đổi" YPercent="true" />
@@ -206,6 +203,8 @@ else
         </MudItem>
     </MudGrid>
 
+    @if (_canReadFinance)
+    {
     <MudGrid Class="mt-2">
         <MudItem xs="12" md="5">
             <MudPaper Class="pa-4" Elevation="1" Style="height:100%">
@@ -302,6 +301,7 @@ else
             </MudPaper>
         </MudItem>
     </MudGrid>
+    }
 
     <MudGrid Class="mt-2">
         <MudItem xs="12" md="6">
@@ -398,6 +398,8 @@ else
         </MudItem>
     </MudGrid>
 
+    @if (_canReadFinance)
+    {
     <MudGrid Class="mt-2">
         <MudItem xs="12">
             <MudPaper Class="pa-4" Elevation="1">
@@ -475,10 +477,27 @@ else
             </MudPaper>
         </MudItem>
     </MudGrid>
+    }
 }
 
 @code {
     private bool _loading = true;
+    private bool _canReadFinance;
+
+    private sealed record ExportOption(string Slug, string Label, string Icon);
+    private static readonly ExportOption[] ExportOptions =
+    [
+        new("finance-monthly", "Thu/chi theo tháng", Icons.Material.Filled.CalendarMonth),
+        new("commissions", "Hoa hồng theo đại lý", Icons.Material.Filled.Handshake),
+        new("overdue-payments", "Khoản thu quá hạn", Icons.Material.Filled.MoneyOff),
+        new("revenue-by-country", "Doanh thu theo quốc gia", Icons.Material.Filled.Public),
+        new("revenue-by-job-order", "Doanh thu theo đơn hàng", Icons.Material.Filled.Work),
+        new("lead-by-province", "Lead theo tỉnh", Icons.Material.Filled.Map),
+        new("recruitment-funnel", "Phễu tuyển dụng", Icons.Material.Filled.FilterAlt),
+        new("top-agents", "Top đại lý", Icons.Material.Filled.EmojiEvents),
+    ];
+    private IEnumerable<ExportOption> VisibleExports => ExportOptions
+        .Where(export => _canReadFinance || !ReportAccessRules.RequiresFinancialPermission(export.Slug));
 
     // ---- Bộ lọc thời gian ----
     private string _rangeKey = "all";
@@ -540,6 +559,10 @@ else
             Nav.NavigateTo("/my-commissions", replace: true);
             return;
         }
+        var principal = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+        _canReadFinance = (await AuthorizationService.AuthorizeAsync(
+            principal,
+            ReportAccessRules.FinancialPermission)).Succeeded;
         await LoadData();
     }
 
@@ -577,6 +600,9 @@ else
         _ => $"{_from:dd/MM/yyyy} – {_to:dd/MM/yyyy}",
     };
 
+    private string ExportHref(string slug, string extension)
+        => $"/export/{slug}.{extension}{new ReportDateRange(_from, _to).ToQueryString()}";
+
     private async Task LoadData()
     {
         _loading = true;
@@ -588,7 +614,6 @@ else
         bool InDay(DateOnly d) => (_from is null || d >= _from.Value) && (_to is null || d <= _to.Value);
 
         await using var db = await DbFactory.CreateDbContextAsync();
-        var financeCandidateIds = await FinanceEligibility.CandidateIdsAsync(db);
 
         // --- Lead (lọc theo ngày tạo) ---
         var leadsQ = db.Leads.Where(l => (fromDto == null || l.CreatedAt >= fromDto) && (toDto == null || l.CreatedAt <= toDto));
@@ -666,6 +691,26 @@ else
             new("Xuất cảnh", departedCount, _departureRate, Color.Secondary)
         };
 
+        var today = DateTime.UtcNow.Date;
+        var todayDate = DateOnly.FromDateTime(today);
+        var candidateNames = await db.Candidates.ToDictionaryAsync(c => c.Id, c => c.FullName);
+
+        // Reset dữ liệu tài chính trước mỗi lần load; RM không có quyền sẽ không query các bảng tài chính.
+        _totalRevenue = 0;
+        _totalExpense = 0;
+        _months = [];
+        _maxMonthAmount = 0;
+        _revenueByCountry = [];
+        _revenueByJobOrder = [];
+        _commissionByAgent = [];
+        _topAgents = [];
+        _receivables = 0;
+        _overduePayments = [];
+
+        if (_canReadFinance)
+        {
+        var financeCandidateIds = await FinanceEligibility.CandidateIdsAsync(db);
+
         // --- Tài chính (lọc theo ngày thu/chi) ---
         var payments = (await db.Payments.Where(p => financeCandidateIds.Contains(p.CandidateId) && p.Status == PaymentStatus.Paid)
             .Select(p => new { p.CandidateId, p.JobOrderId, p.Amount, p.PaidDate, p.CreatedAt }).ToListAsync())
@@ -676,7 +721,6 @@ else
         _totalRevenue = payments.Sum(p => p.Amount);
         _totalExpense = expenses.Sum(e => e.Amount);
 
-        var today = DateTime.UtcNow.Date;
         var firstOfThisMonth = new DateOnly(today.Year, today.Month, 1);
         _months = new(); // reset mỗi lần load (OnInitialized chạy 2 lần + đổi bộ lọc) — tránh cộng dồn tháng
         for (int i = 5; i >= 0; i--)
@@ -773,8 +817,6 @@ else
             .ToList();
 
         // --- Công nợ + khoản thu quá hạn ---
-        var todayDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
-        var candidateNames = await db.Candidates.ToDictionaryAsync(c => c.Id, c => c.FullName);
         var openPayments = await db.Payments
             .Where(p => financeCandidateIds.Contains(p.CandidateId) && p.Status != PaymentStatus.Paid && p.Status != PaymentStatus.Refunded)
             .Select(p => new { p.CandidateId, p.PaymentType, p.Amount, p.DueDate, p.Status })
@@ -786,6 +828,7 @@ else
                 candidateNames.GetValueOrDefault(p.CandidateId, "—"), p.PaymentType, p.Amount, p.DueDate,
                 p.DueDate is null ? 0 : todayDate.DayNumber - p.DueDate.Value.DayNumber))
             .ToList();
+        }
 
         // --- Visa sắp tới (30 ngày) ---
         var horizon = todayDate.AddDays(30);

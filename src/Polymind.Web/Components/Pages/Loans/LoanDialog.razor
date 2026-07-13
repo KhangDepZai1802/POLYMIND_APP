@@ -40,7 +40,7 @@
                 </MudItem>
                 <MudItem xs="12" sm="6">
                     <MudSelect T="LoanStatus" @bind-Value="_status" Label="Tình trạng" Variant="Variant.Outlined" Margin="Margin.Dense">
-                        @foreach (var s in LoanStatusOptions)
+                        @foreach (var s in AvailableLoanStatusOptions)
                         {
                             <MudSelectItem T="LoanStatus" Value="@s">@Labels.Vi(s)</MudSelectItem>
                         }
@@ -113,11 +113,13 @@
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
     [Parameter] public Guid CandidateId { get; set; }
 
-    private static readonly LoanStatus[] LoanStatusOptions = { LoanStatus.Borrowing, LoanStatus.Disbursed, LoanStatus.Settled };
+    private static readonly LoanStatus[] ActiveLoanStatusOptions = { LoanStatus.Borrowing, LoanStatus.Disbursed };
+    private static readonly LoanStatus[] CompanyLoanStatusOptions = { LoanStatus.Borrowing, LoanStatus.Disbursed, LoanStatus.Settled };
     private static readonly LoanKind[] LoanKindOptions = { LoanKind.Bank, LoanKind.Company };
 
     private bool _loading = true;
     private bool _saving;
+    private bool _canCollectDebt;
     private bool _candidateLocked;
     private CandidateChoice? _selectedCandidate;
     private string _candidateName = "—";
@@ -135,9 +137,19 @@
     private int _existingInstallments;
     private decimal _orderCost; // chi phí đơn hàng ứng viên đang gắn — gợi ý số tiền nợ công ty
 
+    private IEnumerable<LoanStatus> AvailableLoanStatusOptions
+        => _kind == LoanKind.Bank
+            ? ActiveLoanStatusOptions
+            : _canCollectDebt
+                ? CompanyLoanStatusOptions
+                : _status == LoanStatus.Settled ? [LoanStatus.Settled] : ActiveLoanStatusOptions;
+
     protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _canCollectDebt = (await AuthorizationService.AuthorizeAsync(authState.User, null, "loans:update")).Succeeded
+            && BusinessRoleAccess.CanCollectDebt(authState.User);
         _candidateLocked = CandidateId != Guid.Empty;
         if (!_candidateLocked)
         {
@@ -204,6 +216,17 @@
                     CreatedBy = actorId,
                 };
                 db.Loans.Add(loan);
+            }
+
+            var repayments = await db.LoanRepayments.Where(r => r.LoanId == loan.Id).ToListAsync();
+            var outstanding = LoanCollectionRules.Outstanding(_amount, repayments);
+            var statusError = LoanCollectionRules.ValidateStatusChange(
+                _kind, loan.Status, _status, outstanding,
+                BusinessRoleAccess.CanCollectDebt(authState.User));
+            if (statusError is not null)
+            {
+                Snackbar.Add(statusError, Severity.Warning);
+                return;
             }
 
             loan.Kind = _kind;
@@ -316,6 +339,8 @@
     private void OnKindChanged(LoanKind kind)
     {
         _kind = kind;
+        if (kind == LoanKind.Bank && _status == LoanStatus.Settled)
+            _status = LoanStatus.Disbursed;
         MaybePrefillCompanyAmount();
     }
 

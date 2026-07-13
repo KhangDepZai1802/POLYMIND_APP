@@ -95,13 +95,14 @@ else
     private decimal _totalOutstanding;
     private decimal _totalPaid;
     private bool _loading = true;
-    private bool _canUpdate;
+    private bool _canCollect;
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        _canUpdate = (await AuthorizationService.AuthorizeAsync(authState.User, null, "loans:update")).Succeeded
-            && BusinessRoleAccess.CanEditLoan(authState.User);
+        _canCollect = (await AuthorizationService.AuthorizeAsync(authState.User, null, "loans:update")).Succeeded
+            && (await AuthorizationService.AuthorizeAsync(authState.User, null, "receipts:create")).Succeeded
+            && BusinessRoleAccess.CanCollectDebt(authState.User);
         await Load();
     }
 
@@ -145,8 +146,8 @@ else
                 insts.Select(r => new InstallmentRow(r.Id, r.InstallmentNo, r.DueDate, r.Amount, r.PaidAmount, r.Status)).ToList()));
         }
 
-        _owing = rows.Where(r => r.Outstanding > 0m && r.Status != LoanStatus.Settled).OrderBy(r => r.CandidateName).ToList();
-        _settled = rows.Where(r => r.Outstanding <= 0m || r.Status == LoanStatus.Settled).OrderBy(r => r.CandidateName).ToList();
+        _owing = rows.Where(r => r.Outstanding > 0m).OrderBy(r => r.CandidateName).ToList();
+        _settled = rows.Where(r => r.Outstanding <= 0m && r.Status == LoanStatus.Settled).OrderBy(r => r.CandidateName).ToList();
         _totalOutstanding = _owing.Sum(r => r.Outstanding);
         _totalPaid = rows.Sum(r => r.Paid);
         _loading = false;
@@ -190,10 +191,15 @@ else
                     }
                 </MudText>
                 <div class="d-flex" style="gap:6px">
-                    @if (_canUpdate && next is not null)
+                    @if (_canCollect && next is not null)
                     {
                         <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Check"
                                    OnClick="@(() => MarkPaid(next.Id))">Thu kỳ tới</MudButton>
+                    }
+                    @if (_canCollect && d.Outstanding > 0m)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success" StartIcon="@Icons.Material.Filled.Payments"
+                                   OnClick="@(() => CollectRemaining(d))">Thu hết phần còn lại</MudButton>
                     }
                     <MudButton Size="Size.Small" Variant="Variant.Text" EndIcon="@(expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
                                OnClick="@(() => ToggleExpand(d.LoanId))">@(expanded ? "Ẩn lịch" : "Xem lịch")</MudButton>
@@ -216,7 +222,7 @@ else
                                     <td style="text-align:right">@($"{i.PaidAmount:N0}")</td>
                                     <td><MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(i.Status)">@Labels.Vi(i.Status)</MudChip></td>
                                     <td style="text-align:right">
-                                        @if (_canUpdate && i.Status != LoanRepaymentStatus.Paid)
+                                        @if (_canCollect && i.Status != LoanRepaymentStatus.Paid)
                                         {
                                             <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success" StartIcon="@Icons.Material.Filled.Check"
                                                        OnClick="@(() => MarkPaid(i.Id))">Đã thu</MudButton>
@@ -231,7 +237,14 @@ else
         }
         else
         {
-            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">Chưa có lịch trả góp — mở hồ sơ vay để tạo lịch.</MudText>
+            <div class="d-flex align-center justify-space-between flex-wrap mt-2" style="gap:8px">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Chưa có lịch trả góp — có thể thu toàn bộ số nợ còn lại.</MudText>
+                @if (_canCollect && d.Outstanding > 0m)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Payments"
+                               OnClick="@(() => CollectRemaining(d))">Thu hết phần còn lại</MudButton>
+                }
+            </div>
         }
     </MudPaper>;
 
@@ -243,28 +256,95 @@ else
 
     private async Task MarkPaid(Guid installmentId)
     {
-        if (!_canUpdate) { Snackbar.Add("Bạn không có quyền thu nợ.", Severity.Warning); return; }
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var inst = await db.LoanRepayments.FirstOrDefaultAsync(r => r.Id == installmentId);
-        if (inst is null) { await Load(); return; }
+        await CollectAsync(null, installmentId);
+    }
 
-        inst.PaidAmount = inst.Amount;
-        inst.PaidDate = DateOnly.FromDateTime(DateTime.UtcNow);
-        inst.Status = LoanRepaymentStatus.Paid;
-        inst.UpdatedAt = DateTimeOffset.UtcNow;
+    private async Task CollectRemaining(DebtRow debt)
+    {
+        var confirm = await DialogService.ShowMessageBoxAsync(
+            "Thu hết phần còn lại?",
+            $"Xác nhận đã thực thu {debt.Outstanding:N0} đ từ {debt.CandidateName}. Hệ thống sẽ sinh phiếu thu và chỉ tất toán khi đã thu đủ 100%.",
+            yesText: "Xác nhận đã thu", cancelText: "Hủy");
+        if (confirm != true) return;
 
-        // Nếu tất cả kỳ của khoản vay đã thu đủ → tự chuyển khoản vay sang "Đã tất toán".
-        var all = await db.LoanRepayments.Where(r => r.LoanId == inst.LoanId).ToListAsync();
-        var loan = await db.Loans.FirstOrDefaultAsync(l => l.Id == inst.LoanId);
-        var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
-        if (loan is not null && all.All(r => r.Status == LoanRepaymentStatus.Paid))
+        await CollectAsync(debt.LoanId, null);
+    }
+
+    private async Task CollectAsync(Guid? loanId, Guid? installmentId)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var authorized = (await AuthorizationService.AuthorizeAsync(authState.User, null, "loans:update")).Succeeded
+            && (await AuthorizationService.AuthorizeAsync(authState.User, null, "receipts:create")).Succeeded
+            && BusinessRoleAccess.CanCollectDebt(authState.User);
+        if (!authorized)
         {
-            loan.Status = LoanStatus.Settled;
-            loan.UpdatedAt = DateTimeOffset.UtcNow;
+            Snackbar.Add("Chỉ Kế toán hoặc Super Admin được thu nợ và sinh phiếu thu.", Severity.Warning);
+            return;
         }
-        db.AddAudit(actorId, "update", "loans", inst.LoanId, null, new { installment = inst.InstallmentNo, inst.PaidAmount });
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        LoanRepayment? installment = null;
+        if (installmentId is Guid iid)
+        {
+            installment = await db.LoanRepayments.FirstOrDefaultAsync(r => r.Id == iid);
+            if (installment is null) { Snackbar.Add("Không tìm thấy kỳ trả nợ.", Severity.Warning); return; }
+            loanId = installment.LoanId;
+            if (await db.Receipts.AnyAsync(r => r.LoanRepaymentId == iid))
+            {
+                Snackbar.Add("Kỳ trả nợ này đã có phiếu thu.", Severity.Info);
+                await Load();
+                return;
+            }
+        }
+
+        if (loanId is not Guid effectiveLoanId) return;
+        var loan = await db.Loans.FirstOrDefaultAsync(l => l.Id == effectiveLoanId);
+        if (loan is null) { Snackbar.Add("Không tìm thấy khoản nợ.", Severity.Warning); return; }
+        var repayments = await db.LoanRepayments.Where(r => r.LoanId == effectiveLoanId).ToListAsync();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var now = DateTimeOffset.UtcNow;
+        var collection = LoanCollectionRules.Collect(loan, repayments, installmentId, today, now);
+        if (!collection.Succeeded)
+        {
+            Snackbar.Add(collection.Error!, Severity.Warning);
+            await Load();
+            return;
+        }
+
+        var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+        var receipt = new Receipt
+        {
+            Code = $"RC-{DateTime.UtcNow:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}",
+            ReceiptType = ReceiptType.Income,
+            CandidateId = loan.CandidateId,
+            LoanId = loan.Id,
+            LoanRepaymentId = installmentId,
+            Amount = collection.Amount,
+            Description = installment is null
+                ? $"Thu hết phần còn lại khoản nợ {loan.Code}"
+                : $"Thu kỳ {installment.InstallmentNo} khoản nợ {loan.Code}",
+            ReceiptDate = today,
+            CreatedBy = actorId,
+        };
+        db.Receipts.Add(receipt);
+        db.AddAudit(actorId, "create", "receipts", receipt.Id, null, new
+        {
+            receipt.Code,
+            receipt.Amount,
+            receipt.LoanId,
+            receipt.LoanRepaymentId,
+        });
+        db.AddAudit(actorId, "collect_debt", "loans", loan.Id, null, new
+        {
+            ReceiptId = receipt.Id,
+            receipt.Amount,
+            InstallmentId = installmentId,
+            collection.Settled,
+        });
         await db.SaveChangesAsync();
-        Snackbar.Add("Đã ghi nhận thu nợ.", Severity.Success);
+        await transaction.CommitAsync();
+        Snackbar.Add($"Đã thu {collection.Amount:N0} đ và tạo phiếu thu {receipt.Code}.", Severity.Success);
         await Load();
     }
 }

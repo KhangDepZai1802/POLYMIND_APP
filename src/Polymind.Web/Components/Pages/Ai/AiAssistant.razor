@@ -211,6 +211,7 @@
     private string _systemPrompt = ChatSystemBase;
     private bool _selfScoped;
     private Guid? _ownedCandidateId;
+    private AiDataScope _dataScope = AiDataScope.All;
 
     protected override async Task OnInitializedAsync()
     {
@@ -226,6 +227,11 @@
         var scope = await AgentScope.GetAsync();
         _selfScoped = scope.IsSelfScoped;
         _ownedCandidateId = scope.OwnedCandidateId;
+        _dataScope = scope.IsAgentOnly
+            ? scope.AgentId is Guid agentId ? AiDataScope.ForAgent(agentId) : AiDataScope.None
+            : scope.IsCollaboratorOnly
+                ? scope.CollaboratorId is Guid collaboratorId ? AiDataScope.ForCollaborator(collaboratorId) : AiDataScope.None
+                : AiDataScope.All;
         try
         {
             if (_selfScoped)
@@ -309,9 +315,15 @@
     {
         await using var db = await DbFactory.CreateDbContextAsync();
 
-        var jobInfo = await db.JobOrders.ToDictionaryAsync(j => j.Id, j => new { j.Country, j.Field });
+        var candidateQuery = _dataScope.ApplyCandidates(db.Candidates.AsNoTracking());
+        var leadQuery = _dataScope.ApplyLeads(db.Leads.AsNoTracking());
+        var jobQuery = _dataScope.ApplyJobOrders(
+            db.JobOrders.AsNoTracking(),
+            db.CandidateJobOrders.AsNoTracking());
 
-        var cands = await db.Candidates
+        var jobInfo = await jobQuery.ToDictionaryAsync(j => j.Id, j => new { j.Country, j.Field });
+
+        var cands = await candidateQuery
             .Select(c => new
             {
                 c.FullName,
@@ -353,13 +365,13 @@
             sb.AppendLine("Phân bố theo bước hiện tại — " + string.Join("; ", byStep) + ".");
 
         // Lead theo trạng thái.
-        var leadCount = await db.Leads.CountAsync();
-        var leadsByStatus = await db.Leads.GroupBy(l => l.Status)
+        var leadCount = await leadQuery.CountAsync();
+        var leadsByStatus = await leadQuery.GroupBy(l => l.Status)
             .Select(g => new { g.Key, Count = g.Count() }).ToListAsync();
         sb.AppendLine($"Tổng số lead: {leadCount} — " +
             string.Join("; ", leadsByStatus.Select(x => $"{Labels.Vi(x.Key)}: {x.Count}")) + ".");
 
-        var jobCount = await db.JobOrders.CountAsync();
+        var jobCount = await jobQuery.CountAsync();
         sb.AppendLine($"Tổng số đơn hàng (job order): {jobCount}.");
 
         sb.AppendLine();

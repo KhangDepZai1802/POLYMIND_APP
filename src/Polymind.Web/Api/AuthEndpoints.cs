@@ -22,18 +22,13 @@ public static class AuthEndpoints
                 return Results.BadRequest(new { message = "Email và mật khẩu là bắt buộc." });
 
             var user = await userManager.FindByEmailAsync(request.Email.Trim());
-            if (user is null)
-                return Results.Json(new { message = "Email hoặc mật khẩu không đúng." }, statusCode: StatusCodes.Status401Unauthorized);
-
-            if (!user.IsActive)
-                return Results.Json(new { message = "Tài khoản đã bị khóa." }, statusCode: StatusCodes.Status403Forbidden);
+            if (user is null || !user.IsActive)
+                return AuthenticationFailed();
 
             // Dùng SignInManager để áp đúng chính sách lockout như đăng nhập web.
             var result = await signInManager.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true);
-            if (result.IsLockedOut)
-                return Results.Json(new { message = "Tài khoản tạm khóa do đăng nhập sai nhiều lần. Thử lại sau ít phút." }, statusCode: StatusCodes.Status423Locked);
             if (!result.Succeeded)
-                return Results.Json(new { message = "Email hoặc mật khẩu không đúng." }, statusCode: StatusCodes.Status401Unauthorized);
+                return AuthenticationFailed();
 
             var issued = await tokenService.CreateAsync(user);
             user.LastLoginAt = DateTimeOffset.UtcNow;
@@ -43,6 +38,7 @@ public static class AuthEndpoints
             return Results.Ok(new TokenResponse(issued.AccessToken, "Bearer", issued.ExpiresAt, info));
         })
         .AllowAnonymous()
+        .RequireRateLimiting("login")
         .WithName("Login")
         .WithSummary("Đăng nhập, trả về JWT access token + quyền của tài khoản.");
 
@@ -65,4 +61,9 @@ public static class AuthEndpoints
         .WithName("Me")
         .WithSummary("Thông tin tài khoản đang đăng nhập (theo JWT).");
     }
+
+    private static IResult AuthenticationFailed()
+        => Results.Json(
+            new { message = AuthenticationSecurityPolicy.InvalidCredentialsMessage },
+            statusCode: StatusCodes.Status401Unauthorized);
 }

@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Polymind.Domain.Commissions;
 using Polymind.Domain.Entities;
 using Polymind.Domain.Enums;
+using Polymind.Domain.Notifications;
 using Polymind.Infrastructure.Identity;
 using Polymind.Infrastructure.Persistence;
 using Polymind.Infrastructure.Persistence.Constants;
@@ -192,6 +194,8 @@ public class NotificationService(
                     .Select(x => (Guid?)x.AgentId).FirstOrDefaultAsync();
                 return agentId is Guid a ? $"/agents/{a}" : "/agents";
             }
+            case "collaborator_commission":
+                return "/my-commissions";
             case "loan":
             {
                 var candidateId = await db.Loans.Where(l => l.Id == id)
@@ -262,6 +266,14 @@ public class NotificationService(
                 ? owners
                 : RoleUsers(roleRecipients, fallbackRoles);
 
+        var financeRecipients = RoleUsers(
+            roleRecipients,
+            FinancialNotificationRules.RecipientRoleNames.ToArray());
+        List<Guid> FinancialRecipients(Guid candidateId)
+            => FinancialNotificationRules.Recipients(
+                financeRecipients,
+                ownerByCandidate.GetValueOrDefault(candidateId));
+
         var duePayments = await db.Payments
             .Where(p => p.Status != PaymentStatus.Paid && p.Status != PaymentStatus.Refunded
                         && p.DueDate != null && p.DueDate <= horizon)
@@ -275,7 +287,7 @@ public class NotificationService(
                 NotificationType.ReminderPayment, p.Id, "payment",
                 $"{label}: {Name(p.CandidateId)}",
                 $"{p.Amount:N0} đ — hạn {p.DueDate:dd/MM/yyyy}.",
-                CandidateOwnersOr(p.CandidateId, RoleNames.Accountant, RoleNames.Director)));
+                FinancialRecipients(p.CandidateId)));
         }
 
         var visas = await db.Visas
@@ -390,36 +402,89 @@ public class NotificationService(
                 recipients));
         }
 
-        // Nhắc thanh toán hoa hồng (§13): hoa hồng đã duyệt nhưng chưa chi → nhắc kế toán/giám đốc.
-        var agentNames = await db.Agents.ToDictionaryAsync(a => a.Id, a => a.Name);
-        var payableCommissions = await db.AgentCommissions
-            .Where(c => c.Status == CommissionStatus.Approved)
-            .Select(c => new { c.Id, c.AgentId, c.CommissionAmount })
+        // RB-7 (Hoa hồng): Đại lý nhận tổng commission; CTV trực tiếp của candidate nhận
+        // notification riêng chỉ chứa phần share của chính họ (U-M13-2).
+        var agentMeta = await db.Agents
+            .Select(a => new { a.Id, a.Name, a.UserId })
+            .ToDictionaryAsync(a => a.Id);
+        var commissions = await db.AgentCommissions
+            .Where(c => c.Status == CommissionStatus.Pending
+                || c.Status == CommissionStatus.Approved
+                || c.Status == CommissionStatus.Paid)
+            .Select(c => new
+            {
+                c.Id,
+                c.AgentId,
+                c.CandidateId,
+                c.CommissionAmount,
+                c.CollaboratorId,
+                c.CollaboratorSharePercentage,
+                c.Status,
+                c.PaidDate,
+            })
             .ToListAsync();
-        foreach (var c in payableCommissions)
+        var directCollaboratorIds = commissions
+            .Where(c => c.CollaboratorId != null)
+            .Select(c => c.CollaboratorId!.Value)
+            .Distinct()
+            .ToList();
+        var collaboratorMeta = await db.Collaborators
+            .Where(c => directCollaboratorIds.Contains(c.Id))
+            .Select(c => new { c.Id, c.AgentId, c.UserId })
+            .ToDictionaryAsync(c => c.Id);
+        foreach (var c in commissions)
         {
+            var type = CommissionNotificationRules.TypeFor(c.Status);
+            if (type is null) continue;
+
+            agentMeta.TryGetValue(c.AgentId, out var agent);
+            var agentName = agent?.Name ?? "Đại lý";
+            var (title, body) = c.Status switch
+            {
+                CommissionStatus.Pending => (
+                    $"Hoa hồng chờ duyệt: {agentName}",
+                    $"{c.CommissionAmount:N0} đ vừa phát sinh, cần duyệt trước khi chi."),
+                CommissionStatus.Approved => (
+                    $"Hoa hồng chờ chi: {agentName}",
+                    $"{c.CommissionAmount:N0} đ đã được duyệt, chờ thanh toán cho đại lý."),
+                CommissionStatus.Paid => (
+                    $"Hoa hồng đã chi: {agentName}",
+                    $"{c.CommissionAmount:N0} đ đã được thanh toán{(c.PaidDate is DateOnly paid ? $" ngày {paid:dd/MM/yyyy}" : string.Empty)}."),
+                _ => (string.Empty, string.Empty),
+            };
+
+            // Thêm event CTV TRƯỚC event tổng. Unique notification key không chứa
+            // ReferenceType; thứ tự này bảo đảm nếu một UserId bị gắn chồng Agent/CTV thì
+            // nội dung ít quyền hơn (share CTV) thắng, không vô tình lộ tổng commission.
+            if (c.CollaboratorId is Guid collaboratorId
+                && c.CollaboratorSharePercentage is decimal collaboratorSharePercentage
+                && collaboratorMeta.TryGetValue(collaboratorId, out var collaborator)
+                && collaborator.AgentId == c.AgentId
+                && collaborator.UserId is Guid collaboratorUserId)
+            {
+                var shareAmount = AgentCommissionRates.CollaboratorShareAmount(
+                    c.CommissionAmount,
+                    collaboratorSharePercentage);
+                var collaboratorText = CommissionNotificationRules.CollaboratorTextFor(
+                    c.Status,
+                    Name(c.CandidateId),
+                    shareAmount,
+                    c.PaidDate);
+                events.Add(new ReminderEvent(
+                    type.Value,
+                    c.Id,
+                    "collaborator_commission",
+                    collaboratorText.Title,
+                    collaboratorText.Body,
+                    [collaboratorUserId]));
+            }
+
             events.Add(new ReminderEvent(
-                NotificationType.CommissionPayment, c.Id, "commission",
-                $"Hoa hồng chờ chi: {agentNames.GetValueOrDefault(c.AgentId, "Đại lý")}",
-                $"{c.CommissionAmount:N0} đ đã được duyệt, chờ thanh toán cho đại lý.",
-                RoleUsers(roleRecipients, RoleNames.Accountant, RoleNames.Director)));
+                type.Value, c.Id, "commission", title, body,
+                CommissionNotificationRules.Recipients(financeRecipients, agent?.UserId)));
         }
 
-        // RB-7 (Hoa hồng): hoa hồng vừa phát sinh, đang chờ duyệt → kế toán/giám đốc.
-        var pendingCommissions = await db.AgentCommissions
-            .Where(c => c.Status == CommissionStatus.Pending)
-            .Select(c => new { c.Id, c.AgentId, c.CommissionAmount })
-            .ToListAsync();
-        foreach (var c in pendingCommissions)
-        {
-            events.Add(new ReminderEvent(
-                NotificationType.CommissionPending, c.Id, "commission",
-                $"Hoa hồng chờ duyệt: {agentNames.GetValueOrDefault(c.AgentId, "Đại lý")}",
-                $"{c.CommissionAmount:N0} đ vừa phát sinh, cần duyệt trước khi chi.",
-                RoleUsers(roleRecipients, RoleNames.Accountant, RoleNames.Director)));
-        }
-
-        // RB-7 (Tài chính): kỳ trả nợ vay đến hạn/quá hạn → kế toán/giám đốc.
+        // RB-7 (Tài chính): kỳ trả nợ → finance recipients + người phụ trách ứng viên nếu có.
         var dueRepayments = await db.LoanRepayments
             .Where(r => r.Status != LoanRepaymentStatus.Paid && r.DueDate <= horizon)
             .Select(r => new { r.Id, r.LoanId, r.InstallmentNo, r.Amount, r.DueDate, r.Status })
@@ -431,7 +496,6 @@ public class NotificationService(
                 .Where(l => loanIds.Contains(l.Id))
                 .Select(l => new { l.Id, l.CandidateId })
                 .ToDictionaryAsync(x => x.Id, x => x.CandidateId);
-            var financeStaff = RoleUsers(roleRecipients, RoleNames.Accountant, RoleNames.Director);
             foreach (var r in dueRepayments)
             {
                 var overdue = r.DueDate < today || r.Status == LoanRepaymentStatus.Overdue;
@@ -440,11 +504,11 @@ public class NotificationService(
                     NotificationType.ReminderLoanRepayment, r.Id, "loan_repayment",
                     $"{(overdue ? "Nợ vay quá hạn" : "Nợ vay sắp đến hạn")}: {Name(candidateId)}",
                     $"Kỳ {r.InstallmentNo}: {r.Amount:N0} đ — hạn {r.DueDate:dd/MM/yyyy}.",
-                    financeStaff));
+                    FinancialRecipients(candidateId)));
             }
         }
 
-        // RB-7 (Tài chính): khoản chi chờ duyệt (chưa có người duyệt) → kế toán/giám đốc.
+        // RB-7 (Tài chính): khoản chi không gắn ứng viên → finance recipients.
         var recentCutoff = today.AddDays(-60);
         var pendingExpenses = await db.Expenses
             .Where(e => e.ApprovedBy == null && e.ExpenseDate >= recentCutoff)
@@ -452,14 +516,13 @@ public class NotificationService(
             .ToListAsync();
         if (pendingExpenses.Count > 0)
         {
-            var financeApprovers = RoleUsers(roleRecipients, RoleNames.Accountant, RoleNames.Director);
             foreach (var e in pendingExpenses)
             {
                 events.Add(new ReminderEvent(
                     NotificationType.ExpenseApproval, e.Id, "expense",
                     $"Khoản chi chờ duyệt: {e.Code}",
                     $"{e.Amount:N0} đ — ngày {e.ExpenseDate:dd/MM/yyyy}.",
-                    financeApprovers));
+                    financeRecipients));
             }
         }
 

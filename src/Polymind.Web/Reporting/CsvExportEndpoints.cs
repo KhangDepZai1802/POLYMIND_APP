@@ -1,7 +1,9 @@
 using System.Text;
 using ClosedXML.Excel;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Polymind.Domain.Enums;
+using Polymind.Domain.Reporting;
 using Polymind.Infrastructure.Persistence;
 using Polymind.Web.Display;
 using QuestPDF.Fluent;
@@ -47,34 +49,66 @@ public static class CsvExportEndpoints
     }
 
     private static void Register(RouteGroupBuilder group, string slug,
-        Func<ApplicationDbContext, Task<ReportTable>> builder)
+        Func<ApplicationDbContext, ReportDateRange, Task<ReportTable>> builder)
     {
-        group.MapGet($"/{slug}.csv", async (IDbContextFactory<ApplicationDbContext> f) => Csv(await Build(f, builder)));
-        group.MapGet($"/{slug}.xlsx", async (IDbContextFactory<ApplicationDbContext> f) => Xlsx(await Build(f, builder)));
-        group.MapGet($"/{slug}.pdf", async (IDbContextFactory<ApplicationDbContext> f) => Pdf(await Build(f, builder)));
+        group.MapGet($"/{slug}.csv", (DateOnly? from, DateOnly? to,
+            IDbContextFactory<ApplicationDbContext> f, HttpContext http, IAuthorizationService auth) =>
+            Export(f, builder, slug, from, to, http, auth, Csv));
+        group.MapGet($"/{slug}.xlsx", (DateOnly? from, DateOnly? to,
+            IDbContextFactory<ApplicationDbContext> f, HttpContext http, IAuthorizationService auth) =>
+            Export(f, builder, slug, from, to, http, auth, Xlsx));
+        group.MapGet($"/{slug}.pdf", (DateOnly? from, DateOnly? to,
+            IDbContextFactory<ApplicationDbContext> f, HttpContext http, IAuthorizationService auth) =>
+            Export(f, builder, slug, from, to, http, auth, Pdf));
     }
 
-    private static async Task<ReportTable> Build(IDbContextFactory<ApplicationDbContext> f,
-        Func<ApplicationDbContext, Task<ReportTable>> builder)
+    private static async Task<IResult> Export(
+        IDbContextFactory<ApplicationDbContext> factory,
+        Func<ApplicationDbContext, ReportDateRange, Task<ReportTable>> builder,
+        string slug,
+        DateOnly? from,
+        DateOnly? to,
+        HttpContext http,
+        IAuthorizationService authorization,
+        Func<ReportTable, IResult> formatter)
     {
-        await using var db = await f.CreateDbContextAsync();
-        return await builder(db);
+        if (!ReportDateRange.TryCreate(from, to, out var range))
+            return Results.BadRequest("Khoảng thời gian không hợp lệ: 'from' phải trước hoặc bằng 'to'.");
+
+        if (ReportAccessRules.RequiresFinancialPermission(slug))
+        {
+            var result = await authorization.AuthorizeAsync(
+                http.User,
+                policyName: ReportAccessRules.FinancialPermission);
+            if (!result.Succeeded) return Results.Forbid();
+        }
+
+        await using var db = await factory.CreateDbContextAsync();
+        return formatter(await builder(db, range));
     }
 
     // ---------- Data builders ----------
 
-    private static async Task<ReportTable> BuildFinanceMonthlyAsync(ApplicationDbContext db)
+    private static async Task<ReportTable> BuildFinanceMonthlyAsync(ApplicationDbContext db, ReportDateRange range)
     {
         var payments = await db.Payments.Where(p => p.Status == PaymentStatus.Paid)
             .Select(p => new { p.Amount, p.PaidDate, p.CreatedAt }).ToListAsync();
         var expenses = await db.Expenses.Select(e => new { e.Amount, e.ExpenseDate }).ToListAsync();
+        payments = payments
+            .Where(p => range.Includes(p.PaidDate ?? DateOnly.FromDateTime(p.CreatedAt.UtcDateTime)))
+            .ToList();
+        expenses = expenses.Where(e => range.Includes(e.ExpenseDate)).ToList();
 
         var today = DateTime.UtcNow.Date;
-        var first = new DateOnly(today.Year, today.Month, 1);
+        var currentMonth = new DateOnly(today.Year, today.Month, 1);
+        var lastSource = range.To ?? DateOnly.FromDateTime(today);
+        var last = new DateOnly(lastSource.Year, lastSource.Month, 1);
+        var first = range.From is DateOnly from
+            ? new DateOnly(from.Year, from.Month, 1)
+            : range.To is not null ? last.AddMonths(-11) : currentMonth.AddMonths(-11);
         var rows = new List<string[]>();
-        for (int i = 11; i >= 0; i--)
+        for (var m = first; m <= last; m = m.AddMonths(1))
         {
-            var m = first.AddMonths(-i);
             var rev = payments.Where(p => Same(p.PaidDate ?? DateOnly.FromDateTime(p.CreatedAt.UtcDateTime), m)).Sum(p => p.Amount);
             var exp = expenses.Where(e => Same(e.ExpenseDate, m)).Sum(e => e.Amount);
             rows.Add(new[] { m.ToString("MM/yyyy"), rev.ToString("N0"), exp.ToString("N0"), (rev - exp).ToString("N0") });
@@ -83,11 +117,12 @@ public static class CsvExportEndpoints
             new[] { "Tháng", "Doanh thu", "Chi phí", "Lợi nhuận" }, rows);
     }
 
-    private static async Task<ReportTable> BuildCommissionsAsync(ApplicationDbContext db)
+    private static async Task<ReportTable> BuildCommissionsAsync(ApplicationDbContext db, ReportDateRange range)
     {
         var agentNames = await db.Agents.ToDictionaryAsync(a => a.Id, a => a.Name);
         var commissions = await db.AgentCommissions
-            .Select(c => new { c.AgentId, c.CommissionAmount, c.Status }).ToListAsync();
+            .Select(c => new { c.AgentId, c.CommissionAmount, c.Status, c.CreatedAt }).ToListAsync();
+        commissions = commissions.Where(c => range.Includes(c.CreatedAt)).ToList();
         var rows = commissions.GroupBy(c => c.AgentId)
             .Select(g => new
             {
@@ -103,14 +138,15 @@ public static class CsvExportEndpoints
             new[] { "Đại lý", "Số mốc", "Đã chi", "Chờ/đã duyệt", "Tổng hoa hồng" }, rows);
     }
 
-    private static async Task<ReportTable> BuildOverdueAsync(ApplicationDbContext db)
+    private static async Task<ReportTable> BuildOverdueAsync(ApplicationDbContext db, ReportDateRange range)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow.Date);
         var names = await db.Candidates.ToDictionaryAsync(c => c.Id, c => c.FullName);
         var open = await db.Payments
             .Where(p => p.Status != PaymentStatus.Paid && p.Status != PaymentStatus.Refunded)
-            .Select(p => new { p.CandidateId, p.PaymentType, p.Amount, p.DueDate, p.Status }).ToListAsync();
+            .Select(p => new { p.CandidateId, p.PaymentType, p.Amount, p.DueDate, p.Status, p.CreatedAt }).ToListAsync();
         var rows = open
+            .Where(p => range.Includes(p.DueDate ?? DateOnly.FromDateTime(p.CreatedAt.UtcDateTime)))
             .Where(p => p.Status == PaymentStatus.Overdue || (p.DueDate != null && p.DueDate < today))
             .OrderBy(p => p.DueDate)
             .Select(p => new[]
@@ -126,10 +162,13 @@ public static class CsvExportEndpoints
             new[] { "Ứng viên", "Loại", "Số tiền", "Hạn thu", "Số ngày quá hạn" }, rows);
     }
 
-    private static async Task<ReportTable> BuildRevenueByCountryAsync(ApplicationDbContext db)
+    private static async Task<ReportTable> BuildRevenueByCountryAsync(ApplicationDbContext db, ReportDateRange range)
     {
         var payments = await db.Payments.Where(p => p.Status == PaymentStatus.Paid)
-            .Select(p => new { p.CandidateId, p.JobOrderId, p.Amount }).ToListAsync();
+            .Select(p => new { p.CandidateId, p.JobOrderId, p.Amount, p.PaidDate, p.CreatedAt }).ToListAsync();
+        payments = payments
+            .Where(p => range.Includes(p.PaidDate ?? DateOnly.FromDateTime(p.CreatedAt.UtcDateTime)))
+            .ToList();
         var jobs = await db.JobOrders.Select(j => new { j.Id, j.Country }).ToDictionaryAsync(j => j.Id);
         var rows = payments
             .Where(p => p.JobOrderId is not null && jobs.ContainsKey(p.JobOrderId.Value))
@@ -150,10 +189,13 @@ public static class CsvExportEndpoints
             new[] { "Quốc gia", "Số đơn hàng", "Ứng viên đã thu", "Doanh thu" }, rows);
     }
 
-    private static async Task<ReportTable> BuildRevenueByJobOrderAsync(ApplicationDbContext db)
+    private static async Task<ReportTable> BuildRevenueByJobOrderAsync(ApplicationDbContext db, ReportDateRange range)
     {
         var payments = await db.Payments.Where(p => p.Status == PaymentStatus.Paid)
-            .Select(p => new { p.CandidateId, p.JobOrderId, p.Amount }).ToListAsync();
+            .Select(p => new { p.CandidateId, p.JobOrderId, p.Amount, p.PaidDate, p.CreatedAt }).ToListAsync();
+        payments = payments
+            .Where(p => range.Includes(p.PaidDate ?? DateOnly.FromDateTime(p.CreatedAt.UtcDateTime)))
+            .ToList();
         var jobs = await db.JobOrders
             .Select(j => new { j.Id, j.Code, j.Country, j.CompanyName })
             .ToDictionaryAsync(j => j.Id);
@@ -183,9 +225,17 @@ public static class CsvExportEndpoints
             new[] { "Đơn hàng", "Quốc gia", "Ứng viên đã thu", "Doanh thu" }, rows);
     }
 
-    private static async Task<ReportTable> BuildLeadByProvinceAsync(ApplicationDbContext db)
+    private static async Task<ReportTable> BuildLeadByProvinceAsync(ApplicationDbContext db, ReportDateRange range)
     {
+        var fromDto = range.From is DateOnly from
+            ? new DateTimeOffset(from.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)
+            : (DateTimeOffset?)null;
+        var toDto = range.To is DateOnly to
+            ? new DateTimeOffset(to.ToDateTime(new TimeOnly(23, 59, 59)), TimeSpan.Zero)
+            : (DateTimeOffset?)null;
         var rows = await db.Leads
+            .Where(lead => (fromDto == null || lead.CreatedAt >= fromDto)
+                && (toDto == null || lead.CreatedAt <= toDto))
             .GroupBy(l => string.IsNullOrWhiteSpace(l.Province) ? "Chưa rõ" : l.Province!.Trim())
             .Select(g => new { Province = g.Key, Total = g.Count(), Converted = g.Count(l => l.Status == LeadStatus.Converted) })
             .ToListAsync();
@@ -205,11 +255,12 @@ public static class CsvExportEndpoints
             new[] { "Tỉnh/Thành", "Tổng Lead", "Đã chuyển ứng viên", "Tỷ lệ chuyển đổi" }, output);
     }
 
-    private static async Task<ReportTable> BuildRecruitmentFunnelAsync(ApplicationDbContext db)
+    private static async Task<ReportTable> BuildRecruitmentFunnelAsync(ApplicationDbContext db, ReportDateRange range)
     {
         var candidateJobs = await db.CandidateJobOrders
-            .Select(c => new { c.CandidateId, c.JobOrderId, c.CurrentStep })
+            .Select(c => new { c.CandidateId, c.JobOrderId, c.CurrentStep, c.CreatedAt })
             .ToListAsync();
+        candidateJobs = candidateJobs.Where(c => range.Includes(c.CreatedAt)).ToList();
         var visaApprovedPairs = await db.Visas.Where(v => v.Status == VisaStatus.Approved)
             .Select(v => new { v.CandidateId, v.JobOrderId }).ToListAsync();
         var visaApprovedKeys = visaApprovedPairs.Select(v => (v.CandidateId, v.JobOrderId)).ToHashSet();
@@ -236,11 +287,12 @@ public static class CsvExportEndpoints
             new[] { "Mốc", "Số ứng viên", "Tỷ lệ trên tổng" }, rows);
     }
 
-    private static async Task<ReportTable> BuildTopAgentsAsync(ApplicationDbContext db)
+    private static async Task<ReportTable> BuildTopAgentsAsync(ApplicationDbContext db, ReportDateRange range)
     {
         var agentNames = await db.Agents.ToDictionaryAsync(a => a.Id, a => a.Name);
         var candidateAgents = await db.Candidates.Where(c => c.AgentId != null)
-            .Select(c => new { c.Id, AgentId = c.AgentId!.Value }).ToListAsync();
+            .Select(c => new { c.Id, AgentId = c.AgentId!.Value, c.CreatedAt }).ToListAsync();
+        candidateAgents = candidateAgents.Where(c => range.Includes(c.CreatedAt)).ToList();
         var candidateJobs = await db.CandidateJobOrders.Select(c => new { c.CandidateId, c.JobOrderId, c.CurrentStep }).ToListAsync();
         var actualDepartures = await db.Flights.Where(f => f.ActualDepartureAt != null)
             .Select(f => new { f.CandidateId, f.JobOrderId }).ToListAsync();
@@ -251,7 +303,8 @@ public static class CsvExportEndpoints
             .Distinct()
             .ToHashSet();
         var commissions = await db.AgentCommissions
-            .Select(c => new { c.AgentId, c.CommissionAmount, c.Status }).ToListAsync();
+            .Select(c => new { c.AgentId, c.CommissionAmount, c.Status, c.CreatedAt }).ToListAsync();
+        commissions = commissions.Where(c => range.Includes(c.CreatedAt)).ToList();
 
         var rows = candidateAgents
             .GroupBy(c => c.AgentId)

@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using Polymind.Domain.Commissions;
 using Polymind.Domain.Entities;
 using Polymind.Domain.Enums;
 using Polymind.Infrastructure.Persistence;
@@ -14,6 +16,8 @@ namespace Polymind.Web.Commissions;
 /// </summary>
 public static class CommissionEngine
 {
+    private const string IdempotencyIndexName = "ix_agent_commissions_agent_id_candidate_id_milestone";
+
     /// <summary>Mốc hoa hồng ↔ giai đoạn đóng tiền kích hoạt.</summary>
     public static readonly (CommissionMilestone Milestone, PaymentStage Stage)[] Map =
     {
@@ -24,13 +28,14 @@ public static class CommissionEngine
 
     /// <summary>
     /// Với 1 ứng viên: phát sinh các lát hoa hồng cho những giai đoạn đóng tiền đã hoàn tất
-    /// mà chưa có hoa hồng. Trả về số lát mới tạo (chưa gọi SaveChanges).
+    /// mà chưa có hoa hồng. Hàm tự lưu hoa hồng + audit và trả về số lát thực sự do lượt gọi này tạo.
+    /// Unique index là chốt cuối; khi hai caller đụng nhau, chỉ retry đúng lỗi từ index idempotency.
     /// </summary>
     public static async Task<int> EnsureAsync(ApplicationDbContext db, Guid candidateId, Guid actorId)
     {
         var candidate = await db.Candidates.AsNoTracking()
             .Where(c => c.Id == candidateId)
-            .Select(c => new { c.Id, c.AgentId })
+            .Select(c => new { c.Id, c.AgentId, c.CollaboratorId })
             .FirstOrDefaultAsync();
         if (candidate?.AgentId is not Guid agentId) return 0;
 
@@ -53,7 +58,14 @@ public static class CommissionEngine
         var configs = await db.AgentCommissionConfigs.AsNoTracking()
             .Where(c => c.AgentId == agentId).ToListAsync();
 
-        var created = 0;
+        var collaboratorSnapshot = candidate.CollaboratorId is Guid collaboratorId
+            ? await db.Collaborators.AsNoTracking()
+                .Where(c => c.Id == collaboratorId && c.AgentId == agentId)
+                .Select(c => new { c.Id, c.CommissionSharePercentage })
+                .FirstOrDefaultAsync()
+            : null;
+
+        var pending = new List<AgentCommission>();
         foreach (var (milestone, stage) in Map)
         {
             if (!paidStages.Contains(stage)) continue;
@@ -83,23 +95,93 @@ public static class CommissionEngine
                 Stage = stage,
                 BaseAmount = baseAmount,
                 CommissionAmount = amount,
+                CollaboratorId = collaboratorSnapshot?.Id,
+                CollaboratorSharePercentage = collaboratorSnapshot is null
+                    ? null
+                    : AgentCommissionRates.NormalizeCollaboratorShare(collaboratorSnapshot.CommissionSharePercentage),
                 Status = CommissionStatus.Pending,
             };
-            db.AgentCommissions.Add(commission);
-            db.AddAudit(actorId, "create", "agent_commissions", commission.Id, null, new
-            {
-                commission.AgentId,
-                commission.CandidateId,
-                commission.JobOrderId,
-                commission.ConfigId,
-                commission.Milestone,
-                commission.Stage,
-                commission.BaseAmount,
-                commission.CommissionAmount,
-                commission.Status,
-            });
-            created++;
+            pending.Add(commission);
         }
-        return created;
+
+        return await PersistAsync(db, pending, actorId);
+    }
+
+    private static async Task<int> PersistAsync(
+        ApplicationDbContext db,
+        List<AgentCommission> desired,
+        Guid actorId)
+    {
+        if (desired.Count == 0) return 0;
+
+        // Tối đa ba mốc. Mỗi conflict đồng nghĩa một caller khác vừa thắng ít nhất một khóa;
+        // nạp lại rồi chỉ retry những mốc vẫn còn thiếu.
+        for (var attempt = 0; attempt <= Map.Length; attempt++)
+        {
+            var agentId = desired[0].AgentId;
+            var candidateId = desired[0].CandidateId;
+            var existing = await db.AgentCommissions.AsNoTracking()
+                .Where(c => c.AgentId == agentId && c.CandidateId == candidateId)
+                .Select(c => c.Milestone)
+                .ToListAsync();
+            var existingSet = existing.ToHashSet();
+            var remaining = desired.Where(c => !existingSet.Contains(c.Milestone)).ToList();
+            if (remaining.Count == 0) return 0;
+
+            db.AgentCommissions.AddRange(remaining);
+            foreach (var commission in remaining)
+            {
+                db.AddAudit(actorId, "create", "agent_commissions", commission.Id, null, new
+                {
+                    commission.AgentId,
+                    commission.CandidateId,
+                    commission.JobOrderId,
+                    commission.ConfigId,
+                    commission.Milestone,
+                    commission.Stage,
+                    commission.BaseAmount,
+                    commission.CommissionAmount,
+                    commission.CollaboratorId,
+                    commission.CollaboratorSharePercentage,
+                    commission.Status,
+                });
+            }
+
+            try
+            {
+                await db.SaveChangesAsync();
+                return remaining.Count;
+            }
+            catch (DbUpdateException ex) when (IsIdempotencyConflict(ex))
+            {
+                DetachGeneratedEntries(db, remaining);
+                if (attempt == Map.Length) throw;
+            }
+        }
+
+        return 0;
+    }
+
+    private static bool IsIdempotencyConflict(DbUpdateException ex)
+        => ex.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: IdempotencyIndexName,
+        };
+
+    private static void DetachGeneratedEntries(
+        ApplicationDbContext db,
+        IReadOnlyCollection<AgentCommission> commissions)
+    {
+        var ids = commissions.Select(c => c.Id).ToHashSet();
+        foreach (var entry in db.ChangeTracker.Entries<AgentCommission>()
+                     .Where(e => ids.Contains(e.Entity.Id)))
+            entry.State = EntityState.Detached;
+
+        foreach (var entry in db.ChangeTracker.Entries<AuditLog>()
+                     .Where(e => e.Entity.Resource == "agent_commissions"
+                                 && e.Entity.ResourceId is Guid resourceId
+                                 && ids.Contains(resourceId)))
+            entry.State = EntityState.Detached;
     }
 }

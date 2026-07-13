@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
     <ProjectReference Include="..\Polymind.Infrastructure\Polymind.Infrastructure.csproj" />
@@ -28,6 +28,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <UserSecretsId>0b22efe9-6fa0-4c0d-99be-8980f36a0edf</UserSecretsId>
   </PropertyGroup>
 
 </Project>

@@ -8,6 +8,8 @@
 @inject NavigationManager Nav
 @inject AgentScope AgentScope
 @using Polymind.Infrastructure.Persistence.Constants
+@using Polymind.Web.Finance
+@using Polymind.Domain.Finance
 
 <PageTitle>Tài chính — POLYMIND</PageTitle>
 
@@ -80,26 +82,34 @@ else
                         }
                         else
                         {
-                            // Chỉ được đóng TUẦN TỰ 1→4: bước kế tiếp = bước chưa đóng đầu tiên.
-                            var nextStage = row.Stages.FirstOrDefault(x => x.Status != PaymentStatus.Paid)?.Stage;
+                            @* Ứng viên phải NỘP tuần tự 1→4: bước kế tiếp = bước đầu tiên chưa nộp. *@
+                            var nextStage = row.Stages.FirstOrDefault(x => x.Status is null || !PaymentPostingRules.IsSubmittedOrPaid(x.Status.Value))?.Stage;
                             <div class="pm-stage-track">
                                 @foreach (var s in row.Stages)
                                 {
                                     var paid = s.Status == PaymentStatus.Paid;
+                                    var submitted = s.Status == PaymentStatus.Submitted;
                                     var isNext = s.Stage == nextStage;
                                     <div class="pm-stage @(paid ? "pm-stage--paid" : "")">
-                                        <MudIcon Icon="@Labels.IconOf(s.Stage)" Size="Size.Small" Color="@(paid ? Color.Success : Color.Default)" />
+                                        <MudIcon Icon="@Labels.IconOf(s.Stage)" Size="Size.Small" Color="@(paid ? Color.Success : submitted ? Color.Info : Color.Default)" />
                                         <div class="pm-stage-label">@((int)s.Stage). @Labels.ShortVi(s.Stage) <span class="mud-text-secondary">(@PaymentSchedule.Percent(s.Stage)%)</span></div>
                                         <div class="pm-stage-amount">@($"{s.Amount:N0} đ")</div>
                                         @if (paid)
                                         {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Check">Đã đóng</MudChip>
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Check">Kế toán đã duyệt</MudChip>
+                                        }
+                                        else if (submitted)
+                                        {
+                                            @* Đã nộp nhưng CHƯA hạch toán — kế toán duyệt riêng bên tab Khoản thu. *@
+                                            <MudTooltip Text="Ứng viên đã nộp tiền. Kế toán duyệt khoản thu này ở tab “Khoản thu”.">
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled" Icon="@Icons.Material.Filled.HourglassTop">Đã nộp — chờ duyệt</MudChip>
+                                            </MudTooltip>
                                         }
                                         else if (s.PaymentId is Guid pid && isNext)
                                         {
                                             @if (_canRecordPayment)
                                             {
-                                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => MarkStagePaid(pid))">Đánh dấu đã đóng</MudButton>
+                                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => MarkStageSubmitted(pid))">Xác nhận đã nộp</MudButton>
                                             }
                                             else
                                             {
@@ -108,8 +118,8 @@ else
                                         }
                                         else if (s.PaymentId is not null)
                                         {
-                                            @* Chưa tới lượt: phải đóng bước trước đó đã. *@
-                                            <MudTooltip Text="Cần đóng các bước trước theo thứ tự">
+                                            @* Chưa tới lượt: nêu ĐÍCH DANH bước còn thiếu, không nói chung chung. *@
+                                            <MudTooltip Text="@BlockedStageHint(row, s.Stage)">
                                                 <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Lock">Chưa tới lượt</MudChip>
                                             </MudTooltip>
                                         }
@@ -120,13 +130,18 @@ else
                                     </div>
                                 }
                             </div>
-                            @if (!row.HasSchedule && _canCreatePayment)
-                            {
-                                <div class="d-flex justify-end mt-2">
+                            <div class="d-flex justify-end mt-2" style="gap:8px">
+                                @if (!row.HasSchedule && _canCreatePayment)
+                                {
                                     <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.PlaylistAddCheck"
                                                OnClick="@(() => CreateSchedule(row))">Tạo lịch đóng tiền 4 bước</MudButton>
-                                </div>
-                            }
+                                }
+                                @if (row.IsFullyPaid && _canArchivePayment)
+                                {
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success" StartIcon="@Icons.Material.Filled.Inventory2"
+                                               OnClick="@(() => ArchiveSchedule(row.CandidateId, row.CandidateName))">Đưa vào kho lưu trữ</MudButton>
+                                }
+                            </div>
                         }
                     </MudPaper>
                 }
@@ -136,17 +151,139 @@ else
         @if (!_selfScoped)
         {
         <MudTabPanel Text="@($"Khoản thu ({_payments.Count})")">
-            <div class="d-flex justify-end mb-3">
+            <MudTextField @bind-Value="_paymentSearch" Placeholder="Tìm theo tên ứng viên / mã khoản thu / loại / trạng thái..." Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+
+            @* ===== Bảng 1 — Theo lịch 4 bước: MỖI ỨNG VIÊN 1 HÀNG, bấm mũi tên để xem chi tiết 4 bước ===== *@
+            <div class="d-flex align-center mb-2" style="gap:8px">
+                <MudIcon Icon="@Icons.Material.Filled.AccountBalanceWallet" Color="Color.Primary" Size="Size.Small" />
+                <MudText Typo="Typo.subtitle1"><b>Theo lịch đóng tiền (@ScheduledPaymentGroups.Count ứng viên)</b></MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">— bấm ▸ để xem 4 bước</MudText>
+            </div>
+            @if (ScheduledPaymentGroups.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary py-3" Align="Align.Center">
+                    @(string.IsNullOrWhiteSpace(_paymentSearch) ? "Chưa có ứng viên nào có lịch đóng tiền." : $"Không tìm thấy khoản thu theo lịch nào khớp “{_paymentSearch}”.")
+                </MudText>
+            }
+            else
+            {
+                <MudDataGrid T="PaymentGroupRow" Items="ScheduledPaymentGroups" Hover="true" Dense="true" Striped="true">
+                    <Columns>
+                        <HierarchyColumn T="PaymentGroupRow" />
+                        <PropertyColumn Property="x => x.CandidateName" Title="Ứng viên" />
+                        <TemplateColumn Title="Tiến độ">
+                            <CellTemplate>
+                                <div style="min-width:130px">
+                                    <MudProgressLinear Color="@(context.Item.PaidSteps == PaymentPostingRules.TotalStages ? Color.Success : Color.Primary)"
+                                                       Value="@context.Item.Percent" Style="height:8px" Rounded="true" />
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @context.Item.PaidSteps/@PaymentPostingRules.TotalStages bước • @($"{context.Item.Percent:0}%")
+                                    </MudText>
+                                </div>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Đã thu / Tổng">
+                            <CellTemplate>
+                                <b>@($"{context.Item.Paid:N0}")</b> <span class="mud-text-secondary">/ @($"{context.Item.Total:N0} đ")</span>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Bước kế tiếp">
+                            <CellTemplate>
+                                @if (context.Item.NextDue is PaymentRow next && next.Stage is PaymentStage ns)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@StageChipColor(next)" Icon="@Labels.IconOf(ns)">
+                                        @PaymentSchedule.StepBadge(ns) — @Labels.ShortVi(ns)
+                                    </MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Đã thu đủ</MudChip>
+                                }
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="" Sortable="false">
+                            <CellTemplate>
+                                @if (context.Item.NextDue is PaymentRow due)
+                                {
+                                    @PaymentActions(due)
+                                }
+                                else if (context.Item.IsFullyPaid && _canArchivePayment)
+                                {
+                                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Success" StartIcon="@Icons.Material.Filled.Inventory2"
+                                               OnClick="@(() => ArchiveSchedule(context.Item.CandidateId, context.Item.CandidateName))">Lưu trữ</MudButton>
+                                }
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                    <ChildRowContent>
+                        <MudSimpleTable Dense="true" Striped="true" Class="ma-2">
+                            <thead>
+                                <tr>
+                                    <th>Bước</th>
+                                    <th>Mã</th>
+                                    <th style="text-align:right">Số tiền</th>
+                                    <th>Hạn thu</th>
+                                    <th>Trạng thái</th>
+                                    <th style="text-align:right">Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var p in context.Item.Stages)
+                                {
+                                    <tr>
+                                        <td>
+                                            @if (p.Stage is PaymentStage st)
+                                            {
+                                                <MudTooltip Text="@($"Lịch đóng tiền: {PaymentSchedule.OrderHint()}")">
+                                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                                             Color="@StageChipColor(p)" Icon="@Labels.IconOf(st)">
+                                                        @PaymentSchedule.StepBadge(st) — @Labels.ShortVi(st)
+                                                    </MudChip>
+                                                </MudTooltip>
+                                            }
+                                        </td>
+                                        <td>@p.Code</td>
+                                        <td style="text-align:right">@($"{p.Amount:N0} đ")</td>
+                                        <td>@(p.DueDate?.ToString("dd/MM/yyyy") ?? "—")</td>
+                                        <td><MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(p.Status)">@Labels.Vi(p.Status)</MudChip></td>
+                                        <td style="text-align:right">@PaymentActions(p)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    </ChildRowContent>
+                    <PagerContent><MudDataGridPager T="PaymentGroupRow" /></PagerContent>
+                </MudDataGrid>
+            }
+
+            @* ===== Bảng 2 — Thu lẻ: ngoài lịch 4 bước, giữ mỗi khoản 1 hàng =====
+                 Nút "Thêm khoản thu" nằm Ở ĐÂY (không ở đầu tab): khoản thu tạo tay luôn không có Stage
+                 nên chắc chắn rơi vào bảng này — để trên đầu dễ hiểu lầm là thêm vào lịch 4 bước. *@
+            <div class="d-flex align-center justify-space-between flex-wrap mt-6 mb-2" style="gap:8px">
+                <div class="d-flex align-center" style="gap:8px">
+                    <MudIcon Icon="@Icons.Material.Filled.Payments" Color="Color.Secondary" Size="Size.Small" />
+                    <MudText Typo="Typo.subtitle1"><b>Khoản thu lẻ (@AdhocPayments.Count)</b></MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">— ngoài lịch 4 bước, duyệt độc lập</MudText>
+                </div>
                 <AuthorizeView Policy="payments:create">
                     <Authorized>
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreatePayment">
-                            Thêm khoản thu
+                            Thêm khoản thu lẻ
                         </MudButton>
                     </Authorized>
                 </AuthorizeView>
             </div>
-            <MudHidden Breakpoint="Breakpoint.SmAndDown">
-                <MudDataGrid T="PaymentRow" Items="_payments" Hover="true" Dense="true" Striped="true">
+            @if (AdhocPayments.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary py-3" Align="Align.Center">
+                    @(string.IsNullOrWhiteSpace(_paymentSearch) ? "Chưa có khoản thu lẻ nào." : $"Không tìm thấy khoản thu lẻ nào khớp “{_paymentSearch}”.")
+                </MudText>
+            }
+            else
+            {
+                <MudDataGrid T="PaymentRow" Items="AdhocPayments" Hover="true" Dense="true" Striped="true">
                     <Columns>
                         <PropertyColumn Property="x => x.Code" Title="Mã" />
                         <PropertyColumn Property="x => x.CandidateName" Title="Ứng viên" />
@@ -165,78 +302,12 @@ else
                             <CellTemplate>@(context.Item.DueDate?.ToString("dd/MM/yyyy") ?? "—")</CellTemplate>
                         </TemplateColumn>
                         <TemplateColumn Title="" Sortable="false">
-                            <CellTemplate>
-                                @if (_canRecordPayment && context.Item.Status != PaymentStatus.Paid && context.Item.Status != PaymentStatus.Refunded)
-                                {
-                                    <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Check" OnClick="@(() => ApprovePayment(context.Item.Id))">Duyệt</MudButton>
-                                }
-                                @if (_canCreateReceipt && context.Item.Status == PaymentStatus.Paid)
-                                {
-                                    @if (_receiptPaymentIds.Contains(context.Item.Id))
-                                    {
-                                        <MudTooltip Text="Đã có phiếu thu"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Success" Size="Size.Small" Class="mx-1" /></MudTooltip>
-                                    }
-                                    else
-                                    {
-                                        <MudButton Size="Size.Small" Color="Color.Info" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ReceiptLong" OnClick="@(() => CreateReceiptForPayment(context.Item))">Phiếu thu</MudButton>
-                                    }
-                                }
-                                @if (_canUpdatePayment)
-                                {
-                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditPayment(context.Item.Id))" />
-                                }
-                            </CellTemplate>
+                            <CellTemplate>@PaymentActions(context.Item)</CellTemplate>
                         </TemplateColumn>
                     </Columns>
                     <PagerContent><MudDataGridPager T="PaymentRow" /></PagerContent>
                 </MudDataGrid>
-            </MudHidden>
-            <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
-                @if (_payments.Count == 0)
-                {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Chưa có khoản thu.</MudText>
-                }
-                else
-                {
-                    @foreach (var p in _payments)
-                    {
-                        <MudPaper Class="mobile-card pa-3" Elevation="0">
-                            <div class="d-flex justify-space-between align-center" style="gap:8px">
-                                <div style="min-width:0">
-                                    <MudText Typo="Typo.subtitle2" Style="font-weight:600">@p.CandidateName</MudText>
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@p.Code • @Labels.Vi(p.Type)</MudText>
-                                </div>
-                                <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(p.Status)">@Labels.Vi(p.Status)</MudChip>
-                            </div>
-                            <div class="d-flex justify-space-between align-center mt-2" style="gap:8px">
-                                <MudText Typo="Typo.subtitle2" Style="font-weight:600">@($"{p.Amount:N0} đ")</MudText>
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Hạn: @(p.DueDate?.ToString("dd/MM/yyyy") ?? "—")</MudText>
-                            </div>
-                            <div class="d-flex flex-wrap justify-end mt-1" style="gap:4px">
-                                @if (_canRecordPayment && p.Status != PaymentStatus.Paid && p.Status != PaymentStatus.Refunded)
-                                {
-                                    <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Check" OnClick="@(() => ApprovePayment(p.Id))">Duyệt</MudButton>
-                                }
-                                @if (_canCreateReceipt && p.Status == PaymentStatus.Paid)
-                                {
-                                    @if (_receiptPaymentIds.Contains(p.Id))
-                                    {
-                                        <MudTooltip Text="Đã có phiếu thu"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Success" Size="Size.Small" Class="mx-1" /></MudTooltip>
-                                    }
-                                    else
-                                    {
-                                        <MudButton Size="Size.Small" Color="Color.Info" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ReceiptLong" OnClick="@(() => CreateReceiptForPayment(p))">Phiếu thu</MudButton>
-                                    }
-                                }
-                                @if (_canUpdatePayment)
-                                {
-                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditPayment(p.Id))" />
-                                }
-                            </div>
-                        </MudPaper>
-                    }
-                }
-            </MudHidden>
+            }
         </MudTabPanel>
 
         <MudTabPanel Text="@($"Khoản chi ({_expenses.Count})")">
@@ -333,8 +404,184 @@ else
         @if (_canReadReceipt)
         {
             <MudTabPanel Text="@($"Phiếu thu/chi ({_receipts.Count})")">
-                <MudHidden Breakpoint="Breakpoint.SmAndDown">
-                    <MudDataGrid T="ReceiptRow" Items="_receipts" Hover="true" Dense="true" Striped="true">
+                <MudTextField @bind-Value="_receiptSearch" Placeholder="Tìm theo mã phiếu / ứng viên / diễn giải..." Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+
+                @* ===== Bảng 1 — PHIẾU THU: gom MỖI ỨNG VIÊN 1 HÀNG, bấm ▸ để xem/in từng phiếu ===== *@
+                <div class="d-flex align-center mb-2" style="gap:8px">
+                    <MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Success" Size="Size.Small" />
+                    <MudText Typo="Typo.subtitle1"><b>Phiếu thu (@IncomeReceiptGroups.Count ứng viên)</b></MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">— bấm ▸ để xem và in từng phiếu</MudText>
+                </div>
+                @if (IncomeReceiptGroups.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary py-3" Align="Align.Center">
+                        @(string.IsNullOrWhiteSpace(_receiptSearch) ? "Chưa có phiếu thu." : $"Không tìm thấy phiếu thu nào khớp “{_receiptSearch}”.")
+                    </MudText>
+                }
+                else
+                {
+                    <MudDataGrid T="ReceiptGroupRow" Items="IncomeReceiptGroups" Hover="true" Dense="true" Striped="true">
+                        <Columns>
+                            <HierarchyColumn T="ReceiptGroupRow" />
+                            <PropertyColumn Property="x => x.PartyName" Title="Ứng viên" />
+                            <TemplateColumn Title="Số phiếu">
+                                <CellTemplate>
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success">@context.Item.Count phiếu</MudChip>
+                                </CellTemplate>
+                            </TemplateColumn>
+                            <TemplateColumn Title="Tổng đã thu">
+                                <CellTemplate><b>@($"{context.Item.Total:N0} đ")</b></CellTemplate>
+                            </TemplateColumn>
+                            <TemplateColumn Title="Phiếu gần nhất">
+                                <CellTemplate>@(context.Item.LastDate?.ToString("dd/MM/yyyy") ?? "—")</CellTemplate>
+                            </TemplateColumn>
+                            <TemplateColumn Title="" Sortable="false">
+                                <CellTemplate>
+                                    @* Kho lưu trữ của phiếu ĐỘC LẬP với kho lưu trữ khoản thu — lưu trữ bên kia không kéo theo phiếu. *@
+                                    @if (_canArchiveReceipt)
+                                    {
+                                        <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Success" StartIcon="@Icons.Material.Filled.Inventory2"
+                                                   OnClick="@(() => ArchiveReceipts(context.Item.Items.Select(r => r.Id).ToList(), context.Item.PartyName))">Lưu trữ</MudButton>
+                                    }
+                                </CellTemplate>
+                            </TemplateColumn>
+                        </Columns>
+                        <ChildRowContent>
+                            <MudSimpleTable Dense="true" Striped="true" Class="ma-2">
+                                <thead>
+                                    <tr>
+                                        <th>Mã phiếu</th>
+                                        <th style="text-align:right">Số tiền</th>
+                                        <th>Ngày</th>
+                                        <th>Diễn giải</th>
+                                        <th style="text-align:right">Thao tác</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var r in context.Item.Items)
+                                    {
+                                        <tr>
+                                            <td>@r.Code</td>
+                                            <td style="text-align:right">@($"{r.Amount:N0} đ")</td>
+                                            <td>@r.Date.ToString("dd/MM/yyyy")</td>
+                                            <td class="mud-text-secondary">@(string.IsNullOrWhiteSpace(r.Description) ? "—" : r.Description)</td>
+                                            <td style="text-align:right">
+                                                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
+                                                           StartIcon="@Icons.Material.Filled.PictureAsPdf"
+                                                           OnClick="@(() => Nav.NavigateTo($"/receipts/{r.Id}.pdf", forceLoad: true))">In PDF</MudButton>
+                                                @if (_canArchiveReceipt)
+                                                {
+                                                    <MudTooltip Text="Lưu trữ riêng phiếu này">
+                                                        <MudIconButton Icon="@Icons.Material.Filled.Inventory2" Size="Size.Small" Color="Color.Success"
+                                                                       OnClick="@(() => ArchiveReceipts(new List<Guid> { r.Id }, r.Code))" />
+                                                    </MudTooltip>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        </ChildRowContent>
+                        <PagerContent><MudDataGridPager T="ReceiptGroupRow" /></PagerContent>
+                    </MudDataGrid>
+                }
+
+                @* ===== Bảng 2 — PHIẾU CHI: giữ nguyên mỗi phiếu 1 hàng ===== *@
+                <div class="d-flex align-center mt-6 mb-2" style="gap:8px">
+                    <MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Error" Size="Size.Small" />
+                    <MudText Typo="Typo.subtitle1"><b>Phiếu chi (@ExpenseReceipts.Count)</b></MudText>
+                </div>
+                @if (ExpenseReceipts.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary py-3" Align="Align.Center">
+                        @(string.IsNullOrWhiteSpace(_receiptSearch) ? "Chưa có phiếu chi." : $"Không tìm thấy phiếu chi nào khớp “{_receiptSearch}”.")
+                    </MudText>
+                }
+                else
+                {
+                    <MudDataGrid T="ReceiptRow" Items="ExpenseReceipts" Hover="true" Dense="true" Striped="true">
+                        <Columns>
+                            <PropertyColumn Property="x => x.Code" Title="Mã phiếu" />
+                            <PropertyColumn Property="x => x.PartyName" Title="Đối tượng" />
+                            <TemplateColumn Title="Số tiền">
+                                <CellTemplate>@($"{context.Item.Amount:N0} đ")</CellTemplate>
+                            </TemplateColumn>
+                            <TemplateColumn Title="Ngày">
+                                <CellTemplate>@context.Item.Date.ToString("dd/MM/yyyy")</CellTemplate>
+                            </TemplateColumn>
+                            <PropertyColumn Property="x => x.Description" Title="Diễn giải" />
+                            <TemplateColumn Title="" Sortable="false">
+                                <CellTemplate>
+                                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
+                                               StartIcon="@Icons.Material.Filled.PictureAsPdf"
+                                               OnClick="@(() => Nav.NavigateTo($"/receipts/{context.Item.Id}.pdf", forceLoad: true))">In PDF</MudButton>
+                                    @if (_canArchiveReceipt)
+                                    {
+                                        <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Success" StartIcon="@Icons.Material.Filled.Inventory2"
+                                                   OnClick="@(() => ArchiveReceipts(new List<Guid> { context.Item.Id }, context.Item.Code))">Lưu trữ</MudButton>
+                                    }
+                                </CellTemplate>
+                            </TemplateColumn>
+                        </Columns>
+                        <PagerContent><MudDataGridPager T="ReceiptRow" /></PagerContent>
+                    </MudDataGrid>
+                }
+            </MudTabPanel>
+        }
+
+        @if (_archivedGroups.Count > 0 || _archivedReceipts.Count > 0)
+        {
+            <MudTabPanel Text="@($"Kho lưu trữ ({_archivedGroups.Count + _archivedReceipts.Count})")" Icon="@Icons.Material.Filled.Inventory2">
+                <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined" Class="mb-3">
+                    Lưu trữ chỉ <b>ẩn khỏi bảng làm việc</b> — dữ liệu còn nguyên, <b>vẫn tính vào Tổng đã thu</b> ở đầu trang, và khôi phục lại được bất cứ lúc nào.
+                </MudAlert>
+
+                <div class="d-flex align-center mb-2" style="gap:8px">
+                    <MudIcon Icon="@Icons.Material.Filled.AccountBalanceWallet" Color="Color.Primary" Size="Size.Small" />
+                    <MudText Typo="Typo.subtitle1"><b>Khoản thu đã lưu trữ (@_archivedGroups.Count ứng viên)</b></MudText>
+                </div>
+                @if (_archivedGroups.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary py-3" Align="Align.Center">Chưa lưu trữ khoản thu nào.</MudText>
+                }
+                else
+                {
+                    <MudDataGrid T="PaymentGroupRow" Items="_archivedGroups" Hover="true" Dense="true" Striped="true">
+                        <Columns>
+                            <PropertyColumn Property="x => x.CandidateName" Title="Ứng viên" />
+                            <TemplateColumn Title="Đã thu">
+                                <CellTemplate><b>@($"{context.Item.Paid:N0} đ")</b></CellTemplate>
+                            </TemplateColumn>
+                            <TemplateColumn Title="Số bước">
+                                <CellTemplate>@context.Item.PaidSteps/@PaymentPostingRules.TotalStages bước</CellTemplate>
+                            </TemplateColumn>
+                            <TemplateColumn Title="" Sortable="false">
+                                <CellTemplate>
+                                    @if (_canArchivePayment)
+                                    {
+                                        <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Unarchive"
+                                                   OnClick="@(() => RestoreSchedule(context.Item.CandidateId, context.Item.CandidateName))">Khôi phục</MudButton>
+                                    }
+                                </CellTemplate>
+                            </TemplateColumn>
+                        </Columns>
+                        <PagerContent><MudDataGridPager T="PaymentGroupRow" /></PagerContent>
+                    </MudDataGrid>
+                }
+
+                <div class="d-flex align-center mt-6 mb-2" style="gap:8px">
+                    <MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Secondary" Size="Size.Small" />
+                    <MudText Typo="Typo.subtitle1"><b>Phiếu đã lưu trữ (@_archivedReceipts.Count)</b></MudText>
+                </div>
+                @if (_archivedReceipts.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary py-3" Align="Align.Center">Chưa lưu trữ phiếu nào.</MudText>
+                }
+                else
+                {
+                    <MudDataGrid T="ReceiptRow" Items="_archivedReceipts" Hover="true" Dense="true" Striped="true">
                         <Columns>
                             <PropertyColumn Property="x => x.Code" Title="Mã phiếu" />
                             <TemplateColumn Title="Loại">
@@ -349,49 +596,22 @@ else
                             <TemplateColumn Title="Ngày">
                                 <CellTemplate>@context.Item.Date.ToString("dd/MM/yyyy")</CellTemplate>
                             </TemplateColumn>
-                            <PropertyColumn Property="x => x.Description" Title="Diễn giải" />
                             <TemplateColumn Title="" Sortable="false">
                                 <CellTemplate>
                                     <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
                                                StartIcon="@Icons.Material.Filled.PictureAsPdf"
                                                OnClick="@(() => Nav.NavigateTo($"/receipts/{context.Item.Id}.pdf", forceLoad: true))">In PDF</MudButton>
+                                    @if (_canArchiveReceipt)
+                                    {
+                                        <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Unarchive"
+                                                   OnClick="@(() => RestoreReceipts(new List<Guid> { context.Item.Id }, context.Item.Code))">Khôi phục</MudButton>
+                                    }
                                 </CellTemplate>
                             </TemplateColumn>
                         </Columns>
                         <PagerContent><MudDataGridPager T="ReceiptRow" /></PagerContent>
                     </MudDataGrid>
-                </MudHidden>
-                <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
-                    @if (_receipts.Count == 0)
-                    {
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary py-4" Align="Align.Center">Chưa có phiếu thu/chi.</MudText>
-                    }
-                    else
-                    {
-                        @foreach (var r in _receipts)
-                        {
-                            <MudPaper Class="mobile-card pa-3" Elevation="0">
-                                <div class="d-flex justify-space-between align-center" style="gap:8px">
-                                    <div style="min-width:0">
-                                        <MudText Typo="Typo.subtitle2" Style="font-weight:600">@r.Code</MudText>
-                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@r.PartyName • @r.Date.ToString("dd/MM/yyyy")</MudText>
-                                    </div>
-                                    <MudChip T="string" Size="Size.Small" Color="Labels.ColorOf(r.Type)">@Labels.Vi(r.Type)</MudChip>
-                                </div>
-                                <div class="d-flex justify-space-between align-center mt-2" style="gap:8px">
-                                    <MudText Typo="Typo.subtitle2" Style="font-weight:600">@($"{r.Amount:N0} đ")</MudText>
-                                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
-                                               StartIcon="@Icons.Material.Filled.PictureAsPdf"
-                                               OnClick="@(() => Nav.NavigateTo($"/receipts/{r.Id}.pdf", forceLoad: true))">In PDF</MudButton>
-                                </div>
-                                @if (!string.IsNullOrWhiteSpace(r.Description))
-                                {
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">@r.Description</MudText>
-                                }
-                            </MudPaper>
-                        }
-                    }
-                </MudHidden>
+                }
             </MudTabPanel>
         }
         }
@@ -399,8 +619,139 @@ else
 </MudPaper>
 
 @code {
-    private record PaymentRow(Guid Id, string Code, string CandidateName, PaymentType Type, decimal Amount, PaymentStatus Status, DateOnly? DueDate);
-    private record ReceiptRow(Guid Id, string Code, ReceiptType Type, string PartyName, decimal Amount, DateOnly Date, string? Description);
+    private record PaymentRow(Guid Id, Guid CandidateId, string Code, string CandidateName, PaymentType Type, decimal Amount, PaymentStatus Status, DateOnly? DueDate, PaymentStage? Stage);
+
+    /// <summary>Ba thao tác trên một khoản thu (Duyệt / Phiếu thu / Sửa) — dùng chung cho mọi bảng.</summary>
+    private RenderFragment PaymentActions(PaymentRow p) =>@<div class="d-flex flex-wrap align-center justify-end" style="gap:2px">
+        @if (_canRecordPayment && p.Status != PaymentStatus.Paid && p.Status != PaymentStatus.Refunded)
+        {
+            <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Text"
+                       StartIcon="@Icons.Material.Filled.Check" OnClick="@(() => ApprovePayment(p.Id))">Duyệt</MudButton>
+        }
+        @if (_canCreateReceipt && p.Status == PaymentStatus.Paid)
+        {
+            @if (_receiptPaymentIds.Contains(p.Id))
+            {
+                <MudTooltip Text="Đã có phiếu thu">
+                    <MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Success" Size="Size.Small" Class="mx-1" />
+                </MudTooltip>
+            }
+            else
+            {
+                <MudButton Size="Size.Small" Color="Color.Info" Variant="Variant.Text"
+                           StartIcon="@Icons.Material.Filled.ReceiptLong" OnClick="@(() => CreateReceiptForPayment(p))">Phiếu thu</MudButton>
+            }
+        }
+        @if (_canUpdatePayment)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditPayment(p.Id))" />
+        }
+    </div>;
+
+    /// <summary>Tooltip cho bước bị khóa ở stepper Tiến độ: nêu đích danh bước ứng viên chưa nộp.</summary>
+    private static string BlockedStageHint(ProgressRow row, PaymentStage stage)
+    {
+        var siblings = row.Stages
+            .Where(s => s.Status is not null)
+            .Select(s => (s.Stage, Status: s.Status!.Value));
+        var blocking = PaymentPostingRules.UnsubmittedEarlierStages(stage, siblings);
+        if (blocking.Count == 0) return $"{PaymentSchedule.StepLabel(stage)} — sẵn sàng nộp.";
+
+        var missing = string.Join(", ", blocking.Select(PaymentSchedule.StepLabel));
+        return $"Chưa nộp được {PaymentSchedule.StepLabel(stage)} vì còn thiếu: {missing}. "
+             + $"Thứ tự bắt buộc: {PaymentSchedule.OrderHint()}.";
+    }
+
+    /// <summary>
+    /// Màu chip bước: đã thu = xanh · tới lượt duyệt = xanh dương · còn chờ bước trước = xám (khóa).
+    /// Cho kế toán thấy NGAY bước nào duyệt được, thay vì bấm rồi mới báo lỗi.
+    /// </summary>
+    private Color StageChipColor(PaymentRow row)
+    {
+        if (row.Status == PaymentStatus.Paid) return Color.Success;
+        if (row.Stage is not PaymentStage stage) return Color.Default;
+
+        var siblings = _payments
+            .Where(p => p.CandidateId == row.CandidateId && p.Stage is not null)
+            .Select(p => (Stage: p.Stage!.Value, p.Status));
+
+        return PaymentPostingRules.HasUnpaidEarlierStage(stage, siblings)
+            ? Color.Default   // bị khóa — còn bước trước chưa thu
+            : Color.Primary;  // tới lượt
+    }
+    private record ReceiptRow(Guid Id, Guid? CandidateId, string Code, ReceiptType Type, string PartyName, decimal Amount, DateOnly Date, string? Description);
+
+    /// <summary>Gom khoản thu theo lịch 4 bước về MỘT hàng/ứng viên; 4 bước nằm trong hàng mở rộng.</summary>
+    private record PaymentGroupRow(Guid CandidateId, string CandidateName, List<PaymentRow> Stages)
+    {
+        public decimal Total => Stages.Sum(s => s.Amount);
+        public decimal Paid => Stages.Where(s => s.Status == PaymentStatus.Paid).Sum(s => s.Amount);
+        public int PaidSteps => Stages.Count(s => s.Status == PaymentStatus.Paid);
+        public double Percent => Total <= 0 ? 0 : Math.Min(100, (double)(Paid * 100 / Total));
+
+        /// <summary>Đủ điều kiện lưu trữ: kế toán đã duyệt cả 4 bước.</summary>
+        public bool IsFullyPaid => PaymentPostingRules.CanArchiveSchedule(
+            Stages.Where(s => s.Stage is not null).Select(s => (s.Stage!.Value, s.Status)));
+
+        /// <summary>Bước kế tiếp cần thu = bước chưa thu đầu tiên (lịch ép tuần tự 1→4).</summary>
+        public PaymentRow? NextDue => Stages
+            .Where(s => s.Status != PaymentStatus.Paid && s.Status != PaymentStatus.Refunded)
+            .OrderBy(s => (int)(s.Stage ?? 0))
+            .FirstOrDefault();
+    }
+
+    /// <summary>Gom phiếu THU về MỘT hàng/ứng viên; từng phiếu (kèm nút In PDF) nằm trong hàng mở rộng.</summary>
+    private record ReceiptGroupRow(Guid? CandidateId, string PartyName, List<ReceiptRow> Items)
+    {
+        public int Count => Items.Count;
+        public decimal Total => Items.Sum(r => r.Amount);
+        public DateOnly? LastDate => Items.Count == 0 ? null : Items.Max(r => r.Date);
+    }
+
+    /// <summary>So khớp không phân biệt hoa thường; ô tìm kiếm để trống thì khớp tất cả.</summary>
+    private static bool Hit(string search, params string?[] fields)
+        => string.IsNullOrWhiteSpace(search)
+        || fields.Any(f => f?.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase) == true);
+
+    private bool MatchesPayment(PaymentRow p)
+        => Hit(_paymentSearch, p.Code, p.CandidateName, Labels.Vi(p.Type), Labels.Vi(p.Status));
+
+    // Khoản thu theo lịch 4 bước → gom 1 hàng/ứng viên (tránh 1 ứng viên chiếm 4 hàng).
+    // Tìm kiếm giữ NGUYÊN cả 4 bước của ứng viên khớp — lọc lẻ từng bước sẽ làm hỏng tiến độ/tổng tiền của hàng.
+    private List<PaymentGroupRow> ScheduledPaymentGroups => _payments
+        .Where(p => p.Stage is not null)
+        .GroupBy(p => (p.CandidateId, p.CandidateName))
+        .Select(g => new PaymentGroupRow(
+            g.Key.CandidateId,
+            g.Key.CandidateName,
+            g.OrderBy(p => (int)p.Stage!.Value).ToList()))
+        .Where(g => Hit(_paymentSearch, g.CandidateName) || g.Stages.Any(MatchesPayment))
+        .OrderBy(g => g.CandidateName)
+        .ToList();
+
+    // Khoản thu ngoài lịch 4 bước (thu lẻ) → giữ mỗi khoản 1 hàng.
+    private List<PaymentRow> AdhocPayments => _payments
+        .Where(p => p.Stage is null && MatchesPayment(p))
+        .ToList();
+
+    private bool MatchesReceipt(ReceiptRow r) => Hit(_receiptSearch, r.Code, r.PartyName, r.Description);
+
+    // Phiếu THU → gom 1 hàng/ứng viên.
+    private List<ReceiptGroupRow> IncomeReceiptGroups => _receipts
+        .Where(r => r.Type == ReceiptType.Income)
+        .GroupBy(r => (r.CandidateId, r.PartyName))
+        .Select(g => new ReceiptGroupRow(
+            g.Key.CandidateId,
+            g.Key.PartyName,
+            g.OrderByDescending(r => r.Date).ToList()))
+        .Where(g => Hit(_receiptSearch, g.PartyName) || g.Items.Any(MatchesReceipt))
+        .OrderByDescending(g => g.LastDate)
+        .ToList();
+
+    // Phiếu CHI → giữ nguyên như cũ, mỗi phiếu 1 hàng.
+    private List<ReceiptRow> ExpenseReceipts => _receipts
+        .Where(r => r.Type == ReceiptType.Expense && MatchesReceipt(r))
+        .ToList();
 
     private record StageInfo(PaymentStage Stage, decimal Amount, Guid? PaymentId, PaymentStatus? Status);
     private record ProgressRow(Guid CandidateId, string CandidateName, string Code, Guid JobOrderId, string JobLabel,
@@ -410,18 +761,27 @@ else
         public double Percent => TotalCost <= 0 ? 0 : Math.Min(100, (double)(Paid * 100 / TotalCost));
         public bool HasSchedule => Stages.Any(s => s.PaymentId != null);
         public int PaidSteps => Stages.Count(s => s.Status == PaymentStatus.Paid);
+
+        /// <summary>Đủ điều kiện lưu trữ: đã tạo lịch VÀ kế toán duyệt xong cả 4 bước.</summary>
+        public bool IsFullyPaid => HasSchedule && PaymentPostingRules.CanArchiveSchedule(
+            Stages.Where(s => s.Status is not null).Select(s => (s.Stage, s.Status!.Value)));
     }
 
     private List<PaymentRow> _payments = new();
     private List<Expense> _expenses = new();
     private List<ReceiptRow> _receipts = new();
     private List<ProgressRow> _progress = new();
+    private List<PaymentGroupRow> _archivedGroups = new();
+    private List<ReceiptRow> _archivedReceipts = new();
     private string _progressSearch = "";
+    private string _paymentSearch = "";
+    private string _receiptSearch = "";
     private HashSet<Guid> _receiptPaymentIds = new();
     private HashSet<Guid> _receiptExpenseIds = new();
     private decimal _totalPaid, _totalPending, _totalExpense;
     private bool _canUpdatePayment, _canUpdateExpense, _canRecordPayment, _canCreatePayment;
     private bool _canCreateReceipt, _canReadReceipt;
+    private bool _canArchivePayment, _canArchiveReceipt;
     private bool _selfScoped;
     private Guid? _ownedCandidateId;
 
@@ -442,6 +802,9 @@ else
         _canRecordPayment = await CanRecordPayment();
         _canCreateReceipt = await HasPermission("receipts:create");
         _canReadReceipt = await HasPermission("receipts:read");
+        // Lưu trữ = thao tác sửa dữ liệu (ẩn/hiện), không phải chỉ đọc → dùng đúng quyền update.
+        _canArchivePayment = !_selfScoped && _canUpdatePayment;
+        _canArchiveReceipt = !_selfScoped && await HasPermission("receipts:update");
         await Load();
     }
 
@@ -503,24 +866,17 @@ else
         var p = await db.Payments.FirstOrDefaultAsync(x => x.Id == id);
         if (p is null) return;
         var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
-        var oldValue = new
+        var posting = await PaymentPostingService.MarkPaidAsync(db, p, actorId);
+        if (!posting.Succeeded)
         {
-            p.Status,
-            p.PaidDate,
-            p.ApprovedBy,
-        };
-        p.ApprovedBy = actorId;
-        p.Status = PaymentStatus.Paid;
-        p.PaidDate ??= DateOnly.FromDateTime(DateTime.UtcNow);
-        p.UpdatedAt = DateTimeOffset.UtcNow;
-        db.AddAudit(actorId, "approve", "payments", p.Id, oldValue, new
-        {
-            p.Status,
-            p.PaidDate,
-            p.ApprovedBy,
-        });
-        await db.SaveChangesAsync();
-        Snackbar.Add("Đã duyệt & ghi nhận khoản thu", Severity.Success);
+            Snackbar.Add(posting.Error!, Severity.Warning);
+            return;
+        }
+        Snackbar.Add(posting.ReceiptCode is null
+            ? "Đã duyệt & ghi nhận khoản thu"
+            : $"Đã duyệt khoản thu và lập phiếu thu {posting.ReceiptCode} — vào tab “Phiếu thu/chi” để in.", Severity.Success);
+        if (posting.NewCommissions > 0)
+            Snackbar.Add($"Đã phát sinh {posting.NewCommissions} lát hoa hồng cho đại lý.", Severity.Info);
         await Load();
     }
 
@@ -540,13 +896,29 @@ else
             .Where(p => eligibleCandidateIds.Contains(p.CandidateId))
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync();
-        _payments = payments.Select(p => new PaymentRow(
-            p.Id, p.Code, names.GetValueOrDefault(p.CandidateId, "—"),
-            p.PaymentType, p.Amount, p.Status, p.DueDate)).ToList();
+
+        PaymentRow ToRow(Payment p) => new(
+            p.Id, p.CandidateId, p.Code, names.GetValueOrDefault(p.CandidateId, "—"),
+            p.PaymentType, p.Amount, p.Status, p.DueDate, p.Stage);
+
+        // Đã lưu trữ = ẩn khỏi bảng làm việc, KHÔNG trừ khỏi tổng tiền (xem FinanceArchiveService).
+        var active = payments.Where(p => p.ArchivedAt is null).ToList();
+        _payments = active.Select(ToRow).ToList();
+        _archivedGroups = payments
+            .Where(p => p.ArchivedAt is not null && p.Stage is not null)
+            .Select(ToRow)
+            .GroupBy(p => (p.CandidateId, p.CandidateName))
+            .Select(g => new PaymentGroupRow(g.Key.CandidateId, g.Key.CandidateName,
+                g.OrderBy(p => (int)p.Stage!.Value).ToList()))
+            .OrderBy(g => g.CandidateName)
+            .ToList();
+
         _expenses = await db.Expenses.OrderByDescending(e => e.ExpenseDate).ToListAsync();
 
         _totalPaid = payments.Where(p => p.Status == PaymentStatus.Paid).Sum(p => p.Amount);
-        _totalPending = payments.Where(p => p.Status is PaymentStatus.Pending or PaymentStatus.Partial or PaymentStatus.Overdue).Sum(p => p.Amount);
+        _totalPending = payments
+            .Where(p => p.Status is PaymentStatus.Pending or PaymentStatus.Partial or PaymentStatus.Overdue or PaymentStatus.Submitted)
+            .Sum(p => p.Amount);
         _totalExpense = _expenses.Sum(e => e.Amount);
 
         var receipts = await db.Receipts
@@ -554,18 +926,27 @@ else
             .OrderByDescending(r => r.ReceiptDate)
             .ThenByDescending(r => r.CreatedAt)
             .ToListAsync();
-        _receipts = receipts.Select(r => new ReceiptRow(
-            r.Id, r.Code, r.ReceiptType,
+
+        ReceiptRow ToReceiptRow(Receipt r) => new(
+            r.Id, r.CandidateId, r.Code, r.ReceiptType,
             r.CandidateId is not null ? names.GetValueOrDefault(r.CandidateId.Value, "—") : "—",
-            r.Amount, r.ReceiptDate, r.Description)).ToList();
+            r.Amount, r.ReceiptDate, r.Description);
+
+        _receipts = receipts.Where(r => r.ArchivedAt is null).Select(ToReceiptRow).ToList();
+        _archivedReceipts = receipts.Where(r => r.ArchivedAt is not null).Select(ToReceiptRow).ToList();
         _receiptPaymentIds = receipts.Where(r => r.PaymentId is not null).Select(r => r.PaymentId!.Value).ToHashSet();
         _receiptExpenseIds = receipts.Where(r => r.ExpenseId is not null).Select(r => r.ExpenseId!.Value).ToHashSet();
 
-        await LoadProgress(db, payments);
+        var archivedCandidates = payments
+            .Where(p => p.ArchivedAt is not null && p.Stage is not null)
+            .Select(p => p.CandidateId)
+            .ToHashSet();
+
+        await LoadProgress(db, active, archivedCandidates);
     }
 
     // Tiến độ đóng tiền: mỗi ứng viên đã xếp vào đơn hàng → tổng phải đóng = chi phí đơn hàng, chia 4 bước.
-    private async Task LoadProgress(ApplicationDbContext db, List<Payment> allPayments)
+    private async Task LoadProgress(ApplicationDbContext db, List<Payment> allPayments, HashSet<Guid> archivedCandidates)
     {
         var candInfo = await db.Candidates.ToDictionaryAsync(c => c.Id, c => new { c.FullName, c.Code });
         var jobInfo = await db.JobOrders.ToDictionaryAsync(j => j.Id,
@@ -580,6 +961,9 @@ else
             .GroupBy(a => a.CandidateId)
             .Select(g => g.First())
             .Where(a => a.CurrentStep >= WorkflowStep.Deposit)
+            // Ứng viên đã đưa lịch đóng tiền vào kho lưu trữ thì biến mất khỏi Tiến độ (cùng lúc với Khoản thu),
+            // nếu không sẽ hiện lại như "chưa tạo lịch" và mời tạo lịch lần hai.
+            .Where(a => !archivedCandidates.Contains(a.CandidateId))
             .ToList();
 
         var stageByCandidate = allPayments
@@ -656,44 +1040,93 @@ else
         await Load();
     }
 
-    // Đánh dấu 1 bước đã đóng (ghi nhận khoản thu Paid).
-    private async Task MarkStagePaid(Guid paymentId)
+    /// <summary>
+    /// Tiến độ đóng tiền: xác nhận ứng viên ĐÃ NỘP tiền bước này — KHÔNG duyệt thay kế toán.
+    /// Khoản thu chuyển sang "Đã nộp — chờ duyệt"; kế toán vào tab Khoản thu bấm Duyệt mới hạch toán
+    /// và mới sinh phiếu thu + hoa hồng.
+    /// </summary>
+    private async Task MarkStageSubmitted(Guid paymentId)
     {
         if (!await CanRecordPayment()) { Snackbar.Add("Bạn không có quyền ghi nhận khoản thu.", Severity.Warning); return; }
         await using var db = await DbFactory.CreateDbContextAsync();
         var p = await db.Payments.FirstOrDefaultAsync(x => x.Id == paymentId);
         if (p is null) return;
-
-        // Ép đóng TUẦN TỰ: không cho đóng bước này nếu còn bước trước (số nhỏ hơn) chưa đóng.
-        if (p.Stage is PaymentStage stage)
+        var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+        var posting = await PaymentPostingService.MarkSubmittedAsync(db, p, actorId);
+        if (!posting.Succeeded)
         {
-            var siblings = await db.Payments
-                .Where(x => x.CandidateId == p.CandidateId && x.Stage != null)
-                .Select(x => new { x.Stage, x.Status })
-                .ToListAsync();
-            if (siblings.Any(x => (int)x.Stage!.Value < (int)stage && x.Status != PaymentStatus.Paid))
-            {
-                Snackbar.Add("Phải đóng các bước trước theo thứ tự 1 → 4.", Severity.Warning);
-                return;
-            }
+            Snackbar.Add(posting.Error!, Severity.Warning);
+            return;
         }
 
-        var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
-        var oldValue = new { p.Status, p.PaidDate, p.ApprovedBy };
-        p.ApprovedBy = actorId;
-        p.Status = PaymentStatus.Paid;
-        p.PaidDate ??= DateOnly.FromDateTime(DateTime.UtcNow);
-        p.UpdatedAt = DateTimeOffset.UtcNow;
-        db.AddAudit(actorId, "approve", "payments", p.Id, oldValue, new { p.Status, p.PaidDate, p.ApprovedBy });
-        await db.SaveChangesAsync();
-
-        // Chia hoa hồng theo giai đoạn đóng tiền: giai đoạn vừa đóng có thể kích hoạt 1 lát hoa hồng.
-        var newCommissions = await Polymind.Web.Commissions.CommissionEngine.EnsureAsync(db, p.CandidateId, actorId);
-        if (newCommissions > 0) await db.SaveChangesAsync();
-
-        Snackbar.Add($"Đã ghi nhận {(p.Stage is PaymentStage st ? Labels.Vi(st) : "khoản thu")}", Severity.Success);
-        if (newCommissions > 0) Snackbar.Add($"Đã phát sinh {newCommissions} lát hoa hồng cho đại lý.", Severity.Info);
+        var what = p.Stage is PaymentStage st ? PaymentSchedule.StepLabel(st) : "khoản thu";
+        Snackbar.Add($"Đã ghi nhận ứng viên nộp {what}. Kế toán duyệt ở tab “Khoản thu”.", Severity.Success);
         await Load();
+    }
+
+    // ===== Kho lưu trữ — chỉ ẩn khỏi bảng làm việc, không xóa và không miễn nợ (xem FinanceArchiveService) =====
+
+    private async Task ArchiveSchedule(Guid candidateId, string candidateName)
+    {
+        if (!await HasPermission("payments:update")) { Snackbar.Add("Bạn không có quyền lưu trữ khoản thu.", Severity.Warning); return; }
+        if (!await Confirm($"Đưa toàn bộ khoản thu của {candidateName} vào kho lưu trữ?",
+                "Khoản thu sẽ ẩn khỏi Tiến độ đóng tiền và Khoản thu. Phiếu thu/chi KHÔNG bị ảnh hưởng. Khôi phục lại được bất cứ lúc nào."))
+            return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+        var result = await FinanceArchiveService.ArchiveScheduleAsync(db, candidateId, actorId);
+        if (!result.Succeeded) { Snackbar.Add(result.Error!, Severity.Warning); return; }
+
+        Snackbar.Add($"Đã lưu trữ {result.Affected} khoản thu của {candidateName}.", Severity.Success);
+        await Load();
+    }
+
+    private async Task RestoreSchedule(Guid candidateId, string candidateName)
+    {
+        if (!await HasPermission("payments:update")) { Snackbar.Add("Bạn không có quyền khôi phục khoản thu.", Severity.Warning); return; }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+        var result = await FinanceArchiveService.RestoreScheduleAsync(db, candidateId, actorId);
+        if (!result.Succeeded) { Snackbar.Add(result.Error!, Severity.Warning); return; }
+
+        Snackbar.Add($"Đã khôi phục khoản thu của {candidateName}.", Severity.Success);
+        await Load();
+    }
+
+    private async Task ArchiveReceipts(List<Guid> receiptIds, string label)
+    {
+        if (!await HasPermission("receipts:update")) { Snackbar.Add("Bạn không có quyền lưu trữ phiếu.", Severity.Warning); return; }
+        if (!await Confirm($"Đưa phiếu của {label} vào kho lưu trữ?",
+                "Phiếu sẽ ẩn khỏi tab Phiếu thu/chi nhưng vẫn in được từ kho lưu trữ, và khôi phục lại được."))
+            return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+        var result = await FinanceArchiveService.ArchiveReceiptsAsync(db, receiptIds, actorId);
+        if (!result.Succeeded) { Snackbar.Add(result.Error!, Severity.Warning); return; }
+
+        Snackbar.Add($"Đã lưu trữ {result.Affected} phiếu.", Severity.Success);
+        await Load();
+    }
+
+    private async Task RestoreReceipts(List<Guid> receiptIds, string label)
+    {
+        if (!await HasPermission("receipts:update")) { Snackbar.Add("Bạn không có quyền khôi phục phiếu.", Severity.Warning); return; }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+        var result = await FinanceArchiveService.RestoreReceiptsAsync(db, receiptIds, actorId);
+        if (!result.Succeeded) { Snackbar.Add(result.Error!, Severity.Warning); return; }
+
+        Snackbar.Add($"Đã khôi phục phiếu {label}.", Severity.Success);
+        await Load();
+    }
+
+    private async Task<bool> Confirm(string title, string message)
+    {
+        var ok = await DialogService.ShowMessageBoxAsync(
+            title, message, yesText: "Đưa vào kho lưu trữ", cancelText: "Hủy");
+        return ok == true;
     }
 
     private async Task OpenCreatePayment()
