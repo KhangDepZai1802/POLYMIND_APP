@@ -9,7 +9,8 @@
 @inject IDialogService DialogService
 
 @* Panel quản lý tài khoản dùng chung cho trang "Tài khoản" (nhân sự nội bộ) và trang "Phụ huynh & Học sinh".
-   Chỉ tạo/hiển thị/đổi vai trò trong phạm vi ManagedRoles → 2 nhóm tài khoản không trộn lẫn được. *@
+   Chỉ tạo/hiển thị/đổi vai trò trong phạm vi ManagedRoles → 2 nhóm tài khoản không trộn lẫn được.
+   Trang Phụ huynh & Học sinh tắt ShowRoleManagement vì vai trò đã cố định theo tài khoản gắn ở hồ sơ ứng viên. *@
 
 @if (_loading)
 {
@@ -81,7 +82,10 @@ else
                                 <tr>
                                     <th>Email</th>
                                     <th>Họ tên</th>
-                                    <th>Chuyển vai trò</th>
+                                    @if (ShowRoleManagement)
+                                    {
+                                        <th>Chuyển vai trò</th>
+                                    }
                                     <th>Trạng thái</th>
                                     <th style="text-align:right">Thao tác</th>
                                 </tr>
@@ -92,23 +96,26 @@ else
                                     <tr>
                                         <td>@user.Email</td>
                                         <td>@user.FullName</td>
-                                        <td style="min-width:220px">
-                                            @if (IsRoleFixed(user))
-                                            {
-                                                <MudTooltip Text="@FixedRoleHint(user)">
-                                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" Icon="@Icons.Material.Filled.Lock">Cố định</MudChip>
-                                                </MudTooltip>
-                                            }
-                                            else
-                                            {
-                                                <MudSelect T="string" @bind-Value="user.SelectedRole" Dense="true" Margin="Margin.Dense">
-                                                    @foreach (var role in _assignableRoles)
-                                                    {
-                                                        <MudSelectItem Value="@(role.Name ?? "")">@RoleDisplay(role)</MudSelectItem>
-                                                    }
-                                                </MudSelect>
-                                            }
-                                        </td>
+                                        @if (ShowRoleManagement)
+                                        {
+                                            <td style="min-width:220px">
+                                                @if (IsRoleFixed(user))
+                                                {
+                                                    <MudTooltip Text="@FixedRoleHint(user)">
+                                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" Icon="@Icons.Material.Filled.Lock">Cố định</MudChip>
+                                                    </MudTooltip>
+                                                }
+                                                else
+                                                {
+                                                    <MudSelect T="string" @bind-Value="user.SelectedRole" Dense="true" Margin="Margin.Dense">
+                                                        @foreach (var role in _assignableRoles)
+                                                        {
+                                                            <MudSelectItem Value="@(role.Name ?? "")">@RoleDisplay(role)</MudSelectItem>
+                                                        }
+                                                    </MudSelect>
+                                                }
+                                            </td>
+                                        }
                                         <td>
                                             <MudChip T="string" Size="Size.Small" Color="@(user.IsActive ? Color.Success : Color.Error)">
                                                 @(user.IsActive ? "Đang hoạt động" : "Đã khóa")
@@ -126,7 +133,7 @@ else
                                             </AuthorizeView>
                                             <AuthorizeView Policy="users:update">
                                                 <Authorized>
-                                                    @if (!IsRoleFixed(user))
+                                                    @if (ShowRoleManagement && !IsRoleFixed(user))
                                                     {
                                                         <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => SaveUserRoleAsync(user))">Lưu role</MudButton>
                                                     }
@@ -154,11 +161,11 @@ else
                                 </div>
                                 <MudChip T="string" Size="Size.Small" Color="@(user.IsActive ? Color.Success : Color.Error)">@(user.IsActive ? "Đang hoạt động" : "Đã khóa")</MudChip>
                             </div>
-                            @if (IsRoleFixed(user))
+                            @if (ShowRoleManagement && IsRoleFixed(user))
                             {
                                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" Icon="@Icons.Material.Filled.Lock" Class="mt-2">@FixedRoleHint(user)</MudChip>
                             }
-                            else
+                            else if (ShowRoleManagement)
                             {
                                 <MudSelect T="string" @bind-Value="user.SelectedRole" Dense="true" Margin="Margin.Dense" Label="Chuyển vai trò" Class="mt-2">
                                     @foreach (var role in _assignableRoles)
@@ -179,7 +186,7 @@ else
                                 </AuthorizeView>
                                 <AuthorizeView Policy="users:update">
                                     <Authorized>
-                                        @if (!IsRoleFixed(user))
+                                        @if (ShowRoleManagement && !IsRoleFixed(user))
                                         {
                                             <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => SaveUserRoleAsync(user))">Lưu role</MudButton>
                                         }
@@ -211,6 +218,9 @@ else
 
     /// <summary>Hiện card "Tạo tài khoản". Tắt ở trang Phụ huynh &amp; Học sinh (tạo trực tiếp ở chi tiết ứng viên).</summary>
     [Parameter] public bool ShowCreateForm { get; set; } = true;
+
+    /// <summary>Hiện cột/dropdown đổi vai trò và nút lưu role. Tắt khi vai trò tài khoản được cố định bởi luồng nghiệp vụ khác.</summary>
+    [Parameter] public bool ShowRoleManagement { get; set; } = true;
 
     private bool _loading = true;
     private List<UserRow> _users = new();
@@ -328,6 +338,12 @@ else
 
     private async Task SaveUserRoleAsync(UserRow row)
     {
+        if (!ShowRoleManagement)
+        {
+            Snackbar.Add("Trang này không cho phép chuyển vai trò tài khoản.", Severity.Warning);
+            return;
+        }
+
         var user = await UserManager.FindByIdAsync(row.Id.ToString());
         if (user is null || string.IsNullOrWhiteSpace(row.SelectedRole)) return;
 
