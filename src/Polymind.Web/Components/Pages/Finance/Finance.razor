@@ -334,24 +334,11 @@ else
                         <TemplateColumn Title="Ngày chi">
                             <CellTemplate>@context.Item.ExpenseDate.ToString("dd/MM/yyyy")</CellTemplate>
                         </TemplateColumn>
+                        <TemplateColumn Title="Duyệt chi">
+                            <CellTemplate>@ExpenseApprovalChip(context.Item)</CellTemplate>
+                        </TemplateColumn>
                         <TemplateColumn Title="" Sortable="false">
-                            <CellTemplate>
-                                @if (_canCreateReceipt)
-                                {
-                                    @if (_receiptExpenseIds.Contains(context.Item.Id))
-                                    {
-                                        <MudTooltip Text="Đã có phiếu chi"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Success" Size="Size.Small" Class="mx-1" /></MudTooltip>
-                                    }
-                                    else
-                                    {
-                                        <MudButton Size="Size.Small" Color="Color.Info" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ReceiptLong" OnClick="@(() => CreateReceiptForExpense(context.Item))">Phiếu chi</MudButton>
-                                    }
-                                }
-                                @if (_canUpdateExpense)
-                                {
-                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditExpense(context.Item.Id))" />
-                                }
-                            </CellTemplate>
+                            <CellTemplate>@ExpenseActions(context.Item)</CellTemplate>
                         </TemplateColumn>
                     </Columns>
                     <PagerContent><MudDataGridPager T="Expense" /></PagerContent>
@@ -378,22 +365,11 @@ else
                                 </div>
                                 <MudText Typo="Typo.subtitle2" Style="font-weight:600">@($"{e.Amount:N0} đ")</MudText>
                             </div>
-                            <div class="d-flex flex-wrap justify-end mt-1" style="gap:4px">
-                                @if (_canCreateReceipt)
-                                {
-                                    @if (_receiptExpenseIds.Contains(e.Id))
-                                    {
-                                        <MudTooltip Text="Đã có phiếu chi"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Success" Size="Size.Small" Class="mx-1" /></MudTooltip>
-                                    }
-                                    else
-                                    {
-                                        <MudButton Size="Size.Small" Color="Color.Info" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ReceiptLong" OnClick="@(() => CreateReceiptForExpense(e))">Phiếu chi</MudButton>
-                                    }
-                                }
-                                @if (_canUpdateExpense)
-                                {
-                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditExpense(e.Id))" />
-                                }
+                            <div class="d-flex flex-wrap justify-space-between align-center mt-1" style="gap:4px">
+                                @ExpenseApprovalChip(e)
+                                <div class="d-flex flex-wrap align-center" style="gap:4px">
+                                    @ExpenseActions(e)
+                                </div>
                             </div>
                         </MudPaper>
                     }
@@ -648,6 +624,55 @@ else
         }
     </div>;
 
+    /// <summary>Trạng thái duyệt của một khoản chi (RB-7): chờ duyệt hoặc đã duyệt + tên người duyệt.</summary>
+    private RenderFragment ExpenseApprovalChip(Expense e) =>@<span>
+        @if (ExpenseApprovalRules.IsApproved(e))
+        {
+            <MudTooltip Text="@($"Người duyệt: {_userNames.GetValueOrDefault(e.ApprovedBy!.Value, "—")}")">
+                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text"
+                         Icon="@Icons.Material.Filled.Verified">Đã duyệt</MudChip>
+            </MudTooltip>
+        }
+        else
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text"
+                     Icon="@Icons.Material.Filled.HourglassEmpty">Chờ duyệt</MudChip>
+        }
+    </span>;
+
+    /// <summary>Thao tác trên một khoản chi (Duyệt / Phiếu chi / Sửa) — dùng chung desktop + mobile.</summary>
+    private RenderFragment ExpenseActions(Expense e) =>@<span class="d-flex flex-wrap align-center justify-end" style="gap:2px">
+        @if (_canApproveExpense && ExpenseApprovalRules.CanApprove(e))
+        {
+            <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Text"
+                       StartIcon="@Icons.Material.Filled.Check" OnClick="@(() => ApproveExpense(e.Id))">Duyệt</MudButton>
+        }
+        @if (_canCreateReceipt)
+        {
+            @if (_receiptExpenseIds.Contains(e.Id))
+            {
+                <MudTooltip Text="Đã có phiếu chi">
+                    <MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Success" Size="Size.Small" Class="mx-1" />
+                </MudTooltip>
+            }
+            else if (ExpenseApprovalRules.CanCreateReceipt(e))
+            {
+                <MudButton Size="Size.Small" Color="Color.Info" Variant="Variant.Text"
+                           StartIcon="@Icons.Material.Filled.ReceiptLong" OnClick="@(() => CreateReceiptForExpense(e))">Phiếu chi</MudButton>
+            }
+            else
+            {
+                <MudTooltip Text="Phải duyệt khoản chi trước khi xuất phiếu chi">
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Default" Size="Size.Small" Class="mx-1" />
+                </MudTooltip>
+            }
+        }
+        @if (_canUpdateExpense)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditExpense(e.Id))" />
+        }
+    </span>;
+
     /// <summary>Tooltip cho bước bị khóa ở stepper Tiến độ: nêu đích danh bước ứng viên chưa nộp.</summary>
     private static string BlockedStageHint(ProgressRow row, PaymentStage stage)
     {
@@ -779,7 +804,8 @@ else
     private HashSet<Guid> _receiptPaymentIds = new();
     private HashSet<Guid> _receiptExpenseIds = new();
     private decimal _totalPaid, _totalPending, _totalExpense;
-    private bool _canUpdatePayment, _canUpdateExpense, _canRecordPayment, _canCreatePayment;
+    private Dictionary<Guid, string> _userNames = new();
+    private bool _canUpdatePayment, _canUpdateExpense, _canRecordPayment, _canCreatePayment, _canApproveExpense;
     private bool _canCreateReceipt, _canReadReceipt;
     private bool _canArchivePayment, _canArchiveReceipt;
     private bool _selfScoped;
@@ -799,6 +825,7 @@ else
         _canUpdatePayment = await HasPermission("payments:update");
         _canCreatePayment = await HasPermission("payments:create");
         _canUpdateExpense = await HasPermission("expenses:update");
+        _canApproveExpense = await HasPermission("expenses:approve");
         _canRecordPayment = await CanRecordPayment();
         _canCreateReceipt = await HasPermission("receipts:create");
         _canReadReceipt = await HasPermission("receipts:read");
@@ -836,10 +863,38 @@ else
         await Load();
     }
 
+    /// <summary>
+    /// Duyệt khoản chi (RB-7). Kiểm quyền + đọc lại từ DB để không duyệt trên dữ liệu cũ trên màn hình.
+    /// </summary>
+    private async Task ApproveExpense(Guid id)
+    {
+        if (!await HasPermission("expenses:approve")) { Snackbar.Add("Bạn không có quyền duyệt khoản chi.", Severity.Warning); return; }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var e = await db.Expenses.FirstOrDefaultAsync(x => x.Id == id);
+        if (e is null) { Snackbar.Add("Không tìm thấy khoản chi.", Severity.Error); await Load(); return; }
+        if (!ExpenseApprovalRules.CanApprove(e)) { Snackbar.Add("Khoản chi này đã được duyệt.", Severity.Info); await Load(); return; }
+
+        var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
+        var oldValue = new { e.ApprovedBy };
+        ExpenseApprovalRules.Approve(e, actorId);
+        db.AddAudit(actorId, "approve", "expenses", e.Id, oldValue, new { e.ApprovedBy, e.Code, e.Amount });
+        await db.SaveChangesAsync();
+        Snackbar.Add($"Đã duyệt khoản chi {e.Code}", Severity.Success);
+        await Load();
+    }
+
     private async Task CreateReceiptForExpense(Expense expense)
     {
         if (!await HasPermission("receipts:create")) { Snackbar.Add("Bạn không có quyền tạo phiếu chi.", Severity.Warning); return; }
         await using var db = await DbFactory.CreateDbContextAsync();
+        var current = await db.Expenses.FirstOrDefaultAsync(x => x.Id == expense.Id);
+        if (current is null) { Snackbar.Add("Không tìm thấy khoản chi.", Severity.Error); await Load(); return; }
+        if (!ExpenseApprovalRules.CanCreateReceipt(current))
+        {
+            Snackbar.Add("Khoản chi chưa được duyệt — không thể xuất phiếu chi.", Severity.Warning);
+            await Load();
+            return;
+        }
         if (await db.Receipts.AnyAsync(r => r.ExpenseId == expense.Id)) { Snackbar.Add("Khoản chi này đã có phiếu.", Severity.Info); await Load(); return; }
         var actorId = await AuthStateProvider.GetRequiredUserIdAsync(db);
         var receipt = new Receipt
@@ -914,6 +969,13 @@ else
             .ToList();
 
         _expenses = await db.Expenses.OrderByDescending(e => e.ExpenseDate).ToListAsync();
+
+        // Tên người duyệt khoản chi — chỉ nạp đúng các user đã duyệt, không kéo cả bảng users.
+        var approverIds = _expenses.Where(e => e.ApprovedBy is not null).Select(e => e.ApprovedBy!.Value).Distinct().ToList();
+        _userNames = approverIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await db.Users.Where(u => approverIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => string.IsNullOrWhiteSpace(u.FullName) ? u.Email! : u.FullName);
 
         _totalPaid = payments.Where(p => p.Status == PaymentStatus.Paid).Sum(p => p.Amount);
         _totalPending = payments

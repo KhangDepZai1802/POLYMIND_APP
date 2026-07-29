@@ -1,6 +1,6 @@
-# Caddy reverse proxy cho profile DuckDNS — tự xin/gia hạn Let's Encrypt.
+# Caddy reverse proxy cho domain thường hoặc DuckDNS — tự xin/gia hạn Let's Encrypt.
 # Biến lấy từ service caddy trong docker-compose.production.yml ({$DOMAIN}, {$ACME_EMAIL}).
-# Yêu cầu: bản ghi A của DOMAIN trỏ về public IP của công ty và đã port-forward 80/443.
+# Yêu cầu: bản ghi A của DOMAIN trỏ về public IP Oracle VM và ingress 80/443 đã mở.
 
 {
 	email {$ACME_EMAIL}

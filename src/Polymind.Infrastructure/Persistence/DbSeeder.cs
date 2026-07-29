@@ -122,6 +122,13 @@ public static class DbSeeder
     /// <summary>Quyền nhắn tin nội bộ: ai cũng đọc + gửi được (phân quyền người-nhận xử lý ở tầng service/UI).</summary>
     private static string[] Messaging() => new[] { "messages:read", "messages:create" };
 
+    /// <summary>
+    /// CHỈ môi trường Development mới được seed 13 tài khoản mẫu dùng chung mật khẩu
+    /// <see cref="DefaultAdminPassword"/>. Production tạo duy nhất super admin thật từ biến môi trường.
+    /// Tách thành hàm có tên để test chốt hợp đồng — đổi nhầm nhánh này là lộ mật khẩu mặc định ra production.
+    /// </summary>
+    public static bool ShouldSeedSampleUsers(bool isDevelopment) => isDevelopment;
+
     public static async Task SeedAsync(IServiceProvider sp)
     {
         using var scope = sp.CreateScope();
@@ -160,7 +167,7 @@ public static class DbSeeder
 
         // 4) Tài khoản.
         var env = s.GetRequiredService<IHostEnvironment>();
-        if (env.IsDevelopment())
+        if (ShouldSeedSampleUsers(env.IsDevelopment()))
         {
             // Dev: seed đủ 8 tài khoản mẫu (mật khẩu chung Admin@123) cho demo/test RBAC.
             foreach (var seedUser in SeedUsers)

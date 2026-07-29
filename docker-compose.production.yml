@@ -1,8 +1,16 @@
+# Giới hạn log Docker để không đầy ổ VPS sau vài tháng chạy 24/7.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
     image: postgres:16-alpine
     container_name: polymind-prod-postgres
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -19,6 +27,7 @@ services:
     image: minio/minio:latest
     container_name: polymind-prod-minio
     restart: unless-stopped
+    logging: *default-logging
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
@@ -31,22 +40,17 @@ services:
       timeout: 5s
       retries: 10
 
-  redis:
-    image: redis:7-alpine
-    container_name: polymind-prod-redis
-    restart: unless-stopped
-    volumes:
-      - prod_redisdata:/data
-
   web:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: polymind-prod-web
     restart: unless-stopped
+    logging: *default-logging
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
+      DataProtection__KeysPath: /app/data-protection-keys
       ConnectionStrings__Default: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
       Jwt__Key: ${JWT_KEY}
       # Super admin thật cho production (KHÔNG có tài khoản mẫu Admin@123 ở Production).
@@ -73,9 +77,10 @@ services:
         condition: service_healthy
     volumes:
       - prod_weblogs:/app/logs
+      - prod_dataprotection:/app/data-protection-keys
 
   # Reverse proxy — chọn 1 trong 2 bằng --profile:
-  #   --profile caddy : Caddy tự cấp Let's Encrypt qua DuckDNS (khuyến nghị, cần port-forward 80/443).
+  #   --profile caddy : Caddy tự cấp Let's Encrypt cho DOMAIN (khuyến nghị, cần mở ingress 80/443).
   #   --profile nginx : Nginx với cert thủ công trong deploy/nginx/certs (fallback/legacy).
   nginx:
     image: nginx:1.27-alpine
@@ -95,6 +100,7 @@ services:
     image: caddy:2-alpine
     container_name: polymind-prod-caddy
     restart: unless-stopped
+    logging: *default-logging
     profiles: ["caddy"]
     ports:
       - "80:80"
@@ -124,7 +130,7 @@ services:
 volumes:
   prod_pgdata:
   prod_miniodata:
-  prod_redisdata:
   prod_weblogs:
+  prod_dataprotection:
   prod_caddydata:
   prod_caddyconfig:

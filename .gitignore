@@ -17,6 +17,7 @@ scripts/.render-db-url.txt
 appsettings.*.Local.json
 logs/
 db-backups/
+artifacts/
 deploy/nginx/certs/*
 !deploy/nginx/certs/.gitkeep
 

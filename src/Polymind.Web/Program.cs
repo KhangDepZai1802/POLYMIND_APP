@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
@@ -44,6 +45,18 @@ builder.Host.UseSerilog((context, services, logger) => logger
         "logs/polymind-.log",
         rollingInterval: RollingInterval.Day,
         retainedFileCountLimit: 14));
+
+// Giữ cookie đăng nhập/antiforgery hợp lệ sau khi container restart hoặc redeploy.
+// Production mount một Docker volume vào đường dẫn này; local/dev tiếp tục dùng key ring mặc định.
+var dataProtectionBuilder = builder.Services
+    .AddDataProtection()
+    .SetApplicationName("POLYMIND");
+var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
+if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+{
+    Directory.CreateDirectory(dataProtectionKeysPath);
+    dataProtectionBuilder.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
+}
 
 // Blazor (Interactive Server)
 builder.Services.AddRazorComponents()
@@ -119,6 +132,26 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
             }));
+
+    // Form đăng nhập WEB (`POST /login`) render tĩnh nên là một endpoint HTTP thật → chặn dò mật khẩu
+    // được ở đây. Hạn mức nới hơn API (30/phút/IP) vì cả văn phòng thường dùng chung một IP NAT và
+    // hay đăng nhập cùng lúc đầu giờ; brute force cần hàng nghìn lượt nên vẫn bị chặn.
+    // Mọi request khác trả NoLimiter để không ảnh hưởng Blazor/SignalR.
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+    {
+        if (!HttpMethods.IsPost(httpContext.Request.Method)
+            || !httpContext.Request.Path.StartsWithSegments("/login"))
+            return RateLimitPartition.GetNoLimiter("unlimited");
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            });
+    });
 });
 
 builder.Services.ConfigureApplicationCookie(options =>
@@ -213,6 +246,26 @@ app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 app.UseRateLimiter();
 app.UseSerilogRequestLogging();
+// Content-Security-Policy: chặn XSS/chèn script lạ. Để trong config (Security:ContentSecurityPolicy)
+// để production siết/nới được bằng biến môi trường mà không phải build lại; đặt rỗng = tắt hẳn.
+//   script-src 'self'        — toàn bộ script là file tĩnh, KHÔNG có inline script nào (đã rà App.razor).
+//   style-src 'unsafe-inline'— MudBlazor đặt style trực tiếp trên element, bắt buộc phải cho.
+//   blob:/data:              — nghe lại ghi âm tin nhắn thoại + xem trước ảnh giấy tờ đã upload.
+//   ws:/wss:                 — SignalR circuit của Blazor Server.
+//   fonts.googleapis/gstatic — font Roboto nạp từ Google Fonts trong App.razor.
+var contentSecurityPolicy = builder.Configuration["Security:ContentSecurityPolicy"] ?? string.Join("; ",
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'self'",
+    "form-action 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "img-src 'self' data: blob:",
+    "media-src 'self' data: blob:",
+    "connect-src 'self' ws: wss:");
+
 app.Use(async (context, next) =>
 {
     context.Response.Headers.TryAdd("X-Content-Type-Options", "nosniff");
@@ -220,6 +273,8 @@ app.Use(async (context, next) =>
     context.Response.Headers.TryAdd("Referrer-Policy", "strict-origin-when-cross-origin");
     // Cho phép MICRO cùng origin (self) để ghi âm tin nhắn thoại; camera/định vị vẫn chặn.
     context.Response.Headers.TryAdd("Permissions-Policy", "camera=(), microphone=(self), geolocation=()");
+    if (!string.IsNullOrWhiteSpace(contentSecurityPolicy))
+        context.Response.Headers.TryAdd("Content-Security-Policy", contentSecurityPolicy);
     await next();
 });
 

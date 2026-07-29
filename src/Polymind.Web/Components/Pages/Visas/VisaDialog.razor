@@ -3,6 +3,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ISnackbar Snackbar
 @using Polymind.Domain.Visas
+@using Polymind.Web.Auditing
 
 <MudDialog>
     <DialogContent>
@@ -121,6 +122,7 @@
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
+            var auditActorId = await AuthStateProvider.GetUserIdAsync();
             if (IsEdit)
             {
                 var v = await db.Visas.FirstOrDefaultAsync(x => x.Id == VisaId);
@@ -129,8 +131,10 @@
                     Snackbar.Add("Không tìm thấy hồ sơ visa.", Severity.Error);
                     return;
                 }
+                var before = Snapshot(v);
                 _m.ApplyTo(v);
                 v.UpdatedAt = DateTimeOffset.UtcNow;
+                db.AddAudit(auditActorId, "update", "visas", v.Id, before, Snapshot(v));
             }
             else
             {
@@ -138,6 +142,7 @@
                 var v = VisaFlightCreationRules.CreateVisa(actorId);
                 _m.ApplyTo(v);
                 db.Visas.Add(v);
+                db.AddAudit(auditActorId, "create", "visas", v.Id, null, Snapshot(v));
             }
             await db.SaveChangesAsync();
         }
@@ -155,6 +160,16 @@
         var result = await AuthorizationService.AuthorizeAsync(authState.User, null, permission);
         return result.Succeeded;
     }
+
+    /// <summary>Ảnh chụp các trường nghiệp vụ để ghi audit trước/sau.</summary>
+    private static VisaSnapshot Snapshot(Visa v) => new(
+        v.CandidateId, v.JobOrderId, v.Country, v.VisaType, v.Status,
+        v.SubmittedDate, v.InterviewDate, v.ResultDate, v.RejectionReason, v.Notes);
+
+    private sealed record VisaSnapshot(
+        Guid CandidateId, Guid JobOrderId, string Country, string? VisaType, VisaStatus Status,
+        DateOnly? SubmittedDate, DateOnly? InterviewDate, DateOnly? ResultDate,
+        string? RejectionReason, string? Notes);
 
     private sealed class FormModel
     {

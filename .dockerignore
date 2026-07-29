@@ -1,14 +1,14 @@
-.git/
-.vs/
-.idea/
-.claude/
-bin/
-obj/
-logs/
-db-backups/
-*.user
-*.env
-.env
-appsettings.*.Local.json
-deploy/nginx/certs/*
-!deploy/nginx/certs/.gitkeep
+# Image production chỉ cần solution, project và mã nguồn.
+# Allowlist này tránh gửi .qa, tài liệu, backup và file cá nhân nhiều GB vào Docker daemon.
+**
+!Dockerfile
+!Polymind.slnx
+!src/
+!src/**
+
+# Loại tiếp output/tệp kiểm chứng nằm bên trong src.
+src/**/bin/
+src/**/obj/
+src/**/logs/
+src/**/tmppolymind-*/
+src/**/appsettings.*.Local.json

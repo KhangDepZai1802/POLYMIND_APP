@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>POLYMIND - Báo cáo triển khai từ bản phát triển đến vận hành thật</title>
+  <style>
+    :root{
+      --blue:#0967c5; --blue2:#0ea5e9; --navy:#0b1f3a; --ink:#172033;
+      --muted:#627087; --line:#dbe5ef; --paper:#ffffff; --soft:#f4f8fc;
+      --orange:#f58220; --green:#16845b; --amber:#b76700; --red:#bd3b3b;
+    }
+    *{box-sizing:border-box}
+    @page{size:A4;margin:0}
+    html,body{margin:0;padding:0;background:#eaf0f6;color:var(--ink);font-family:"Segoe UI",Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    body{font-size:10.2pt;line-height:1.38}
+    .page{width:210mm;height:297mm;margin:0 auto 8mm;background:var(--paper);position:relative;overflow:hidden;padding:17mm 17mm 15mm 17mm;page-break-after:always}
+    .page:last-child{page-break-after:auto}
+    .cover{padding:0;background:linear-gradient(145deg,#071a34 0%,#0a4e91 58%,#0ea5e9 100%);color:#fff}
+    .cover:before{content:"";position:absolute;width:150mm;height:150mm;border-radius:50%;border:1px solid rgba(255,255,255,.12);right:-42mm;top:-45mm}
+    .cover:after{content:"";position:absolute;width:92mm;height:92mm;border-radius:50%;background:rgba(245,130,32,.18);right:-20mm;bottom:-20mm}
+    .cover-inner{position:relative;z-index:2;height:100%;padding:22mm 20mm;display:flex;flex-direction:column}
+    .brandbar{display:flex;align-items:center;justify-content:space-between}
+    .logo-box{width:55mm;height:28mm;background:#fff;border-radius:4mm;padding:1mm 3mm;display:flex;align-items:center;box-shadow:0 5px 20px rgba(0,0,0,.16)}
+    .logo-box{overflow:hidden}
+    .logo-box img{width:100%;height:100%;object-fit:cover;object-position:center 50%}
+    .confidential{font-size:8.2pt;letter-spacing:.14em;text-transform:uppercase;color:#cfe9ff;border:1px solid rgba(255,255,255,.35);padding:2mm 3mm;border-radius:20mm}
+    .cover-main{margin-top:40mm;max-width:160mm}
+    .eyebrow{font-weight:700;color:#9edcff;text-transform:uppercase;letter-spacing:.13em;font-size:9pt;margin-bottom:6mm}
+    .cover h1{font-size:29pt;line-height:1.08;margin:0 0 8mm;font-weight:800;letter-spacing:-.03em}
+    .cover .subtitle{font-size:14pt;line-height:1.45;color:#e6f5ff;max-width:145mm}
+    .cover-strip{margin-top:18mm;border-left:1.5mm solid var(--orange);padding:2mm 0 2mm 6mm;font-size:11pt;color:#fff}
+    .cover-meta{margin-top:auto;display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:6mm;padding-top:8mm;border-top:1px solid rgba(255,255,255,.25);font-size:8.6pt;color:#cfe3f6}
+    .cover-meta strong{display:block;color:#fff;font-size:9.5pt;margin-bottom:1mm}
+    .page-head{display:flex;align-items:center;justify-content:space-between;padding-bottom:4mm;border-bottom:.6mm solid var(--navy);margin-bottom:6mm}
+    .page-head .kicker{font-size:8.4pt;font-weight:800;letter-spacing:.12em;color:var(--blue);text-transform:uppercase}
+    .page-head .section{font-size:8.4pt;color:var(--muted)}
+    .footer{position:absolute;left:17mm;right:17mm;bottom:7mm;border-top:.25mm solid var(--line);padding-top:2.5mm;display:flex;justify-content:space-between;color:#718096;font-size:7.8pt}
+    h2{font-size:22pt;line-height:1.15;letter-spacing:-.025em;color:var(--navy);margin:0 0 4mm}
+    h3{font-size:13pt;color:var(--navy);margin:0 0 2.5mm}
+    h4{font-size:10.6pt;color:var(--navy);margin:0 0 1.5mm}
+    p{margin:0 0 3mm}
+    .lead{font-size:12.3pt;line-height:1.46;color:#33445c;margin-bottom:6mm}
+    .small{font-size:8.4pt;color:var(--muted)}
+    .tiny{font-size:7.6pt;color:var(--muted)}
+    .muted{color:var(--muted)}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:5mm}
+    .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:4mm}
+    .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:3.5mm}
+    .card{border:.35mm solid var(--line);border-radius:3.5mm;padding:4mm;background:#fff;break-inside:avoid}
+    .card.soft{background:var(--soft);border-color:#d6e8f7}
+    .card.blue{background:#eef7ff;border-color:#bbdefb}
+    .card.orange{background:#fff5eb;border-color:#ffd4ad}
+    .card.green{background:#eefaf5;border-color:#bee7d5}
+    .card.red{background:#fff2f2;border-color:#f3caca}
+    .metric{font-size:23pt;font-weight:800;line-height:1;color:var(--blue);letter-spacing:-.04em}
+    .metric.orange{color:var(--orange)}
+    .metric.green{color:var(--green)}
+    .metric-label{font-size:8.5pt;color:var(--muted);margin-top:1.5mm}
+    .pill{display:inline-flex;align-items:center;gap:1.5mm;border-radius:20mm;padding:1.2mm 2.8mm;font-weight:700;font-size:8pt}
+    .pill.done{background:#daf4e7;color:#0e6b47}
+    .pill.wait{background:#fff0d7;color:#915500}
+    .pill.stop{background:#ffe1e1;color:#a62b2b}
+    .pill.info{background:#dceeff;color:#075aa9}
+    .dot{width:2mm;height:2mm;border-radius:50%;background:currentColor}
+    .callout{border-left:1.4mm solid var(--orange);background:#fff8f0;padding:3.5mm 4mm;border-radius:0 3mm 3mm 0}
+    .callout.blue{border-left-color:var(--blue);background:#f0f7ff}
+    .callout.green{border-left-color:var(--green);background:#eefaf5}
+    ul{margin:1.5mm 0 0;padding-left:5mm}
+    li{margin:0 0 1.5mm}
+    .clean{list-style:none;padding:0;margin:0}
+    .clean li{padding-left:5mm;position:relative;margin-bottom:2.2mm}
+    .clean li:before{content:"✓";position:absolute;left:0;color:var(--green);font-weight:800}
+    .toc{display:grid;grid-template-columns:1fr 1fr;gap:2.5mm 7mm;margin-top:4mm}
+    .toc div{display:flex;gap:2.5mm;align-items:flex-start;border-bottom:.25mm dotted #c6d1dc;padding:2.1mm 0}
+    .toc b{color:var(--blue);min-width:7mm}
+    .decision{display:grid;grid-template-columns:9mm 1fr;gap:3mm;align-items:start;margin-bottom:3.2mm}
+    .decision .n{width:8mm;height:8mm;border-radius:2.2mm;background:var(--navy);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center}
+    .architecture{margin-top:5mm;display:flex;align-items:center;justify-content:center;gap:3mm}
+    .arch-node{border:.4mm solid #c9d9e8;background:#fff;border-radius:3mm;padding:3.5mm;text-align:center;min-width:28mm}
+    .arch-node strong{display:block;color:var(--navy);margin-bottom:.5mm}
+    .arch-node.primary{background:linear-gradient(145deg,#0b64bd,#118bdb);color:#fff;border:none;min-width:37mm}
+    .arch-node.primary strong{color:#fff}
+    .arrow{color:var(--blue);font-size:16pt;font-weight:800}
+    .vps{margin-top:5mm;border:.55mm solid #9cc9ed;background:#f4faff;border-radius:4mm;padding:5mm;position:relative}
+    .vps-title{font-size:9pt;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3mm}
+    .vps-grid{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:3mm}
+    .vps-box{background:#fff;border:.3mm solid #cae1f4;border-radius:2.5mm;padding:3mm;text-align:center}
+    .flow-row{display:grid;grid-template-columns:15mm 1fr 29mm;gap:4mm;align-items:start;padding:3.5mm 0;border-bottom:.25mm solid var(--line)}
+    .flow-row:last-child{border-bottom:none}
+    .stage{width:12mm;height:12mm;border-radius:50%;background:var(--navy);color:#fff;font-size:11pt;font-weight:800;display:flex;align-items:center;justify-content:center}
+    .stage.done{background:var(--green)}
+    .stage.wait{background:var(--amber)}
+    .owner{font-size:7.6pt;font-weight:700;text-align:center;border-radius:2mm;background:#eef2f6;padding:1.7mm 1mm;color:#536174}
+    .gate{display:inline-block;font-size:7.7pt;color:#526175;background:#eef3f8;border-radius:2mm;padding:1.2mm 2mm;margin-top:1.5mm}
+    table{width:100%;border-collapse:collapse;font-size:8.4pt}
+    th{background:var(--navy);color:#fff;text-align:left;padding:2.6mm 2.4mm;font-weight:700}
+    td{border-bottom:.25mm solid var(--line);padding:2.5mm 2.4mm;vertical-align:top}
+    tr:nth-child(even) td{background:#f7f9fb}
+    .money{text-align:right;white-space:nowrap;font-weight:700}
+    .barbox{margin:4mm 0 6mm}
+    .barrow{display:grid;grid-template-columns:39mm 1fr 26mm;gap:3mm;align-items:center;margin-bottom:3mm}
+    .bartrack{height:8mm;background:#edf2f7;border-radius:2mm;overflow:hidden}
+    .bar{height:100%;border-radius:2mm;background:linear-gradient(90deg,#0b63b8,#20a6df)}
+    .bar.current{background:linear-gradient(90deg,#f58220,#ffad4d)}
+    .compare-card{border:.35mm solid var(--line);border-radius:3.5mm;overflow:hidden;margin-bottom:4mm;break-inside:avoid}
+    .compare-head{display:grid;grid-template-columns:10mm 1fr auto;gap:3mm;align-items:center;background:var(--navy);color:#fff;padding:3mm 4mm}
+    .compare-head .num{width:8mm;height:8mm;border-radius:2mm;background:var(--orange);font-weight:800;display:flex;align-items:center;justify-content:center}
+    .compare-head h3{color:#fff;margin:0;font-size:11.5pt}
+    .compare-body{display:grid;grid-template-columns:1fr 1fr;gap:0}
+    .compare-body>div{padding:3.2mm 4mm;border-right:.25mm solid var(--line)}
+    .compare-body>div:last-child{border-right:0}
+    .compare-body .label{font-size:7.6pt;text-transform:uppercase;letter-spacing:.08em;font-weight:800;color:var(--blue);margin-bottom:1mm}
+    .trade{display:grid;grid-template-columns:1fr 1fr;gap:3mm;padding:0 4mm 3.5mm}
+    .trade>div{border-radius:2.5mm;padding:2.4mm 3mm;font-size:8.3pt}
+    .plus{background:#edf9f3;color:#155f43}.minus{background:#fff3f1;color:#8e3931}
+    .risk{display:grid;grid-template-columns:18mm 1fr 27mm;gap:3mm;align-items:start;border-bottom:.25mm solid var(--line);padding:3mm 0}
+    .risk .level{border-radius:2mm;padding:1.5mm 1mm;text-align:center;font-size:7.5pt;font-weight:800;color:#fff;background:var(--red)}
+    .risk .level.med{background:var(--amber)}
+    .risk .action{font-size:7.6pt;font-weight:700;color:var(--blue);background:#eaf5ff;border-radius:2mm;padding:1.8mm;text-align:center}
+    .checklist{display:grid;grid-template-columns:1fr 1fr;gap:2.5mm 5mm}
+    .check{display:grid;grid-template-columns:6mm 1fr;gap:2mm;align-items:start;border-bottom:.25mm solid var(--line);padding:2mm 0}
+    .box{width:4.5mm;height:4.5mm;border:.4mm solid #8ca1b5;border-radius:.8mm;margin-top:.4mm}
+    .kpi{border-top:1.1mm solid var(--blue);padding-top:3mm}
+    .glossary{display:grid;grid-template-columns:32mm 1fr;gap:2mm 4mm;padding:2.2mm 0;border-bottom:.25mm solid var(--line)}
+    .glossary dt{font-weight:800;color:var(--navy)}.glossary dd{margin:0;color:#4b5a6f}
+    .stamp{display:inline-block;background:var(--navy);color:#fff;border-radius:2mm;padding:1.5mm 2.5mm;font-size:7.8pt;font-weight:800;letter-spacing:.05em}
+    .timeline-page .flow-row{padding:2.3mm 0}
+    .timeline-page .flow-row h3{font-size:11.8pt;margin-bottom:1mm}
+    .timeline-page .flow-row p{margin-bottom:1.2mm}
+    .timeline-page .gate{margin-top:.5mm;padding:1mm 1.8mm}
+    .timeline-page .card{padding:3mm}
+    .timeline-page .callout{padding:2.3mm 3mm;font-size:8.8pt}
+    .timeline-page>h3{margin-top:4mm!important;margin-bottom:1.5mm}
+    .timeline-page .clean li{margin-bottom:1mm}
+    .cost-page .barbox{margin:2.5mm 0 4mm}
+    .cost-page td{padding:2.1mm 2.3mm}
+    .cost-page .card{padding:3mm}
+    .cost-page>h3{margin-top:4mm!important}
+    .cost-page .callout{padding:2.2mm 3mm;font-size:8.8pt}
+    .risk-page .risk{padding:2.2mm 0}
+    .risk-page>h3{margin-top:4mm!important}
+    .risk-page .card{padding:3mm}
+    .risk-page .callout{padding:2.2mm 3mm;font-size:8.8pt}
+    .go-live-page .check{padding:1.6mm 0}
+    .go-live-page td{padding:2mm 2.3mm}
+    .go-live-page .callout{padding:2mm 3mm;font-size:8.8pt}
+    @media print{body{background:#fff}.page{margin:0}}
+  </style>
+</head>
+<body>
+
+  <section class="page cover">
+    <div class="cover-inner">
+      <div class="brandbar">
+        <div class="logo-box"><img src="../src/Polymind.Web/wwwroot/img/logo-polymind.png" alt="POLYMIND"></div>
+        <div class="confidential">Ban Giám đốc PolyMind</div>
+      </div>
+      <div class="cover-main">
+        <div class="eyebrow">Từ bản phát triển đến hệ thống dùng thật</div>
+        <h1>BÁO CÁO PHƯƠNG ÁN<br>TRIỂN KHAI POLYMIND</h1>
+        <div class="subtitle">Quy trình đầu–cuối, thay đổi so với dự toán ban đầu, lý do lựa chọn và các điều kiện bắt buộc trước khi mở cho người dùng thật.</div>
+        <div class="cover-strip"><strong>Đề xuất điều hành:</strong> triển khai Web trước trên VPS Việt Nam, mở theo 3 đợt có kiểm soát; chưa chi tiền cho mobile và các kênh trả phí ở giai đoạn 1.</div>
+      </div>
+      <div class="cover-meta">
+        <div><strong>Ngày báo cáo</strong>22/07/2026</div>
+        <div><strong>Nguồn đối chiếu</strong>Dự toán 26/06 &amp; trao đổi 21/07</div>
+        <div><strong>Trạng thái</strong>Chưa mở người dùng thật</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="page">
+    <div class="page-head"><div class="kicker">01 · Kết luận điều hành</div><div class="section">Tóm tắt trong 2 phút</div></div>
+    <h2>Quyết định đúng lúc này: Web trước, hạ tầng gọn, mở theo đợt</h2>
+    <p class="lead">Phương án hiện tại không làm “ít đi” chức năng cốt lõi của Web. Nó thay cách mua và vận hành hạ tầng để phù hợp hơn với đặc tính của POLYMIND, đồng thời hoãn các khoản chưa cần cho ngày mở cửa đầu tiên.</p>
+    <div class="grid4">
+      <div class="card blue"><div class="metric">~0,76</div><div class="metric-label">triệu đồng/tháng<br>chi phí nền cố định hiện tại</div></div>
+      <div class="card orange"><div class="metric orange">~5,85</div><div class="metric-label">triệu đồng/tháng<br>theo dự toán đầy đủ ban đầu</div></div>
+      <div class="card green"><div class="metric green">~87%</div><div class="metric-label">mức giảm ước tính<br>so với dự toán đầy đủ</div></div>
+      <div class="card"><span class="pill wait"><span class="dot"></span>Đang chờ GĐ1</span><div class="metric-label" style="margin-top:4mm">Chưa mua VPS/domain;<br>chưa đưa lên production</div></div>
+    </div>
+    <div class="grid2" style="margin-top:6mm">
+      <div>
+        <h3>Bốn ý chính sếp cần nắm</h3>
+        <div class="decision"><div class="n">1</div><div><strong>Đổi nơi chạy, không đổi nghiệp vụ.</strong><br><span class="muted">Web và bộ xử lý vẫn là nền .NET/C# hiện có; chuyển từ cloud quốc tế nhiều dịch vụ sang một VPS Việt Nam.</span></div></div>
+        <div class="decision"><div class="n">2</div><div><strong>Lý do lớn nhất là độ trễ.</strong><br><span class="muted">Mỗi thao tác trên Web cần trao đổi liên tục với máy chủ; đặt máy chủ gần người dùng Việt Nam cho cảm giác nhanh và ổn định hơn.</span></div></div>
+        <div class="decision"><div class="n">3</div><div><strong>Giảm tiền bằng cách hoãn phần chưa cần.</strong><br><span class="muted">App iOS/Android, Zalo ZNS, Messenger, Sentry trả phí và CI/CD đầy đủ được đưa sang giai đoạn sau.</span></div></div>
+        <div class="decision"><div class="n">4</div><div><strong>Đổi lại, đội dự án phải tự vận hành nhiều hơn.</strong><br><span class="muted">Sao lưu, khôi phục, giám sát, cập nhật và xử lý sự cố không còn do nhiều nhà cung cấp quản lý thay.</span></div></div>
+      </div>
+      <div>
+        <h3>Trạng thái thật tại ngày 22/07</h3>
+        <div class="card green" style="margin-bottom:3mm"><span class="pill done"><span class="dot"></span>ĐÃ XONG</span><p style="margin-top:2mm">Đóng gói phương án vận hành chính thức; bổ sung bảo mật cơ bản; viết kịch bản sao lưu/khôi phục; <strong>236/236 kiểm thử đạt</strong>; đóng gói <strong>0 lỗi, 0 cảnh báo</strong> (kiểm tra lại ngày 22/07).</p></div>
+        <div class="card orange" style="margin-bottom:3mm"><span class="pill wait"><span class="dot"></span>ĐANG CHỜ</span><p style="margin-top:2mm">Mua VPS, tên miền, tạo Cloudflare, kho backup ngoài, email gửi thông báo và cung cấp thông tin truy cập.</p></div>
+        <div class="card red"><span class="pill stop"><span class="dot"></span>CHƯA ĐƯỢC MỞ THẬT</span><p style="margin-top:2mm">Chưa chạy kiểm thử trên hạ tầng thật, chưa thử khôi phục backup, chưa kiểm quyền từng vai trò, chưa có kế hoạch chuyển dữ liệu chính thức.</p></div>
+      </div>
+    </div>
+    <div class="callout blue" style="margin-top:5mm"><strong>Kết luận:</strong> Có thể phê duyệt hướng VPS Việt Nam cho giai đoạn Web 1. Chỉ ra quyết định “Go-live” sau khi toàn bộ cổng kiểm soát ở trang 12 được ký xác nhận.</div>
+    <div class="footer"><span>POLYMIND · Báo cáo triển khai production</span><span>02 / 14</span></div>
+  </section>
+
+  <section class="page">
+    <div class="page-head"><div class="kicker">02 · Cơ sở thay đổi</div><div class="section">Vì sao không đi đúng dự toán ban đầu?</div></div>
+    <h2>Dự toán là bức tranh đích; phương án hiện tại là đường đi thực tế</h2>
+    <p class="lead">Dự toán 26/06 giả định mua nhiều dịch vụ chuyên biệt ngay từ đầu. Sau khi đối chiếu với ứng dụng thật ngày 21/07, nhóm chuyển sang kiến trúc gọn hơn vì ba phát hiện kỹ thuật và một quyết định kinh doanh.</p>
+    <div class="grid2">
+      <div class="card blue">
+        <h3>1. Web cần máy chủ “luôn nghe”</h3>
+        <p>POLYMIND dùng mô hình giao diện tương tác trực tiếp với máy chủ. Khi người dùng bấm, nhập, chuyển màn hình, hệ thống phải trao đổi liên tục. Vì vậy khoảng cách mạng và việc giữ kết nối lâu quan trọng hơn khả năng “tự co giãn hoặc tắt khi rảnh” của dịch vụ serverless.</p>
+        <div class="gate">Tác động: ưu tiên máy chủ trong nước, chạy 24/7</div>
+      </div>
+      <div class="card orange">
+        <h3>2. Một số dịch vụ trong dự toán chưa được dùng</h3>
+        <p>Phần tìm kiếm vector/pgvector chưa có trong mã ứng dụng; kho tệp MinIO đã hoạt động; Redis không có đoạn chương trình nào sử dụng. Trả phí Supabase Pro, GCS/S3 và Redis ở giai đoạn này tạo chi phí nhưng chưa tạo giá trị tương ứng.</p>
+        <div class="gate">Tác động: PostgreSQL + MinIO tự quản lý trên VPS</div>
+      </div>
+      <div class="card green">
+        <h3>3. Nhu cầu ngày đầu là Web, không phải app store</h3>
+        <p>Nhân sự nội bộ, đại lý, cộng tác viên và ứng viên đều có thể dùng trình duyệt. Đưa iOS/Android lên store ngay làm phát sinh phí tài khoản, quy trình duyệt và công sức kiểm thử nhưng không chặn việc vận hành Web.</p>
+        <div class="gate">Tác động: MAUI/PWA chuyển sang giai đoạn 2</div>
+      </div>
+      <div class="card soft">
+        <h3>4. Mục tiêu kinh doanh là học từ người dùng thật sớm</h3>
+        <p>Mở theo nhóm nhỏ giúp thấy đúng chỗ nghẽn trước khi mua thêm. Khi có dữ liệu sử dụng thật, quyết định nâng cấu hình, mua giám sát trả phí, Zalo ZNS hay app mobile sẽ dựa trên nhu cầu đo được thay vì giả định.</p>
+        <div class="gate">Tác động: đầu tư theo ngưỡng, tránh chi phí sớm</div>
+      </div>
+    </div>
+    <h3 style="margin-top:6mm">Điểm đánh đổi cần hiểu đúng</h3>
+    <table>
+      <thead><tr><th style="width:31%">Chúng ta nhận được</th><th style="width:31%">Chúng ta chấp nhận</th><th>Điều kiện để chấp nhận an toàn</th></tr></thead>
+      <tbody>
+        <tr><td>Chi phí nền thấp hơn rất nhiều</td><td>Một VPS là điểm tập trung rủi ro</td><td>Backup ngoài VPS, thử khôi phục, có quy trình thay máy</td></tr>
+        <tr><td>Độ trễ thấp cho người dùng Việt Nam</td><td>Đội dự án tự chăm server</td><td>Giám sát 24/7, nhật ký giới hạn dung lượng, người chịu trách nhiệm rõ</td></tr>
+        <tr><td>Go-live Web nhanh hơn</td><td>Chưa có app store và kênh trả phí</td><td>Đánh giá lại sau 30 ngày bằng số liệu sử dụng</td></tr>
+        <tr><td>Dễ kiểm soát dữ liệu và chi phí</td><td>Khả năng mở rộng chưa tự động</td><td>Đặt ngưỡng CPU/RAM/người dùng để nâng gói kịp thời</td></tr>
+      </tbody>
+    </table>
+    <div class="footer"><span>Nguồn: Dự toán hạ tầng 26/06 và WORKLOG phiên 21/07</span><span>03 / 14</span></div>
+  </section>
+
+  <section class="page">
+    <div class="page-head"><div class="kicker">03 · Kiến trúc vận hành</div><div class="section">Giải thích không cần biết code</div></div>
+    <h2>Một cửa vào an toàn, một máy chủ trung tâm, một bản sao bên ngoài</h2>
+    <p class="lead">Người dùng chỉ cần mở tên miền chính thức. Phía sau, Cloudflare và Caddy bảo vệ đường vào; VPS Việt Nam chạy ứng dụng, dữ liệu và kho hồ sơ; bản sao được đẩy ra một nhà cung cấp khác.</p>
+    <div class="architecture">
+      <div class="arch-node"><strong>Người dùng</strong>Máy tính / điện thoại</div><div class="arrow">→</div>
+      <div class="arch-node"><strong>Cloudflare</strong>DNS + lớp chắn ngoài</div><div class="arrow">→</div>
+      <div class="arch-node"><strong>Caddy</strong>HTTPS tự động</div><div class="arrow">→</div>
+      <div class="arch-node primary"><strong>VPS Việt Nam</strong>Trung tâm vận hành</div>
+    </div>
+    <div class="vps">
+      <div class="vps-title">Bên trong VPS 4 vCPU · 8GB RAM · 100GB SSD · đặt tại TP.HCM</div>
+      <div class="vps-grid">
+        <div class="vps-box"><h4>Ứng dụng POLYMIND</h4><span class="muted">Hiển thị màn hình + xử lý nghiệp vụ trong cùng một hệ thống .NET</span></div>
+        <div class="vps-box"><h4>PostgreSQL</h4><span class="muted">“Két sắt” lưu dữ liệu nghiệp vụ</span></div>
+        <div class="vps-box"><h4>MinIO</h4><span class="muted">Lưu CCCD, CV, hồ sơ, hình ảnh</span></div>
+      </div>
+    </div>
+    <div class="grid3" style="margin-top:5mm">
+      <div class="card blue"><h4>Backblaze B2</h4><p class="small">Mỗi đêm nhận bản sao dữ liệu và tệp từ VPS. Bản sao ở ngoài VPS để sự cố máy chủ không làm mất cả dữ liệu lẫn backup.</p></div>
+      <div class="card green"><h4>UptimeRobot + email</h4><p class="small">Kiểm tra hệ thống định kỳ, gửi cảnh báo khi không truy cập được. Email/SMTP dùng để gửi thông báo nghiệp vụ.</p></div>
+      <div class="card orange"><h4>Gemini AI</h4><p class="small">Phục vụ trợ lý hỏi–đáp và phân tích hồ sơ khi có khóa dịch vụ thật. Chi phí phụ thuộc mức sử dụng.</p></div>
+    </div>
+    <h3 style="margin-top:6mm">Điểm mạnh và giới hạn của mô hình “một VPS”</h3>
+    <div class="grid2">
+      <div class="card green"><h4>Điểm mạnh</h4><ul><li>Chi phí cố định thấp, dễ dự toán.</li><li>Dữ liệu và ứng dụng ở gần người dùng Việt Nam.</li><li>Ít nhà cung cấp, triển khai và xử lý lỗi nhanh.</li><li>Có thể tăng RAM/CPU mà không đổi phần mềm.</li></ul></div>
+      <div class="card red"><h4>Giới hạn</h4><ul><li>VPS ngừng hoạt động thì toàn hệ thống ngừng.</li><li>Database và kho tệp chia sẻ cùng tài nguyên.</li><li>Nâng cấp/triển khai phải được quản lý cẩn thận.</li><li>Backup giúp phục hồi nhưng không thay thế hệ thống dự phòng nóng.</li></ul></div>
+    </div>
+    <div class="callout blue" style="margin-top:5mm"><strong>Quan điểm quản trị:</strong> cấu hình này phù hợp để bắt đầu và đo nhu cầu. Khi người dùng hoặc tần suất giao dịch vượt ngưỡng, tách database/kho tệp hoặc bổ sung máy dự phòng là bước nâng cấp tự nhiên.</div>
+    <div class="footer"><span>Kiến trúc mục tiêu của giai đoạn Web 1</span><span>04 / 14</span></div>
+  </section>
+
+  <section class="page timeline-page">
+    <div class="page-head"><div class="kicker">04 · Quy trình đầu–cuối</div><div class="section">Phần 1 — từ code đến môi trường thật</div></div>
+    <h2>Tám giai đoạn, mỗi giai đoạn có đầu ra và cổng duyệt</h2>
+    <p class="lead">Không coi “đã đưa Web lên mạng” là hoàn thành. Hoàn thành chỉ khi có thể đăng nhập đúng quyền, thực hiện nghiệp vụ, sao lưu–khôi phục được và mở theo nhóm mà không lộ dữ liệu.</p>
+    <div class="flow-row">
+      <div class="stage done">0</div><div><h3>Chốt phương án &amp; làm sạch trước bản chính thức</h3><p>Khóa phạm vi Web giai đoạn 1; rà soát bảo mật; bỏ thành phần không dùng; bổ sung sao lưu/khôi phục; chạy kiểm thử.</p><span class="gate">Đầu ra: phần mềm đóng gói thành công; 236/236 kiểm thử đạt; tài liệu triển khai có sẵn</span></div><div class="owner">ĐÃ XONG<br>21/07</div>
+    </div>
+    <div class="flow-row">
+      <div class="stage wait">1</div><div><h3>Phê duyệt &amp; mua hạ tầng</h3><p>Mua VPS Việt Nam, tên miền; tạo tài khoản Cloudflare, Backblaze B2 và email gửi thông báo. Toàn bộ tài khoản phải đứng tên/thuộc quyền kiểm soát của PolyMind.</p><span class="gate">Cổng duyệt: có hóa đơn, IP, tên miền, khóa truy cập và người sở hữu</span></div><div class="owner">CHỜ<br>0,5–3 ngày</div>
+    </div>
+    <div class="flow-row">
+      <div class="stage">2</div><div><h3>Chuẩn bị máy chủ</h3><p>Tạo tài khoản vận hành riêng, khóa đăng nhập trực tiếp bằng quyền cao nhất, cài tường lửa, nền tảng đóng gói Docker và bộ nhớ đệm; chỉ mở cổng cần thiết.</p><span class="gate">Cổng duyệt: truy cập quản trị an toàn; máy chủ khởi động lại không mất cấu hình</span></div><div class="owner">AI + chủ dự án<br>2–3 giờ</div>
+    </div>
+    <div class="flow-row">
+      <div class="stage">3</div><div><h3>Đưa ứng dụng lên &amp; gắn tên miền</h3><p>Lấy đúng phiên bản mã nguồn, tạo các khóa bí mật riêng cho môi trường chính thức, chạy các dịch vụ; trỏ tên miền; cấp HTTPS rồi mới bật lớp trung gian Cloudflare.</p><span class="gate">Cổng duyệt: trang /health báo khỏe; HTTP tự chuyển HTTPS; không lộ cổng nội bộ</span></div><div class="owner">AI<br>2–3 giờ</div>
+    </div>
+    <div class="flow-row">
+      <div class="stage">4</div><div><h3>Khởi tạo dữ liệu &amp; tài khoản thật</h3><p>Tạo cấu trúc kho dữ liệu; tuyệt đối không đưa tài khoản/mật khẩu mẫu vào môi trường chính thức; tạo tài khoản quản trị cấp cao và người dùng theo danh sách vai trò. Chốt phương án chuyển dữ liệu cũ trước khi nhập.</p><span class="gate">Cổng duyệt: chủ dữ liệu xác nhận dữ liệu đầu vào; tài khoản mẫu đăng nhập thất bại</span></div><div class="owner">Chủ dự án + nghiệp vụ<br>0,5–1 ngày</div>
+    </div>
+    <div class="callout" style="margin-top:5mm"><strong>Điểm cần sếp quyết định sớm:</strong> hệ thống chính thức sẽ khởi tạo sạch hay chuyển dữ liệu đang có? Tài liệu hiện tại chưa chỉ rõ dữ liệu nguồn, người duyệt và thời điểm khóa dữ liệu. Không nên tự động mang toàn bộ dữ liệu thử nghiệm sang hệ thống thật.</div>
+    <div class="footer"><span>Giai đoạn 0–4 · Chuẩn bị và đưa hệ thống lên</span><span>05 / 14</span></div>
+  </section>
+
+  <section class="page timeline-page">
+    <div class="page-head"><div class="kicker">04 · Quy trình đầu–cuối</div><div class="section">Phần 2 — kiểm thử, mở thật và ổn định</div></div>
+    <h2>Go-live là một chuỗi quyết định có thể dừng, không phải một lần bấm nút</h2>
+    <div class="flow-row">
+      <div class="stage">5</div><div><h3>Kiểm thử chấp nhận trên môi trường thật</h3><p>Đăng nhập từng vai trò; chạy một hồ sơ ứng viên qua các bước chính; thử upload/tải hồ sơ, ghi âm, AI, email, tài chính; khởi động lại server; sao lưu và khôi phục vào môi trường tạm.</p><span class="gate">Cổng Go/No-go: checklist trang 12 đạt 100%; lỗi nghiêm trọng = dừng mở người dùng</span></div><div class="owner">AI + đại diện nghiệp vụ<br>1 ngày</div>
+    </div>
+    <div class="flow-row">
+      <div class="stage">6</div><div><h3>Mở thật theo 3 đợt</h3><p><strong>Tuần 1:</strong> nhân sự nội bộ. <strong>Tuần 2:</strong> đại lý và cộng tác viên, tập trung kiểm rò rỉ dữ liệu chéo. <strong>Tuần 3:</strong> ứng viên/học viên qua cổng /me, theo dõi tải vì đây là nhóm đông nhất.</p><span class="gate">Cổng mỗi đợt: 2 ngày ổn định, không lỗi nghiêm trọng, người phụ trách đồng ý mở rộng</span></div><div class="owner">Chủ dự án + AI<br>3 tuần</div>
+    </div>
+    <div class="flow-row">
+      <div class="stage">7</div><div><h3>Ổn định 30 ngày đầu</h3><p>Theo dõi truy cập, lỗi, CPU/RAM/dung lượng, backup và phản hồi người dùng; có giờ bảo trì; chỉ đưa thay đổi đã kiểm thử; tổng kết sau 7, 14 và 30 ngày.</p><span class="gate">Đầu ra: biên bản ổn định, danh sách nâng cấp và ngân sách giai đoạn 2</span></div><div class="owner">Vận hành + nghiệp vụ<br>30 ngày</div>
+    </div>
+    <h3 style="margin-top:6mm">Ba nguyên tắc khi mở theo đợt</h3>
+    <div class="grid3">
+      <div class="card blue"><h4>1. Nhóm nhỏ trước</h4><p class="small">Lỗi phát hiện trong nhóm nội bộ rẻ và dễ xử lý hơn khi đã có hàng trăm tài khoản bên ngoài.</p></div>
+      <div class="card orange"><h4>2. Quyền dữ liệu trước tính năng</h4><p class="small">Đại lý/CTV không được thấy dữ liệu của bên khác qua danh sách, báo cáo, CSV, AI hay tin nhắn.</p></div>
+      <div class="card green"><h4>3. Có đường lùi</h4><p class="small">Mỗi bản cập nhật phải biết cách quay lại bản trước; backup chỉ được công nhận sau khi thử khôi phục.</p></div>
+    </div>
+    <div class="callout blue" style="margin-top:6mm"><strong>Điều chỉnh lịch:</strong> tài liệu triển khai có một dòng ghi “1 tuần, 3 đợt” nhưng phần chi tiết lại ghi Tuần 1–2–3. Báo cáo này chọn <strong>3 tuần</strong> để bảo đảm mỗi nhóm có thời gian quan sát; cần xác nhận đây là lịch chính thức.</div>
+    <h3 style="margin-top:6mm">Khi nào được gọi là “bản chính thức”?</h3>
+    <ul class="clean"><li>Tên miền và HTTPS ổn định; hệ thống tự lên lại sau khi khởi động máy chủ.</li><li>Người dùng thật đăng nhập bằng tài khoản riêng và chỉ thấy đúng phạm vi được giao.</li><li>Nghiệp vụ trọng yếu đã được đại diện phòng ban nghiệm thu.</li><li>Có cảnh báo khi hệ thống ngừng; backup ngoài VPS và khôi phục thử thành công.</li><li>Có người chịu trách nhiệm vận hành, xử lý sự cố và phê duyệt thay đổi.</li></ul>
+    <div class="footer"><span>Giai đoạn 5–7 · Nghiệm thu, mở thật và ổn định</span><span>06 / 14</span></div>
+  </section>
+
+  <section class="page cost-page">
+    <div class="page-head"><div class="kicker">05 · Chi phí</div><div class="section">Dự toán ban đầu so với phương án chốt</div></div>
+    <h2>Giảm khoảng 5,09 triệu đồng mỗi tháng ở giai đoạn Web 1</h2>
+    <p class="lead">Con số hiện tại là chi phí nền cố định để Web vận hành. Nó chưa bao gồm phần dùng đến đâu trả đến đó như AI, tin nhắn trả phí, dung lượng vượt miễn phí, VAT hoặc nhân công vận hành.</p>
+    <div class="barbox">
+      <div class="barrow"><strong>Dự toán đầy đủ ban đầu</strong><div class="bartrack"><div class="bar" style="width:100%"></div></div><strong>5,85 tr</strong></div>
+      <div class="barrow"><strong>Dự toán nếu dùng gói Free</strong><div class="bartrack"><div class="bar" style="width:79.5%"></div></div><strong>4,65 tr</strong></div>
+      <div class="barrow"><strong>Phương án hiện tại</strong><div class="bartrack"><div class="bar current" style="width:13%"></div></div><strong>~0,76 tr</strong></div>
+    </div>
+    <table>
+      <thead><tr><th>Khoản chi nền hiện tại</th><th class="money">Theo tháng</th><th>Ghi chú</th></tr></thead>
+      <tbody>
+        <tr><td>VPS Việt Nam 4 vCPU / 8GB / 100GB</td><td class="money">~700.000đ</td><td>Gộp Web, xử lý nghiệp vụ, database và kho tệp</td></tr>
+        <tr><td>Tên miền .com hoặc .vn (phân bổ theo tháng)</td><td class="money">25.000–62.500đ</td><td>Chi thực tế 300.000–750.000đ/năm</td></tr>
+        <tr><td>Cloudflare Free + Caddy/HTTPS</td><td class="money">0đ</td><td>Đủ cho giai đoạn khởi đầu; nâng cấp khi cần luật bảo vệ/log nâng cao</td></tr>
+        <tr><td>Backblaze B2, UptimeRobot, SMTP</td><td class="money">0đ*</td><td>*Trong hạn mức miễn phí/phương án Gmail hoặc Zoho Free</td></tr>
+        <tr><td><strong>Tổng nền cố định làm tròn</strong></td><td class="money"><strong>~760.000đ</strong></td><td>Khớp phương án đã chốt ngày 21/07</td></tr>
+      </tbody>
+    </table>
+    <div class="grid3" style="margin-top:5mm">
+      <div class="card green"><div class="metric green">~5,09</div><div class="metric-label">triệu đồng/tháng tiết kiệm so với dự toán 5,85 triệu</div></div>
+      <div class="card blue"><div class="metric">~61,1</div><div class="metric-label">triệu đồng/năm nếu mức chi giữ ổn định</div></div>
+      <div class="card orange"><div class="metric orange">0đ</div><div class="metric-label">phí Apple/Google đóng ngay ở giai đoạn Web 1 (được hoãn)</div></div>
+    </div>
+    <h3 style="margin-top:6mm">Các khoản phải tách khỏi con số 760.000đ</h3>
+    <div class="grid2">
+      <div class="card soft"><h4>Biến phí</h4><ul><li>Gemini AI theo lượt sử dụng.</li><li>Zalo ZNS/SMS khi được bật.</li><li>Kho backup vượt hạn mức miễn phí.</li><li>Nâng VPS khi tải tăng.</li></ul></div>
+      <div class="card soft"><h4>Chi phí tổ chức</h4><ul><li>Nhân sự vận hành và hỗ trợ người dùng.</li><li>Thời gian nhập/chuyển dữ liệu.</li><li>Đào tạo và xử lý sự cố.</li><li>Dịch vụ giám sát trả phí nếu nâng cấp.</li></ul></div>
+    </div>
+    <div class="callout" style="margin-top:5mm"><strong>Khuyến nghị ngân sách:</strong> duyệt trần nền <strong>1 triệu đồng/tháng</strong> cho giai đoạn Web 1, nhưng theo dõi biến phí AI riêng. Mọi dịch vụ trả phí mới cần có ngưỡng kích hoạt và người duyệt.</div>
+    <div class="footer"><span>Đơn vị: VNĐ · Số liệu làm tròn theo tài liệu dự toán</span><span>07 / 14</span></div>
+  </section>
+
+  <section class="page">
+    <div class="page-head"><div class="kicker">06 · Đối chiếu từng hạng mục</div><div class="section">Hạng mục 1–3</div></div>
+    <h2>Giao diện, bộ xử lý và database</h2>
+    <div class="compare-card">
+      <div class="compare-head"><div class="num">1</div><h3>Mặt tiền ứng dụng (Frontend)</h3><span class="stamp">CHI PHÍ RIÊNG: 0Đ</span></div>
+      <div class="compare-body"><div><div class="label">Dự toán ban đầu</div><strong>Blazor Server Web + .NET MAUI Mobile</strong><p class="small">Web và app iOS/Android cùng dùng C#; mobile dự kiến phát hành qua app store.</p></div><div><div class="label">Phương án hiện tại</div><strong>Chỉ Web tương tác trên trình duyệt</strong><p class="small">MAUI hoãn; PWA/ứng dụng cài như app được đánh giá sau. Giao diện và xử lý vẫn gộp trong cùng ứng dụng.</p></div></div>
+      <div class="trade"><div class="plus"><strong>Ưu:</strong> mở thật nhanh hơn; không chờ app store; không phát sinh Apple/Google; một bản để bảo trì.</div><div class="minus"><strong>Nhược:</strong> chưa có trải nghiệm app native, offline, thông báo đẩy cấp hệ điều hành; vẫn phụ thuộc mạng.</div></div>
+      <div class="tiny" style="padding:0 4mm 3mm"><strong>Lý do đổi:</strong> Web đủ bao phủ mọi nhóm người dùng trong giai đoạn đầu; chưa có bằng chứng lợi ích mobile lớn hơn chi phí phát hành và kiểm thử.</div>
+    </div>
+    <div class="compare-card">
+      <div class="compare-head"><div class="num">2</div><h3>Bề chìm xử lý (Backend)</h3><span class="stamp">TỪ CLOUD RUN → VPS VN</span></div>
+      <div class="compare-body"><div><div class="label">Dự toán ban đầu</div><strong>ASP.NET Core .NET 10 trên Google Cloud Run</strong><p class="small">Giữ tối thiểu một instance luôn bật; ước tính khoảng 50 USD/tháng.</p></div><div><div class="label">Phương án hiện tại</div><strong>ASP.NET Core .NET 10 trong Docker trên VPS TP.HCM</strong><p class="small">Chạy 24/7, cùng máy với database và kho tệp; VPS khoảng 700.000đ/tháng cho toàn bộ cụm.</p></div></div>
+      <div class="trade"><div class="plus"><strong>Ưu:</strong> gần người dùng; kết nối dài ổn định; chi phí dễ dự toán; tác vụ nền luôn chạy.</div><div class="minus"><strong>Nhược:</strong> không tự mở rộng; đội dự án tự vá, cập nhật, theo dõi; sự cố VPS ảnh hưởng toàn hệ thống.</div></div>
+      <div class="tiny" style="padding:0 4mm 3mm"><strong>Lý do đổi:</strong> mô hình giao diện hiện tại nhạy với độ trễ và kết nối dài; máy chủ ở xa và dịch vụ tự co giãn/tắt khi rảnh không phải lựa chọn tối ưu cho trải nghiệm ngày đầu.</div>
+    </div>
+    <div class="compare-card">
+      <div class="compare-head"><div class="num">3</div><h3>Két sắt dữ liệu (Database)</h3><span class="stamp">SUPABASE PRO → POSTGRES TỰ QUẢN</span></div>
+      <div class="compare-body"><div><div class="label">Dự toán ban đầu</div><strong>PostgreSQL + pgvector trên Supabase Pro</strong><p class="small">Khoảng 25 USD/tháng; pgvector dự kiến phục vụ tìm kiếm AI theo ngữ nghĩa.</p></div><div><div class="label">Phương án hiện tại</div><strong>PostgreSQL 16 trong VPS</strong><p class="small">Ứng dụng đã có cơ chế quản lý cấu trúc dữ liệu; chưa dùng pgvector nên chưa mua Supabase Pro.</p></div></div>
+      <div class="trade"><div class="plus"><strong>Ưu:</strong> không mất phí database riêng; truy cập nội bộ nhanh; toàn quyền cấu hình và backup.</div><div class="minus"><strong>Nhược:</strong> tự quản trị; cùng điểm lỗi với Web; phục hồi và nâng cấp cần kỷ luật vận hành.</div></div>
+      <div class="tiny" style="padding:0 4mm 3mm"><strong>Điều kiện nâng cấp:</strong> dữ liệu/tải vượt khả năng VPS, yêu cầu dự phòng cao, hoặc tính năng AI thật sự cần pgvector.</div>
+    </div>
+    <div class="footer"><span>Đối chiếu theo đúng các dòng 1–3 trong bảng dự toán</span><span>08 / 14</span></div>
+  </section>
+
+  <section class="page">
+    <div class="page-head"><div class="kicker">06 · Đối chiếu từng hạng mục</div><div class="section">Hạng mục 4–6</div></div>
+    <h2>Kho tệp, AI và lớp bảo vệ</h2>
+    <div class="compare-card">
+      <div class="compare-head"><div class="num">4</div><h3>Kho lưu tệp tin (Storage)</h3><span class="stamp">GCS/S3 → MINIO + B2</span></div>
+      <div class="compare-body"><div><div class="label">Dự toán ban đầu</div><strong>Google Cloud Storage hoặc AWS S3</strong><p class="small">Khoảng 10 USD/tháng, dùng để lưu CCCD, CV, Word/PDF và ảnh hồ sơ.</p></div><div><div class="label">Phương án hiện tại</div><strong>MinIO trên VPS làm kho chính; Backblaze B2 làm backup ngoài</strong><p class="small">MinIO đã có trong hệ thống; B2 miễn phí dưới hạn mức dự kiến ban đầu.</p></div></div>
+      <div class="trade"><div class="plus"><strong>Ưu:</strong> không mất phí kho chính; tích hợp đã sẵn; dữ liệu ở gần ứng dụng; có bản sao ngoài.</div><div class="minus"><strong>Nhược:</strong> kho chính vẫn chung VPS; dung lượng hữu hạn; phải tự theo dõi, sao lưu và thử khôi phục.</div></div>
+      <div class="tiny" style="padding:0 4mm 3mm"><strong>Điều kiện bắt buộc:</strong> backup hằng đêm ra B2 và khôi phục thử thành công; backup nằm cùng VPS không được tính là backup.</div>
+    </div>
+    <div class="compare-card">
+      <div class="compare-head"><div class="num">5</div><h3>Lõi Trí tuệ Nhân tạo (AI Engine)</h3><span class="stamp">CLAUDE/OPENAI → GEMINI</span></div>
+      <div class="compare-body"><div><div class="label">Dự toán ban đầu</div><strong>Claude hoặc OpenAI API</strong><p class="small">Khoảng 40 USD/tháng theo token; chatbot, đọc CV/giấy tờ và trợ lý dữ liệu.</p></div><div><div class="label">Phương án hiện tại</div><strong>Gemini 2.5 Flash, tính theo sử dụng</strong><p class="small">Mã ứng dụng hiện đã tích hợp Gemini; khóa production cần cấu hình riêng.</p></div></div>
+      <div class="trade"><div class="plus"><strong>Ưu:</strong> không cần Python; tích hợp sẵn; có thể bắt đầu với mức sử dụng thấp, theo dõi biến phí.</div><div class="minus"><strong>Nhược:</strong> chi phí chưa có trần; phụ thuộc nhà cung cấp; dữ liệu gửi ra ngoài cần chính sách; chưa kiểm thử với khóa thật.</div></div>
+      <div class="tiny" style="padding:0 4mm 3mm"><strong>Khoảng trống hiện tại:</strong> tài liệu yêu cầu biến khóa Gemini nhưng file cấu hình production mẫu/chạy Docker chưa truyền biến này. Phải sửa trước nghiệm thu AI.</div>
+    </div>
+    <div class="compare-card">
+      <div class="compare-head"><div class="num">6</div><h3>Lá chắn bảo mật &amp; CDN</h3><span class="stamp">CLOUDFLARE PRO → FREE + CADDY</span></div>
+      <div class="compare-body"><div><div class="label">Dự toán ban đầu</div><strong>Cloudflare Pro khoảng 20 USD/tháng</strong><p class="small">Tường lửa, chống bot/tấn công và tăng tốc phân phối.</p></div><div><div class="label">Phương án hiện tại</div><strong>Cloudflare Free + Caddy cấp HTTPS</strong><p class="small">Bổ sung chặn script lạ, giới hạn đăng nhập, secret production riêng và không tạo tài khoản mẫu.</p></div></div>
+      <div class="trade"><div class="plus"><strong>Ưu:</strong> 0đ; HTTPS tự gia hạn; có lớp bảo vệ cơ bản; đủ để khởi động có kiểm soát.</div><div class="minus"><strong>Nhược:</strong> ít quy tắc nâng cao, log và hỗ trợ hơn Pro; cấu hình sai thứ tự có thể làm HTTPS thất bại.</div></div>
+      <div class="tiny" style="padding:0 4mm 3mm"><strong>Thứ tự bắt buộc:</strong> DNS-only → Caddy cấp chứng chỉ → kiểm /health → mới bật Cloudflare proxy và Full (strict).</div>
+    </div>
+    <div class="footer"><span>Đối chiếu theo đúng các dòng 4–6 trong bảng dự toán</span><span>09 / 14</span></div>
+  </section>
+
+  <section class="page">
+    <div class="page-head"><div class="kicker">06 · Đối chiếu từng hạng mục</div><div class="section">Hạng mục 7–9 &amp; phí ban đầu</div></div>
+    <h2>Giám sát, CI/CD, kênh liên lạc và mobile</h2>
+    <div class="compare-card">
+      <div class="compare-head"><div class="num">7</div><h3>Giám sát lỗi chủ động</h3><span class="stamp">SENTRY TEAM → UPTIME + LOG</span></div>
+      <div class="compare-body"><div><div class="label">Dự toán ban đầu</div><strong>Sentry Team khoảng 29 USD/tháng</strong><p class="small">Thu lỗi ứng dụng chi tiết và báo cho đội phát triển.</p></div><div><div class="label">Phương án hiện tại</div><strong>UptimeRobot miễn phí + nhật ký Docker có giới hạn</strong><p class="small">Biết Web có đang sống; giữ log không làm đầy ổ đĩa.</p></div></div>
+      <div class="trade"><div class="plus"><strong>Ưu:</strong> 0đ, cấu hình nhanh, phát hiện ngừng dịch vụ.</div><div class="minus"><strong>Nhược:</strong> khó biết lỗi chức năng bên trong; tìm nguyên nhân lâu hơn; chưa có cảnh báo lỗi theo người dùng.</div></div>
+    </div>
+    <div class="compare-card">
+      <div class="compare-head"><div class="num">8</div><h3>Kiểm soát mã nguồn &amp; tự động triển khai</h3><span class="stamp">TEAM/ACTIONS → THỦ CÔNG GĐ1</span></div>
+      <div class="compare-body"><div><div class="label">Dự toán ban đầu</div><strong>GitHub Team + GitHub Actions khoảng 20 USD/tháng</strong><p class="small">Tự chạy kiểm thử và đưa bản mới lên; gồm nhu cầu build iOS.</p></div><div><div class="label">Phương án hiện tại</div><strong>Git + triển khai thủ công qua SSH</strong><p class="small">CI/CD và PWA để giai đoạn tiếp theo; hướng dẫn hiện vẫn dùng chỗ trống &lt;REPO_URL&gt;.</p></div></div>
+      <div class="trade"><div class="plus"><strong>Ưu:</strong> chưa mất phí nhóm; đơn giản khi tần suất phát hành thấp.</div><div class="minus"><strong>Nhược:</strong> phụ thuộc người thao tác; dễ sai bước; rollback và truy vết bản phát hành chưa tự động.</div></div>
+    </div>
+    <div class="compare-card">
+      <div class="compare-head"><div class="num">9</div><h3>Kênh kết nối đa nền tảng</h3><span class="stamp">ZALO/MESSENGER → IN-APP/EMAIL</span></div>
+      <div class="compare-body"><div><div class="label">Dự toán ban đầu</div><strong>Zalo ZNS + Facebook Messenger khoảng 45 USD/tháng</strong><p class="small">Zalo OA cơ bản còn được liệt kê riêng khoảng 198.000đ/tháng.</p></div><div><div class="label">Phương án hiện tại</div><strong>Thông báo trong Web + email SMTP</strong><p class="small">SMS OTP, Zalo ZNS rồi MAUI được xếp sau, khi có nhu cầu và ngân sách.</p></div></div>
+      <div class="trade"><div class="plus"><strong>Ưu:</strong> không chờ xét duyệt OA; không trả theo tin; go-live sớm.</div><div class="minus"><strong>Nhược:</strong> tỷ lệ đọc có thể thấp hơn Zalo/SMS; phụ thuộc người dùng mở Web/email.</div></div>
+    </div>
+    <div class="callout blue"><strong>Phí thiết lập mobile được hoãn:</strong> Apple Developer ~2,5 triệu/năm + Google Play ~630.000đ một lần = <strong>~3,13 triệu đồng chưa phải đóng ngay</strong>. Đây là trì hoãn đúng thứ tự, không phải hủy định hướng mobile.</div>
+    <div class="footer"><span>Đối chiếu dòng 7–9 và phần phí thiết lập trong dự toán</span><span>10 / 14</span></div>
+  </section>
+
+  <section class="page risk-page">
+    <div class="page-head"><div class="kicker">07 · Rủi ro &amp; kiểm soát</div><div class="section">Những gì tiết kiệm chi phí không được phép đánh đổi</div></div>
+    <h2>Sáu rủi ro phải có chủ sở hữu trước khi mở người dùng</h2>
+    <p class="lead">Phương án VPS hợp lý với giai đoạn đầu, nhưng an toàn chỉ khi các việc vận hành bên dưới được thực hiện như một phần của sản phẩm, không phải việc phụ.</p>
+    <div class="risk"><div class="level">CAO</div><div><h4>Chưa kiểm thử trên hạ tầng chính thức</h4><p class="small">Việc đóng gói và 236 kiểm thử tự động đạt chưa chứng minh HTTPS, upload, âm thanh, AI, email và kết nối dài hoạt động ngoài Internet.</p></div><div class="action">Kiểm tra nhanh toàn hệ thống<br>trước Go-live</div></div>
+    <div class="risk"><div class="level">CAO</div><div><h4>Một VPS là một điểm lỗi</h4><p class="small">Hỏng máy, đầy ổ hoặc lỗi nhà cung cấp có thể dừng toàn bộ Web, database và kho tệp.</p></div><div class="action">Backup ngoài + restore thử + quy trình thay VPS</div></div>
+    <div class="risk"><div class="level">CAO</div><div><h4>Chưa chốt kế hoạch dữ liệu thật</h4><p class="small">Chưa rõ khởi tạo sạch hay chuyển dữ liệu hiện có, ai làm sạch, ai ký xác nhận và thời điểm khóa dữ liệu.</p></div><div class="action">Biên bản migration<br>và đối soát</div></div>
+    <div class="risk"><div class="level">CAO</div><div><h4>Rò rỉ dữ liệu giữa đại lý/CTV</h4><p class="small">Rủi ro lớn nhất khi mở ra ngoài công ty là một bên thấy hồ sơ của bên khác qua danh sách, báo cáo, xuất CSV, AI hoặc tin nhắn.</p></div><div class="action">Test chéo mọi đường<br>bằng tài khoản thật</div></div>
+    <div class="risk"><div class="level med">TRUNG</div><div><h4>Cấu hình chính thức chưa đồng nhất</h4><p class="small">Tài liệu nói bỏ DuckDNS nhưng bộ cấu hình triển khai vẫn còn mục cũ; khóa Gemini được nêu trong tài liệu nhưng chưa có trong mẫu cấu hình chạy.</p></div><div class="action">Dọn cấu hình<br>trước triển khai</div></div>
+    <div class="risk"><div class="level med">TRUNG</div><div><h4>Triển khai và giám sát còn thủ công</h4><p class="small">Chưa có quy trình tự động phát hành, theo dõi lỗi chi tiết và quay về bản trước; ứng dụng còn một số điểm gia cố cần làm sau khi chạy thật.</p></div><div class="action">Sổ tay vận hành + người trực;<br>nâng sau Go-live</div></div>
+    <h3 style="margin-top:6mm">Nguyên tắc xử lý sự cố trong 30 ngày đầu</h3>
+    <div class="grid3">
+      <div class="card red"><h4>Lỗi nghiêm trọng</h4><p class="small">Lộ dữ liệu, sai số tiền, mất dữ liệu, không đăng nhập hàng loạt.</p><strong>Dừng mở rộng; ưu tiên quay lại bản ổn định.</strong></div>
+      <div class="card orange"><h4>Lỗi ảnh hưởng công việc</h4><p class="small">Một chức năng chính lỗi nhưng có cách làm tạm.</p><strong>Khắc phục trong cửa sổ bảo trì gần nhất.</strong></div>
+      <div class="card blue"><h4>Lỗi nhỏ/giao diện</h4><p class="small">Không sai dữ liệu, không chặn quy trình.</p><strong>Gom theo tuần, tránh cập nhật nóng liên tục.</strong></div>
+    </div>
+    <div class="callout" style="margin-top:5mm"><strong>Đề xuất chỉ tiêu phục hồi để sếp duyệt:</strong> mất tối đa 24 giờ dữ liệu (backup hằng đêm) và phục hồi dịch vụ trong tối đa 4 giờ khi phải dựng VPS mới. Nếu doanh nghiệp cần mức tốt hơn, ngân sách phải tăng cho database/backup/dự phòng.</div>
+    <div class="footer"><span>Rủi ro tồn dư phải được ghi nhận trong biên bản Go-live</span><span>11 / 14</span></div>
+  </section>
+
+  <section class="page go-live-page">
+    <div class="page-head"><div class="kicker">08 · Cổng Go-live</div><div class="section">Không đủ mục = không mở người dùng</div></div>
+    <h2>Checklist nghiệm thu bắt buộc</h2>
+    <p class="lead">Mỗi mục cần người thực hiện và người xác nhận. Ảnh chụp/kết quả kiểm tra được lưu cùng biên bản phát hành.</p>
+    <div class="checklist">
+      <div class="check"><div class="box"></div><div><strong>Sức khỏe hệ thống</strong><br><span class="small">Tên miền /health báo “Healthy”.</span></div></div>
+      <div class="check"><div class="box"></div><div><strong>HTTPS</strong><br><span class="small">HTTP tự chuyển HTTPS; chứng chỉ hợp lệ.</span></div></div>
+      <div class="check"><div class="box"></div><div><strong>Tài khoản mẫu bị loại bỏ</strong><br><span class="small">admin@polymind.local / Admin@123 đăng nhập thất bại.</span></div></div>
+      <div class="check"><div class="box"></div><div><strong>Trang quản trị tác vụ</strong><br><span class="small">Người không có quyền không vào được /hangfire.</span></div></div>
+      <div class="check"><div class="box"></div><div><strong>Quyền từng vai trò</strong><br><span class="small">Nội bộ, đại lý, CTV, ứng viên chỉ thấy đúng dữ liệu.</span></div></div>
+      <div class="check"><div class="box"></div><div><strong>Quy trình ứng viên</strong><br><span class="small">Chạy ít nhất một hồ sơ qua các bước trọng yếu.</span></div></div>
+      <div class="check"><div class="box"></div><div><strong>Hồ sơ điện tử</strong><br><span class="small">Upload CCCD/CV và tải/xem lại thành công.</span></div></div>
+      <div class="check"><div class="box"></div><div><strong>Tin nhắn thoại</strong><br><span class="small">Ghi âm và nghe lại được trên trình duyệt thật.</span></div></div>
+      <div class="check"><div class="box"></div><div><strong>Trợ lý AI</strong><br><span class="small">Có khóa AI riêng; trả lời đúng phạm vi dữ liệu.</span></div></div>
+      <div class="check"><div class="box"></div><div><strong>Email thông báo</strong><br><span class="small">Gửi và nhận được email thật.</span></div></div>
+      <div class="check"><div class="box"></div><div><strong>Kiểm soát tài chính</strong><br><span class="small">Khoản chi chưa duyệt không xuất được phiếu chi.</span></div></div>
+      <div class="check"><div class="box"></div><div><strong>Tự phục hồi sau reboot</strong><br><span class="small">Khởi động lại VPS, các dịch vụ tự chạy lại.</span></div></div>
+      <div class="check"><div class="box"></div><div><strong>Backup ngoài VPS</strong><br><span class="small">Nhìn thấy database và tệp trên B2.</span></div></div>
+      <div class="check"><div class="box"></div><div><strong>Khôi phục thử</strong><br><span class="small">Restore thành công vào môi trường tạm.</span></div></div>
+      <div class="check"><div class="box"></div><div><strong>Cảnh báo downtime</strong><br><span class="small">Thử dừng dịch vụ và nhận được cảnh báo.</span></div></div>
+      <div class="check"><div class="box"></div><div><strong>Kế hoạch dữ liệu</strong><br><span class="small">Nguồn, người duyệt, đối soát và thời điểm khóa đã ký.</span></div></div>
+    </div>
+    <h3 style="margin-top:7mm">Bốn quyết định đề nghị Ban Giám đốc phê duyệt</h3>
+    <table>
+      <thead><tr><th style="width:8%">#</th><th style="width:43%">Quyết định</th><th>Đề xuất</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Phương án hạ tầng Web giai đoạn 1</td><td>VPS Việt Nam 4 vCPU/8GB/100GB + domain + Cloudflare Free + B2</td></tr>
+        <tr><td>2</td><td>Trần chi phí nền</td><td>Không quá 1 triệu đồng/tháng; AI và kênh tin nhắn theo dõi riêng</td></tr>
+        <tr><td>3</td><td>Lịch mở thật</td><td>3 tuần: nội bộ → đại lý/CTV → ứng viên/học viên</td></tr>
+        <tr><td>4</td><td>Thẩm quyền Go/No-go</td><td>Chủ dự án + đại diện nghiệp vụ ký khi checklist đạt 100%</td></tr>
+      </tbody>
+    </table>
+    <div class="callout green" style="margin-top:6mm"><strong>Điều kiện ký “Go”:</strong> không còn lỗi mức nghiêm trọng/cao; backup đã khôi phục thử; dữ liệu và phân quyền được chủ nghiệp vụ xác nhận; đã có người trực trong 72 giờ đầu mỗi đợt.</div>
+    <div class="footer"><span>Biên bản checklist là hồ sơ bàn giao bắt buộc</span><span>12 / 14</span></div>
+  </section>
+
+  <section class="page">
+    <div class="page-head"><div class="kicker">09 · Vận hành sau mở thật</div><div class="section">30 ngày đầu và ngưỡng nâng cấp</div></div>
+    <h2>Ổn định trước, mở rộng sau, mọi quyết định dựa trên số liệu</h2>
+    <div class="grid3">
+      <div class="card blue"><h3>Hằng ngày</h3><ul><li>Web có hoạt động?</li><li>Backup đêm qua thành công?</li><li>Ổ đĩa, RAM, CPU có bất thường?</li><li>Có lỗi nghiêm trọng từ người dùng?</li></ul></div>
+      <div class="card green"><h3>Hằng tuần</h3><ul><li>Tổng hợp lỗi và thời gian xử lý.</li><li>Kiểm tài khoản/quyền mới.</li><li>Xem tốc độ tăng dữ liệu và tệp.</li><li>Chốt bản cập nhật tuần tới.</li></ul></div>
+      <div class="card orange"><h3>Hằng tháng</h3><ul><li>Thử khôi phục chọn mẫu.</li><li>Rà chi phí AI/dịch vụ.</li><li>Đánh giá năng lực VPS.</li><li>Quyết định hạng mục giai đoạn 2.</li></ul></div>
+    </div>
+    <h3 style="margin-top:7mm">Bộ chỉ số tối thiểu báo cáo sếp</h3>
+    <div class="grid4">
+      <div class="kpi"><div class="metric">≥99,5%</div><div class="metric-label">thời gian Web truy cập được<br><em>đề xuất</em></div></div>
+      <div class="kpi"><div class="metric">100%</div><div class="metric-label">backup hằng đêm thành công</div></div>
+      <div class="kpi"><div class="metric">0</div><div class="metric-label">sự cố lộ/sai phạm vi dữ liệu</div></div>
+      <div class="kpi"><div class="metric">&lt;4h</div><div class="metric-label">thời gian phục hồi sự cố lớn<br><em>đề xuất</em></div></div>
+    </div>
+    <h3 style="margin-top:8mm">Khi nào nên mua thêm?</h3>
+    <table>
+      <thead><tr><th>Hạng mục nâng cấp</th><th>Tín hiệu kích hoạt</th><th>Kết quả mong đợi</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Nâng VPS / tách database</strong></td><td>CPU/RAM cao kéo dài; người dùng thấy chậm; backup quá lâu</td><td>Ổn định tải và giảm điểm nghẽn</td></tr>
+        <tr><td><strong>Sentry hoặc APM trả phí</strong></td><td>Lỗi chức năng khó truy tìm; thời gian sửa kéo dài</td><td>Biết lỗi nào, ở đâu, ảnh hưởng ai</td></tr>
+        <tr><td><strong>CI/CD + kho mã nguồn nhóm</strong></td><td>Phát hành thường xuyên; nhiều người cùng sửa; từng xảy ra sai thao tác</td><td>Tự kiểm thử, phát hành và rollback có kiểm soát</td></tr>
+        <tr><td><strong>Zalo ZNS / SMS</strong></td><td>Email/in-app có tỷ lệ đọc thấp; thông báo cần đúng thời điểm</td><td>Tăng khả năng tiếp cận và xác nhận</td></tr>
+        <tr><td><strong>PWA / MAUI mobile</strong></td><td>Người dùng di động chiếm đa số; cần push/offline/camera sâu</td><td>Trải nghiệm mobile tốt hơn</td></tr>
+        <tr><td><strong>Cloudflare Pro</strong></td><td>Cần luật firewall, bot management, log/hỗ trợ nâng cao</td><td>Tăng lớp phòng thủ và khả năng điều tra</td></tr>
+      </tbody>
+    </table>
+    <div class="callout blue" style="margin-top:6mm"><strong>Nguyên tắc chi tiêu giai đoạn 2:</strong> mỗi khoản nâng cấp phải gắn với một vấn đề đã đo được, một ngưỡng kích hoạt, người chịu trách nhiệm và lợi ích có thể kiểm chứng sau 30 ngày.</div>
+    <div class="footer"><span>Mô hình quản trị vận hành đề xuất</span><span>13 / 14</span></div>
+  </section>
+
+  <section class="page">
+    <div class="page-head"><div class="kicker">10 · Phụ lục</div><div class="section">Nguồn, giả định và thuật ngữ</div></div>
+    <h2>Cơ sở lập báo cáo</h2>
+    <div class="grid2">
+      <div class="card soft">
+        <h3>Tài liệu nguồn chính</h3>
+        <ul>
+          <li><strong>Du_Toan_Ha_Tang_App_PolyMind_DuongA.xlsx</strong> — bảng dự toán 9 hạng mục và phí thiết lập.</li>
+          <li><strong>WORKLOG.md · Session 70 · 21/07/2026</strong> — quyết định chuyển sang VPS Việt Nam và kết quả GĐ0.</li>
+          <li><strong>docs/09-deploy-vps-vn.md</strong> — quy trình production đã chốt.</li>
+          <li><strong>docker-compose.production.yml, Dockerfile, Caddyfile</strong> — cấu hình triển khai thực tế.</li>
+          <li><strong>Program.cs, appsettings.Production.json, backup/restore scripts</strong> — kiểm chứng bảo mật, AI, health, lưu trữ và sao lưu.</li>
+        </ul>
+      </div>
+      <div class="card orange">
+        <h3>Giả định và giới hạn</h3>
+        <ul>
+          <li>Chi phí dùng đúng con số trong dự toán và phương án 21/07; chưa khảo giá nhà cung cấp tại ngày báo cáo.</li>
+          <li>760.000đ/tháng là chi phí nền làm tròn, không phải giá trọn gói không đổi.</li>
+          <li>Chưa có production đang chạy để đo tải, độ trễ và chi phí AI thực tế.</li>
+          <li>Mức uptime 99,5%, phục hồi 4 giờ và trần 1 triệu/tháng là <strong>đề xuất quản trị</strong>, cần sếp phê duyệt.</li>
+          <li>Lịch 3 tuần được chọn để giải quyết mâu thuẫn trong tài liệu nguồn giữa “1 tuần” và “Tuần 1–2–3”.</li>
+        </ul>
+      </div>
+    </div>
+    <h3 style="margin-top:7mm">Thuật ngữ được dùng trong báo cáo</h3>
+    <dl>
+      <div class="glossary"><dt>Production</dt><dd>Môi trường chính thức phục vụ người dùng thật và dữ liệu thật.</dd></div>
+      <div class="glossary"><dt>VPS</dt><dd>Một máy chủ thuê riêng trên Internet; ở đây đặt tại Việt Nam.</dd></div>
+      <div class="glossary"><dt>Frontend / Backend</dt><dd>Phần người dùng nhìn thấy / phần xử lý nghiệp vụ phía sau.</dd></div>
+      <div class="glossary"><dt>Database</dt><dd>Nơi lưu dữ liệu có cấu trúc: người dùng, hồ sơ, tài chính, quy trình.</dd></div>
+      <div class="glossary"><dt>Storage</dt><dd>Nơi lưu tệp: CCCD, CV, ảnh, PDF, Word và các tài liệu đính kèm.</dd></div>
+      <div class="glossary"><dt>HTTPS</dt><dd>Kết nối mã hóa giữa trình duyệt và Web; thể hiện bằng biểu tượng ổ khóa.</dd></div>
+      <div class="glossary"><dt>Backup / Restore</dt><dd>Tạo bản sao / dùng bản sao để phục hồi khi dữ liệu hoặc máy chủ gặp sự cố.</dd></div>
+      <div class="glossary"><dt>CI/CD</dt><dd>Quy trình tự động kiểm tra, phát hành phiên bản mới và hỗ trợ quay về bản trước.</dd></div>
+      <div class="glossary"><dt>Go-live</dt><dd>Quyết định mở hệ thống cho người dùng thật sau khi nghiệm thu.</dd></div>
+    </dl>
+    <div class="callout green" style="margin-top:7mm"><strong>Thông điệp cuối:</strong> phương án hiện tại phù hợp để đưa POLYMIND vào sử dụng thật với chi phí kiểm soát được. Thành công không nằm ở việc “đã có đường link”, mà ở kỷ luật dữ liệu, phân quyền, backup, giám sát và mở người dùng theo cổng kiểm soát.</div>
+    <div style="position:absolute;left:17mm;right:17mm;bottom:20mm;text-align:center">
+      <div class="stamp">HẾT BÁO CÁO</div>
+    </div>
+    <div class="footer"><span>POLYMIND · Báo cáo Ban Giám đốc · 22/07/2026</span><span>14 / 14</span></div>
+  </section>
+
+</body>
+</html>

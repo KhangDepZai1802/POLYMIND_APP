@@ -1,111 +1,217 @@
-# Triển khai POLYMIND lên Oracle Cloud Always Free (24/7)
+# Triển khai POLYMIND lên Oracle Cloud Always Free
 
-> Mục tiêu: web sống 24/7, miễn phí, độc lập điện/mạng công ty. Chạy nguyên bộ
-> `docker-compose.production.yml` trên 1 VM Always Free (ARM Ampere), DuckDNS trỏ
-> domain về public IP của VM, Caddy tự cấp HTTPS Let's Encrypt.
+> Trạng thái quyết định: **đã chốt Oracle Cloud Always Free**.
+>
+> Kiến trúc: một VM ARM64 chạy Docker Compose gồm PostgreSQL, MinIO, POLYMIND Web và
+> Caddy HTTPS. Backup hằng ngày phải được đẩy ra kho nằm ngoài VM.
 
-## Tổng quan 4 giai đoạn
-1. **Tạo tài khoản Oracle + VM Always Free** (bạn làm trên web console).
-2. **Domain**: DuckDNS subdomain → public IP của VM.
-3. **Cài server + deploy** (SSH; có thể để Claude điều khiển từ máy local của bạn).
-4. **Verify + vận hành** (auto-start khi reboot, backup hằng ngày).
+## Hạn mức hiện hành và cấu hình chọn
 
----
+Tài liệu Oracle cập nhật ngày 29/06/2026 quy định Always Free Ampere A1 tổng cộng:
 
-## GIAI ĐOẠN 1 — Tài khoản + VM (bạn làm)
+- 2 OCPU;
+- 12 GB RAM;
+- 200 GB Block Volume, tính cả boot disk;
+- 20 GB Object Storage.
 
-### 1.1 Đăng ký
-- Vào https://www.oracle.com/cloud/free/ → **Start for free**.
-- Cần: email, **số điện thoại** (nhận OTP), **thẻ Visa/Mastercard** để xác minh (không bị trừ tiền với Always Free; có thể bị tạm giữ ~1 USD rồi hoàn).
-- **Home Region: CHỌN KỸ — KHÔNG đổi được sau này.** Cho VN nên chọn **Singapore (ap-singapore-1)** (gần nhất, độ trễ thấp). Phương án khác: Tokyo/Osaka (Nhật).
+Không dùng số cũ 4 OCPU/24 GB.
 
-### 1.2 Tạo VM
-- Console → **Compute → Instances → Create instance**.
-- **Image & shape → Change shape → Ampere (ARM)**: shape `VM.Standard.A1.Flex`.
-  - OCPU: **2**, RAM: **12 GB** (đủ dư cho cả stack; tối đa Always Free là 4 OCPU/24 GB).
-  - Nếu báo **"Out of capacity"** → giảm còn 1 OCPU/6 GB, đổi Availability Domain (AD-1/2/3), hoặc thử lại sau (giờ thấp điểm). Đây là lỗi hay gặp, cứ kiên nhẫn thử lại.
-- **Image**: Canonical **Ubuntu 22.04** (ARM build — aarch64).
-- **Networking**: tạo VCN mới (mặc định OK), **Assign a public IPv4 address = Yes**.
-- **SSH keys**: chọn **Generate a key pair for me** → **TẢI private key** (`.key`) về máy NGAY (không tải lại được). Lưu vào nơi nhớ được, vd `C:\Users\khang\.ssh\oracle-polymind.key`.
-- Create. Đợi state = **Running**, ghi lại **Public IP address**.
+Cấu hình khuyến nghị cho POLYMIND:
 
-### 1.3 (Khuyến nghị) Public IP tĩnh + chống thu hồi
-- Public IP mặc định có thể đổi khi stop/start. Vào instance → IP address → reserve public IP để cố định (free).
-- Để KHÔNG bị thu hồi VM idle: cân nhắc **Upgrade to Pay As You Go** (vẫn $0 nếu chỉ dùng trong hạn mức Always Free). App chạy + Hangfire mỗi 5' thường đã đủ "bận".
+- Home Region: Singapore;
+- Shape: `VM.Standard.A1.Flex` (ARM);
+- 2 OCPU, 8 GB RAM;
+- Ubuntu 24.04 LTS ARM64; dùng Ubuntu 22.04 LTS nếu console chưa có 24.04;
+- Boot volume 100 GB;
+- Public IPv4: bật;
+- Swap: script bootstrap tạo thêm 4 GB.
 
-### 1.4 Mở port ở firewall ĐÁM MÂY (Security List)
-- Console → VCN → Subnet → **Security List** → Add **Ingress Rules**:
-  - Source `0.0.0.0/0`, TCP, **port 80**.
-  - Source `0.0.0.0/0`, TCP, **port 443**.
-  - (Port 22 SSH thường đã mở sẵn.)
+Oracle có thể thu hồi VM Always Free bị xem là idle. Không lưu bản duy nhất của dữ liệu
+nghiệp vụ trên VM; bắt buộc có backup ngoài máy và giám sát uptime.
 
-> ⚠️ **GOTCHA Oracle Ubuntu:** ngoài Security List, **OS Ubuntu còn iptables chặn sẵn** mọi port trừ 22. Phải mở thêm ở GIAI ĐOẠN 3, nếu không 80/443 vẫn không vào được dù Security List đã mở.
+## Phân công
 
-**➡️ Báo lại cho Claude khi xong GĐ1:** (a) Public IP, (b) đường dẫn file private key trên máy, (c) version Ubuntu.
+### Người dùng bắt buộc thực hiện
 
----
+1. Tạo/xác minh tài khoản Oracle bằng email, điện thoại và thẻ.
+2. Chọn Home Region và tạo VM từ Oracle Console.
+3. Tải private SSH key về máy.
+4. Mở ingress 80/443 trên Oracle Cloud.
+5. Tạo hoặc cấu hình domain/DuckDNS trỏ về public IP.
+6. Gửi lại IP, đường dẫn private key và domain.
 
-## GIAI ĐOẠN 2 — Domain (DuckDNS)
+### Codex thực hiện sau khi nhận thông tin
 
-- Vào https://www.duckdns.org → đăng nhập (Google/GitHub) → tạo subdomain
-  `polymindolms` (fallback `polymindolmsvn`, `polymindolms2026`).
-- Đặt ô **current ip = Public IP của VM** → **update ip**. Ghi lại **token**.
-- Kết quả: `polymindolms.duckdns.org` trỏ về VM. (IP tĩnh thì set 1 lần là xong;
-  nếu không tĩnh, container `duckdns` trong compose sẽ tự cập nhật.)
+1. Kiểm tra SSH và fingerprint máy chủ.
+2. Upload bundle mã nguồn hiện tại, không phụ thuộc GitHub/private repository.
+3. Chạy bootstrap Docker/firewall/swap.
+4. Tạo secret production; người dùng chỉ nhập mật khẩu super admin.
+5. Build ARM64, chạy migration, PostgreSQL, MinIO, Caddy và Web.
+6. Kiểm tra HTTPS, health, đăng nhập, upload/tải hồ sơ và restart.
+7. Cấu hình backup, cron và bàn giao lệnh vận hành.
 
----
+## Giai đoạn 1 — Người dùng tạo tài khoản và VM
 
-## GIAI ĐOẠN 3 — Cài server + deploy (qua SSH)
+### 1. Tạo tài khoản
 
-> Có thể để Claude chạy các lệnh này qua SSH từ máy local của bạn (máy đang code),
-> hoặc bạn tự dán. `KEY` = đường dẫn private key, `IP` = public IP VM.
+1. Mở <https://www.oracle.com/cloud/free/>.
+2. Chọn **Start for free**.
+3. Xác minh email và số điện thoại.
+4. Nhập thẻ Visa/Mastercard để xác minh danh tính.
+5. Tại **Home Region**, chọn **Singapore**.
 
-```bash
-# 0) SSH vào (Ubuntu user mặc định là 'ubuntu')
-ssh -i KEY ubuntu@IP
+Home Region không đổi được sau khi tạo account. Nếu Oracle từ chối thẻ hoặc báo lỗi tài
+khoản, chụp nguyên màn hình lỗi nhưng che số thẻ trước khi gửi.
 
-# 1) Mở iptables OS cho 80/443 và lưu vĩnh viễn
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
-sudo netfilter-persistent save
+### 2. Tạo VM
 
-# 2) Cài Docker + compose plugin
-curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker $USER && newgrp docker
+Trong Oracle Console:
 
-# 3) Lấy mã nguồn (git clone repo) hoặc scp từ máy local
-git clone <REPO_URL> polymind && cd polymind
+1. Vào **Compute → Instances → Create instance**.
+2. Name: `polymind-production`.
+3. Image: **Canonical Ubuntu 24.04 Minimal aarch64**; fallback Ubuntu 22.04 aarch64.
+4. Shape:
+   - Ampere;
+   - `VM.Standard.A1.Flex`;
+   - 2 OCPU;
+   - 8 GB RAM;
+   - phải thấy nhãn **Always Free eligible**.
+5. Networking:
+   - tạo VCN/subnet mặc định nếu chưa có;
+   - **Assign a public IPv4 address: Yes**.
+6. SSH key:
+   - chọn **Generate a key pair for me**;
+   - tải private key ngay;
+   - lưu ví dụ tại `C:\Users\khang\.ssh\oracle-polymind.key`.
+7. Boot volume:
+   - 100 GB;
+   - không chọn hiệu năng trả phí;
+   - kiểm tra tổng chi phí dự kiến hiển thị 0 trong Always Free.
+8. Chọn **Create**, chờ state `Running`.
 
-# 4) Tạo .env.production (secret mạnh) — xem .env.production.example
-#    BẮT BUỘC: SUPERADMIN_EMAIL/PASSWORD, DOMAIN, ACME_EMAIL, JWT_KEY, mật khẩu DB/MinIO
-cp .env.production.example .env.production && nano .env.production
+Nếu báo `Out of host capacity`, thử Availability Domain khác hoặc thử lại sau. Không tạo
+shape không có nhãn Always Free chỉ để vượt lỗi capacity.
 
-# 5) Kiểm tra cấu hình rồi chạy (profile caddy = auto HTTPS)
-docker compose --env-file .env.production -f docker-compose.production.yml --profile caddy config -q
-docker compose --env-file .env.production -f docker-compose.production.yml --profile caddy up -d --build
+### 3. Mở firewall Oracle Cloud
+
+Vào VCN của VM → Subnet → Security List → Add Ingress Rules:
+
+| Source | Protocol | Port | Mục đích |
+|---|---|---:|---|
+| `0.0.0.0/0` | TCP | 80 | HTTP/Let's Encrypt |
+| `0.0.0.0/0` | TCP | 443 | HTTPS |
+| IP hiện tại của quản trị viên `/32` | TCP | 22 | SSH |
+
+Nếu chưa biết IP quản trị viên hoặc IP thường xuyên thay đổi, có thể tạm để SSH
+`0.0.0.0/0`; sau khi deploy xong phải siết lại.
+
+Không mở các cổng PostgreSQL 5432, MinIO 9000/9001 hoặc Web 8080 ra Internet.
+
+### 4. Domain
+
+Ưu tiên domain chính thức do đơn vị sở hữu. Nếu chưa có:
+
+1. Mở <https://www.duckdns.org/>.
+2. Đăng nhập và tạo một subdomain, ví dụ `polymindolms`.
+3. Cập nhật IP bằng public IPv4 của Oracle VM.
+4. Kết quả là `polymindolms.duckdns.org`.
+
+Domain phải phân giải về đúng IP trước khi Caddy xin chứng chỉ HTTPS.
+
+### 5. Thông tin gửi lại cho Codex
+
+Không gửi nội dung private key, mật khẩu thẻ hoặc OTP trong chat. Chỉ gửi:
+
+```text
+ORACLE_PUBLIC_IP=...
+SSH_PRIVATE_KEY_PATH=C:\...\oracle-polymind.key
+DOMAIN=...
+UBUNTU_VERSION=24.04
 ```
 
-> Build image .NET trên ARM cần vài phút + RAM (vì vậy chọn ≥ 6 GB). `web` lắng nghe
-> nội bộ 8080, chỉ Caddy expose 80/443 ra ngoài.
+Private key vẫn nằm trên máy local; Codex sử dụng đường dẫn đó để gọi `ssh.exe`.
 
----
+## Giai đoạn 2 — Chuẩn bị và upload bundle
 
-## GIAI ĐOẠN 4 — Verify + vận hành
+Thực hiện từ máy đang chứa source:
 
-- **Auto-start khi reboot:** Docker service bật sẵn (`sudo systemctl enable docker`);
-  các container đã có `restart: unless-stopped` → tự lên lại sau reboot.
-- **Verify:**
-  - `docker logs polymind-prod-caddy` → thấy cấp cert thành công.
-  - `https://polymindolms.duckdns.org/health` → `Healthy` (hoặc `Degraded` nếu bucket
-    MinIO chưa tạo, KHÔNG được `Unhealthy`).
-  - `scripts/smoke-test.ps1 -BaseUrl https://polymindolms.duckdns.org -Password <admin-prod-pw>`.
-  - Đăng nhập bằng super admin thật; xác nhận `admin@polymind.local / Admin@123` **không** đăng nhập được.
-- **Backup hằng ngày:** cron chạy `scripts/backup.ps1` (hoặc bản bash tương đương), copy ra nơi khác.
-- **Tạo user thật theo role** trong `/admin`, mật khẩu mạnh.
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/New-OracleDeployBundle.ps1
+scp -i C:\path\oracle-polymind.key `
+  artifacts\polymind-oracle-deploy.tar.gz `
+  ubuntu@ORACLE_PUBLIC_IP:/home/ubuntu/
+```
 
-## Gotchas tổng hợp
-- Region home KHÔNG đổi được → chọn đúng từ đầu.
-- Out-of-capacity ARM → giảm OCPU/RAM, đổi AD, thử lại.
-- Hai lớp firewall: Security List (cloud) **và** iptables (OS Ubuntu) — phải mở cả hai.
-- Let's Encrypt không cấp cert cho IP trần → bắt buộc có domain (DuckDNS).
-- Mất private key = mất quyền SSH (phải tạo lại qua console/recovery).
+Trên VM:
+
+```bash
+mkdir -p /home/ubuntu/polymind
+tar -xzf /home/ubuntu/polymind-oracle-deploy.tar.gz -C /home/ubuntu/polymind
+cd /home/ubuntu/polymind
+bash scripts/oracle-bootstrap.sh
+```
+
+Đăng xuất và SSH lại sau bootstrap để group Docker có hiệu lực.
+
+## Giai đoạn 3 — Secret và deploy
+
+```bash
+cd /home/ubuntu/polymind
+bash scripts/init-production-env.sh
+bash scripts/deploy-oracle.sh
+```
+
+`init-production-env.sh` chỉ yêu cầu domain, email và mật khẩu super admin; toàn bộ password
+PostgreSQL/MinIO/JWT được sinh ngẫu nhiên. File `.env.production` có quyền `600` và bị Git
+bỏ qua.
+
+Ứng dụng tự chạy migration khi startup. Production chỉ tạo super admin từ biến môi trường,
+không seed tài khoản/mật khẩu demo.
+
+## Giai đoạn 4 — Kiểm tra trước go-live
+
+```bash
+cd /home/ubuntu/polymind
+docker compose --env-file .env.production -f docker-compose.production.yml --profile caddy ps
+docker compose --env-file .env.production -f docker-compose.production.yml --profile caddy logs --tail=150
+curl -fsS https://DOMAIN/health
+```
+
+Checklist bắt buộc:
+
+- `/health` trả HTTP 200 và PostgreSQL/MinIO đều `Healthy`;
+- HTTP chuyển sang HTTPS;
+- đăng nhập được bằng super admin production;
+- tài khoản demo `admin@polymind.local / Admin@123` đăng nhập thất bại;
+- upload và tải lại một file thử;
+- restart VM xong toàn bộ container tự lên lại;
+- cookie đăng nhập/Data Protection keys tồn tại qua restart;
+- không truy cập được 5432, 9000, 9001, 8080 từ Internet;
+- backup PostgreSQL và MinIO chạy thành công;
+- thử restore backup vào môi trường tạm trước khi mở người dùng thật.
+
+## Lệnh vận hành
+
+```bash
+# Trạng thái
+docker compose --env-file .env.production -f docker-compose.production.yml --profile caddy ps
+
+# Log
+docker compose --env-file .env.production -f docker-compose.production.yml --profile caddy logs -f --tail=100
+
+# Deploy lại bundle/source mới
+bash scripts/deploy-oracle.sh
+
+# Backup thủ công
+bash scripts/backup.sh
+
+# Dung lượng và RAM
+df -h
+free -h
+docker stats --no-stream
+```
+
+## Nguồn hạn mức
+
+- Oracle Free Tier: <https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier.htm>
+- Always Free Resources: <https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm>

@@ -99,6 +99,21 @@
                         <TemplateColumn Title="Giờ bay">
                             <CellTemplate>@context.Item.DepartureText</CellTemplate>
                         </TemplateColumn>
+                        <TemplateColumn Title="Xuất cảnh" Sortable="false">
+                            <CellTemplate>
+                                @if (context.Item.ActualDepartureAt is not null)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text"
+                                             Icon="@Icons.Material.Filled.FlightTakeoff">
+                                        @context.Item.ActualDepartureAt.Value.ToLocalTime().ToString("dd/MM/yyyy")
+                                    </MudChip>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Chưa bay</MudText>
+                                }
+                            </CellTemplate>
+                        </TemplateColumn>
                         <TemplateColumn Title="" Sortable="false">
                             <CellTemplate>
                                 @if (_canUpdateFlight)
@@ -135,6 +150,13 @@
                                 <MudText Typo="Typo.caption" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(f.Destination) ? "—" : f.Destination)</MudText>
                                 <MudText Typo="Typo.caption" Class="mud-text-secondary">@f.DepartureText</MudText>
                             </div>
+                            @if (f.ActualDepartureAt is not null)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text"
+                                         Icon="@Icons.Material.Filled.FlightTakeoff" Class="mt-1 ml-0">
+                                    Đã bay @f.ActualDepartureAt.Value.ToLocalTime().ToString("dd/MM/yyyy")
+                                </MudChip>
+                            }
                         </MudPaper>
                     }
                 }
@@ -145,7 +167,7 @@
 
 @code {
     private record VisaRow(Guid Id, string CandidateName, string Country, string? VisaType, VisaStatus Status, DateOnly? SubmittedDate);
-    private record FlightRow(Guid Id, string CandidateName, string? Airline, string? TicketCode, string? Destination, string DepartureText);
+    private record FlightRow(Guid Id, string CandidateName, string? Airline, string? TicketCode, string? Destination, string DepartureText, DateTimeOffset? ActualDepartureAt);
 
     private List<VisaRow> _visas = new();
     private List<FlightRow> _flights = new();
@@ -171,7 +193,8 @@
         _flights = flights.Select(f => new FlightRow(
             f.Id, names.GetValueOrDefault(f.CandidateId, "—"), f.Airline, f.TicketCode,
             f.DestinationCountry,
-            f.DepartureDate is null ? "—" : f.DepartureDate.Value.ToString("dd/MM/yyyy") + (f.DepartureTime is null ? "" : " " + f.DepartureTime.Value.ToString("HH:mm")))).ToList();
+            f.DepartureDate is null ? "—" : f.DepartureDate.Value.ToString("dd/MM/yyyy") + (f.DepartureTime is null ? "" : " " + f.DepartureTime.Value.ToString("HH:mm")),
+            f.ActualDepartureAt)).ToList();
     }
 
     private async Task OpenCreateVisa()

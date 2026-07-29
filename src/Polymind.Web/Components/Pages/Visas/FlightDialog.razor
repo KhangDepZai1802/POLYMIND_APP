@@ -3,6 +3,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ISnackbar Snackbar
 @using Polymind.Domain.Visas
+@using Polymind.Web.Auditing
 
 <MudDialog>
     <DialogContent>
@@ -37,6 +38,31 @@
             <MudItem xs="12">
                 <MudTextField @bind-Value="_m.Notes" Label="Ghi chú" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
             </MudItem>
+            @if (IsEdit)
+            {
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    @if (_m.ActualDepartureAt is null)
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Success"
+                                   StartIcon="@Icons.Material.Filled.FlightTakeoff" OnClick="MarkDeparted">
+                            Xác nhận đã bay
+                        </MudButton>
+                        <MudText Typo="Typo.caption" Class="d-block mt-1 mud-text-secondary">
+                            Ghi nhận thời điểm ứng viên thực sự xuất cảnh. Bấm xong nhớ nhấn <b>Lưu</b>.
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Success" Dense="true" Class="mb-1">
+                            Đã bay lúc @_m.ActualDepartureAt.Value.ToLocalTime().ToString("HH:mm dd/MM/yyyy")
+                        </MudAlert>
+                        <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small" OnClick="ClearDeparted">
+                            Bỏ xác nhận
+                        </MudButton>
+                    }
+                </MudItem>
+            }
         </MudGrid>
     </DialogContent>
     <DialogActions>
@@ -94,6 +120,10 @@
 
     private void Cancel() => MudDialog.Cancel();
 
+    private void MarkDeparted() => _m.ActualDepartureAt = DateTimeOffset.UtcNow;
+
+    private void ClearDeparted() => _m.ActualDepartureAt = null;
+
     private async Task Save()
     {
         if (_m.CandidateId == Guid.Empty || _m.JobOrderId == Guid.Empty)
@@ -113,6 +143,7 @@
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
+            var auditActorId = await AuthStateProvider.GetUserIdAsync();
             if (IsEdit)
             {
                 var f = await db.Flights.FirstOrDefaultAsync(x => x.Id == FlightId);
@@ -121,8 +152,18 @@
                     Snackbar.Add("Không tìm thấy vé.", Severity.Error);
                     return;
                 }
+                var before = Snapshot(f);
+                var departureChanged = f.ActualDepartureAt != _m.ActualDepartureAt;
                 _m.ApplyTo(f);
                 f.UpdatedAt = DateTimeOffset.UtcNow;
+                db.AddAudit(auditActorId, "update", "flights", f.Id, before, Snapshot(f));
+                if (departureChanged)
+                {
+                    var action = f.ActualDepartureAt is null ? "clear_departure" : "confirm_departure";
+                    db.AddAudit(auditActorId, action, "flights", f.Id,
+                        new { ActualDepartureAt = before.ActualDepartureAt },
+                        new { f.ActualDepartureAt });
+                }
             }
             else
             {
@@ -130,6 +171,7 @@
                 var f = VisaFlightCreationRules.CreateFlight(actorId);
                 _m.ApplyTo(f);
                 db.Flights.Add(f);
+                db.AddAudit(auditActorId, "create", "flights", f.Id, null, Snapshot(f));
             }
             await db.SaveChangesAsync();
         }
@@ -148,6 +190,17 @@
         return result.Succeeded;
     }
 
+    /// <summary>Ảnh chụp các trường nghiệp vụ để ghi audit trước/sau.</summary>
+    private static FlightSnapshot Snapshot(Flight f) => new(
+        f.CandidateId, f.JobOrderId, f.Airline, f.TicketCode, f.DepartureDate, f.DepartureTime,
+        f.DepartureAirport, f.DestinationCountry, f.DestinationAirport, f.ActualDepartureAt, f.Notes);
+
+    private sealed record FlightSnapshot(
+        Guid CandidateId, Guid JobOrderId, string? Airline, string? TicketCode,
+        DateOnly? DepartureDate, TimeOnly? DepartureTime, string? DepartureAirport,
+        string? DestinationCountry, string? DestinationAirport,
+        DateTimeOffset? ActualDepartureAt, string? Notes);
+
     private sealed class FormModel
     {
         public Guid CandidateId { get; set; }
@@ -159,6 +212,7 @@
         public string? DepartureAirport { get; set; }
         public string? DestinationCountry { get; set; }
         public string? DestinationAirport { get; set; }
+        public DateTimeOffset? ActualDepartureAt { get; set; }
         public string? Notes { get; set; }
 
         public void LoadFrom(Flight f)
@@ -172,6 +226,7 @@
             DepartureAirport = f.DepartureAirport;
             DestinationCountry = f.DestinationCountry;
             DestinationAirport = f.DestinationAirport;
+            ActualDepartureAt = f.ActualDepartureAt;
             Notes = f.Notes;
         }
 
@@ -186,6 +241,7 @@
             f.DepartureAirport = DepartureAirport;
             f.DestinationCountry = DestinationCountry;
             f.DestinationAirport = DestinationAirport;
+            f.ActualDepartureAt = ActualDepartureAt;
             f.Notes = Notes;
         }
     }
