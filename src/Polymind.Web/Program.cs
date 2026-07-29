@@ -345,10 +345,21 @@ app.MapLeadsApi();
 app.MapCandidatesApi();
 app.MapJobOrdersApi();
 
-RecurringJob.AddOrUpdate<NotificationJob>(
-    "polymind-notification-reminders",
-    job => job.RunAsync(),
-    "*/5 * * * *");
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    try
+    {
+        RecurringJob.AddOrUpdate<NotificationJob>(
+            "polymind-notification-reminders",
+            job => job.RunAsync(),
+            "*/5 * * * *");
+    }
+    catch (Exception ex)
+    {
+        var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+        logger.LogWarning(ex, "Không thể đăng ký recurring job lúc khởi động — sẽ không có nhắc nhở tự động cho tới khi khắc phục kết nối Hangfire storage.");
+    }
+});
 
 // Áp migration + seed roles/permissions/super_admin + dữ liệu mẫu (bỏ qua nếu DB chưa sẵn sàng).
 using (var scope = app.Services.CreateScope())
