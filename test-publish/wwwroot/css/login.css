@@ -1,0 +1,255 @@
+/* ===== Trang đăng nhập — nhận diện POLYMIND (navy hero + thẻ trắng) ===== */
+.login-page {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start; /* neo nội dung lên trên; footer đi liền dưới thẻ */
+    background: #EFF5FC;
+    font-family: 'Roboto', sans-serif;
+}
+
+.login-shell {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 1.25rem 1rem 0;
+    display: flex;
+    flex-direction: column;
+}
+/* Footer đi LIỀN dưới thẻ (khoảng cách cố định) → không thừa khi màn hình quá dài */
+.login-page > .app-footer { margin-top: 1.5rem; flex: 0 0 auto; }
+
+/* Standalone login card without the hero column.
+   Dùng flex canh giữa để không dính lề trái ở desktop (rule .login-card{margin:0} chỉ
+   dành cho thẻ nằm trong .login-shell). Canh giữa đồng nhất mọi màn hình: PC/laptop/iPad/điện thoại. */
+.login-solo {
+    flex: 0 0 auto;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    padding: 1.5rem 1rem 0;
+    box-sizing: border-box;
+}
+.login-solo .login-card { margin: 0; }
+
+/* ----- Hero navy ----- */
+.login-hero {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #0D3F78 0%, #1A5FA8 100%);
+    color: #fff;
+    border-radius: 24px;
+    padding: 1.6rem 1.5rem;
+}
+.login-hero::after {
+    content: "";
+    position: absolute;
+    right: -60px;
+    top: -60px;
+    width: 220px;
+    height: 220px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(1,103,216,.45), transparent 70%);
+    pointer-events: none;
+}
+.login-hero-brand {
+    display: flex;
+    align-items: center;
+    gap: .85rem;
+    margin-bottom: 1.1rem;
+}
+.login-hero-brand h2 {
+    margin: 0;
+    font-size: 1.4rem;
+    font-weight: 900;
+    letter-spacing: .04em;
+}
+.login-hero-tag {
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .16em;
+    color: #D1E4FA;
+}
+.login-hero-eyebrow {
+    color: #9CC6F4 !important;
+    margin-bottom: .5rem;
+}
+.login-hero-title {
+    margin: 0 0 .55rem;
+    font-size: clamp(1.4rem, 5.4vw, 2.1rem);
+    font-weight: 900;
+    line-height: 1.14;
+    letter-spacing: -.01em;
+    max-width: 18ch;
+}
+.login-hero-sub {
+    margin: 0;
+    font-size: .92rem;
+    color: #D1E4FA;
+    max-width: 42ch;
+}
+
+/* ----- Thẻ form trắng (NẰM DƯỚI hero, không đè để khỏi che chữ) ----- */
+.login-card {
+    width: 100%;
+    max-width: 440px;
+    margin: 0.9rem auto 0;
+    background: #fff;
+    border-radius: 22px;
+    padding: 1.9rem 1.6rem;
+    box-shadow: 0 24px 60px rgba(13, 63, 120, .18);
+    position: relative;
+    z-index: 2;
+}
+.login-card-title {
+    margin: .15rem 0 .15rem;
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: #10243f;
+    letter-spacing: -.01em;
+}
+.login-card-sub {
+    margin: 0 0 .5rem;
+    font-size: .85rem;
+    color: #5b6b80;
+}
+
+.login-label {
+    display: block;
+    font-size: .82rem;
+    font-weight: 600;
+    color: #0D3F78;
+    margin: .85rem 0 .3rem;
+}
+
+.login-input {
+    width: 100%;
+    padding: .8rem 1rem;
+    border: 1.5px solid #D1E4FA;
+    border-radius: 12px;
+    font-size: .95rem;
+    box-sizing: border-box;
+    background: #F7FBFF;
+    transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.login-input:focus {
+    outline: none;
+    background: #fff;
+    border-color: #0167D8;
+    box-shadow: 0 0 0 3px rgba(1, 103, 216, .16);
+}
+
+.login-pwd-wrap { position: relative; }
+.login-pwd-wrap .login-input { padding-right: 2.7rem; }
+
+.login-pwd-toggle {
+    position: absolute;
+    top: 50%;
+    right: .5rem;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.1rem;
+    height: 2.1rem;
+    padding: 0;
+    border: none;
+    background: none;
+    color: #7d93ab;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: color .15s, background .15s;
+}
+.login-pwd-toggle:hover { color: #0167D8; background: #EFF5FC; }
+.login-pwd-toggle svg { width: 20px; height: 20px; fill: currentColor; }
+
+.login-btn {
+    width: 100%;
+    margin-top: 1.5rem;
+    padding: .9rem;
+    border: none;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #1A5FA8, #0167D8);
+    color: #fff;
+    font-size: 1.02rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 10px 24px rgba(1, 103, 216, .3);
+    transition: transform .12s, box-shadow .12s, opacity .12s;
+}
+.login-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(1, 103, 216, .38); }
+.login-btn:active { transform: translateY(0); }
+
+.login-error {
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+    padding: .65rem .85rem;
+    font-size: .85rem;
+    margin-bottom: .5rem;
+}
+
+.login-help {
+    margin: 1.1rem 0 0;
+    text-align: center;
+    font-size: .82rem;
+    color: #7d93ab;
+}
+
+.validation-message {
+    color: #dc2626;
+    font-size: .75rem;
+}
+
+/* Đăng xuất (menu app bar) */
+.logout-btn {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: .6rem 1rem;
+    background: none;
+    border: none;
+    font-size: .9rem;
+    color: #0D3F78;
+    cursor: pointer;
+    text-align: left;
+}
+.logout-btn:hover { background: #EFF5FC; }
+
+/* Desktop: hero + thẻ nằm cạnh nhau cho hiện đại */
+@media (min-width: 900px) {
+    .login-shell {
+        flex: 1 0 auto;          /* desktop: giữ nguyên như cũ (đã OK) */
+        flex-direction: row;
+        align-items: center;
+        gap: 2.5rem;
+        padding-top: 0;
+    }
+    .login-hero {
+        flex: 1;
+        padding: 3rem 2.5rem;
+        align-self: stretch;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    .login-card { margin: 0; flex: none; }
+    .login-page > .app-footer { margin-top: auto; } /* desktop: footer dính đáy như cũ */
+}
+
+/* ----- Logo tile dùng chung (hero) ----- */
+.login-logo {
+    width: 56px;
+    height: 56px;
+    border-radius: 15px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    padding: 7px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.2);
+}
+.login-logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
